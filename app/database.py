@@ -2,7 +2,9 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DB_URL = os.getenv("DATABASE_URL", "sqlite:///vss.db")
+DB_URL = os.getenv("DATABASE_URL")
+if not DB_URL or not DB_URL.strip():
+    DB_URL = "sqlite:///vss.db"
 
 # Fix for SQLAlchemy requiring 'postgresql://' instead of 'postgres://'
 if DB_URL and DB_URL.startswith("postgres://"):

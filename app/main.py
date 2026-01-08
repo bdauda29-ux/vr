@@ -23,6 +23,10 @@ app = Flask(__name__, static_folder='static')
 app.config["JSON_SORT_KEYS"] = False
 CORS(app)
 
+@app.route("/ping")
+def ping():
+    return "pong"
+
 # --- AUTH ---
 @app.route("/login.html")
 def login_page():
