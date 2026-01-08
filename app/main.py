@@ -1,22 +1,30 @@
 import sys
 import os
 import traceback
+from flask import Flask, request, jsonify, send_from_directory, send_file
 
 # 1. Initialize Flask App IMMEDIATELY
 # This ensures 'app' exists even if other imports fail
-from flask import Flask, request, jsonify, send_from_directory, send_file
-from flask_cors import CORS
-
 app = Flask(__name__, static_folder='static')
 app.config["JSON_SORT_KEYS"] = False
-CORS(app)
 
 # 2. Define Global Error State
 STARTUP_ERROR = None
+cors_enabled = False
 
 # 3. Safe Imports
 # We import everything else inside a try/except block
 try:
+    # Flask CORS
+    try:
+        from flask_cors import CORS
+        CORS(app)
+        cors_enabled = True
+    except ImportError:
+        print("WARNING: flask_cors not found. CORS disabled.")
+    except Exception as e:
+        print(f"WARNING: CORS init failed: {e}")
+
     # Standard Libs
     from datetime import date, datetime
     import io
@@ -62,7 +70,7 @@ except Exception as e:
     class Font: pass
     class Alignment: pass
     class PatternFill: pass
-    
+
 @app.route("/ping")
 def ping():
     if STARTUP_ERROR:
@@ -80,6 +88,7 @@ def success_page():
 
 @app.post("/login")
 def login():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     try:
         data = request.get_json(force=True)
         username = data.get("username")
@@ -90,6 +99,7 @@ def login():
 
         def attempt_login():
             with next(get_db()) as db:
+                if not db: raise Exception("Database connection failed")
                 # 1. Check if Admin/Super Admin
                 user = db.query(models.User).filter(models.User.username == username).first()
                 if user:
@@ -135,6 +145,7 @@ def login():
 
 @app.get("/me")
 def get_current_user_info():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({"detail": "Not authenticated"}), 401
@@ -190,12 +201,15 @@ def require_role(allowed_roles):
 
 @app.route("/")
 def index():
+    if STARTUP_ERROR:
+        return f"<h1>System Error</h1><pre>{STARTUP_ERROR}</pre>"
     # SKIP DB CHECK ON INDEX to prevent timeouts/crashes on cold start
     # We will let the frontend load, and DB errors will appear when they try to Login.
     return send_from_directory(app.static_folder, "index.html")
 
 @app.route("/debug-db")
 def debug_db():
+    if STARTUP_ERROR: return jsonify({"status": "error", "message": STARTUP_ERROR}), 500
     if not engine:
         return jsonify({"status": "error", "detail": "Database engine not initialized. Check logs."}), 500
         
@@ -239,6 +253,7 @@ def debug_db():
 
 @app.get("/download/template")
 def download_template():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Staff Import Template"
@@ -264,7 +279,7 @@ def download_template():
     wb.save(out)
     out.seek(0)
     
-    return flask.send_file(
+    return send_file(
         out,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True,
@@ -273,6 +288,7 @@ def download_template():
 
 @app.post("/import/excel")
 def import_excel():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["office_admin", "super_admin"])
     if err: return err, code
 
@@ -414,67 +430,83 @@ def import_excel():
             except Exception as e:
                 print(f"Warning: Could not remove temp file {tmp_path}: {e}")
 
-Base.metadata.create_all(bind=engine)
-
-def seed_states_lgas(db: Session):
-    # 1. Ensure all states exist
-    existing_states = {s.name: s for s in db.query(models.State).all()}
-    
-    for state_name in NIGERIA_STATES_LGAS:
-        if state_name not in existing_states:
-            s = models.State(name=state_name)
-            db.add(s)
-            # Add to local dict for next step, though ID won't be available until flush
-            existing_states[state_name] = s
-    
-    db.flush() # Flush to get IDs for new states
-    
-    # Refresh existing_states map to ensure we have IDs
-    existing_states = {s.name: s for s in db.query(models.State).all()}
-    
-    # 2. Ensure all LGAs exist
-    # Fetch all existing LGAs to avoid duplicates
-    existing_lgas = set()
-    for l in db.query(models.LGA).all():
-        existing_lgas.add((l.state_id, l.name))
+# Init DB on startup if possible
+if engine:
+    try:
+        Base.metadata.create_all(bind=engine)
         
-    for state_name, lgas in NIGERIA_STATES_LGAS.items():
-        if state_name in existing_states:
-            st = existing_states[state_name]
-            for lga_name in lgas:
-                if (st.id, lga_name) not in existing_lgas:
-                    db.add(models.LGA(name=lga_name, state_id=st.id))
-                    existing_lgas.add((st.id, lga_name)) # Update local set
-                    
-    db.commit()
+        def seed_states_lgas(db: Session):
+            # 1. Ensure all states exist
+            existing_states = {s.name: s for s in db.query(models.State).all()}
+            
+            for state_name in NIGERIA_STATES_LGAS:
+                if state_name not in existing_states:
+                    s = models.State(name=state_name)
+                    db.add(s)
+                    # Add to local dict for next step, though ID won't be available until flush
+                    existing_states[state_name] = s
+            
+            db.flush() # Flush to get IDs for new states
+            
+            # Refresh existing_states map to ensure we have IDs
+            existing_states = {s.name: s for s in db.query(models.State).all()}
+            
+            # 2. Ensure all LGAs exist
+            # Fetch all existing LGAs to avoid duplicates
+            existing_lgas = set()
+            for l in db.query(models.LGA).all():
+                existing_lgas.add((l.state_id, l.name))
+                
+            for state_name, lgas in NIGERIA_STATES_LGAS.items():
+                if state_name in existing_states:
+                    st = existing_states[state_name]
+                    for lga_name in lgas:
+                        if (st.id, lga_name) not in existing_lgas:
+                            db.add(models.LGA(name=lga_name, state_id=st.id))
+                            existing_lgas.add((st.id, lga_name)) # Update local set
+                            
+            db.commit()
 
-def seed_super_admin(db: Session):
-    admin = db.query(models.User).filter(models.User.username == "admin").first()
-    if not admin:
-        # Default password: admin
-        pwd_hash = auth.get_password_hash("admin")
-        admin = models.User(username="admin", password_hash=pwd_hash, role="super_admin")
-        db.add(admin)
-        db.commit()
+        def seed_super_admin(db: Session):
+            admin = db.query(models.User).filter(models.User.username == "admin").first()
+            if not admin:
+                # Default password: admin
+                pwd_hash = auth.get_password_hash("admin")
+                admin = models.User(username="admin", password_hash=pwd_hash, role="super_admin")
+                db.add(admin)
+                db.commit()
 
-with next(get_db()) as db:
-    seed_states_lgas(db)
-    seed_super_admin(db)
+        # We can't use next(get_db()) here easily because of context manager
+        # Just use SessionLocal direct
+        from .database import SessionLocal
+        db = SessionLocal()
+        try:
+            seed_states_lgas(db)
+            seed_super_admin(db)
+        finally:
+            db.close()
+            
+    except Exception as e:
+        print(f"DB Init Warning: {e}")
+        # We don't crash here, just log
 
 @app.get("/states")
 def get_states():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     with next(get_db()) as db:
         items = crud.list_states(db)
         return jsonify([schemas.to_dict_state(s) for s in items])
 
 @app.get("/states/<int:state_id>/lgas")
 def get_lgas(state_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     with next(get_db()) as db:
         items = crud.list_lgas_by_state(db, state_id)
         return jsonify([schemas.to_dict_lga(l) for l in items])
 
 @app.get("/staff")
 def list_staff_endpoint():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user = get_current_user()
     if not user:
         return jsonify({"detail": "Not authenticated"}), 401
@@ -507,6 +539,7 @@ def list_staff_endpoint():
 
 @app.post("/staff")
 def create_staff():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, error_response, code = require_role(["office_admin", "super_admin"])
     if error_response:
         return error_response, code
@@ -537,6 +570,7 @@ def create_staff():
 
 @app.get("/staff/<int:staff_id>")
 def get_staff(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj:
@@ -545,451 +579,106 @@ def get_staff(staff_id: int):
 
 @app.put("/staff/<int:staff_id>")
 def update_staff(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user = get_current_user()
     if not user:
-         return jsonify({"detail": "Not authenticated"}), 401
-    
-    if user["role"] == "staff":
-        if user.get("id") != staff_id:
-             return jsonify({"detail": "Permission denied: Can only edit your own record"}), 403
-    elif user["role"] not in ["office_admin", "super_admin"]:
-         return jsonify({"detail": "Permission denied"}), 403
-
+        return jsonify({"detail": "Not authenticated"}), 401
+        
     data = request.get_json(force=True)
     for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
         if k in data:
-            parsed = parse_date_value(data.get(k))
-            if data.get(k) not in (None, "") and parsed is None:
-                return jsonify({"detail": f"Invalid date for {k}. Use dd/mm/yyyy"}), 400
-            data[k] = parsed
+             data[k] = parse_date_value(data.get(k))
+             
     with next(get_db()) as db:
-        obj = crud.get_staff(db, staff_id)
-        if not obj:
+        # Check permissions
+        existing = crud.get_staff(db, staff_id)
+        if not existing:
+             return jsonify({"detail": "Not found"}), 404
+             
+        if user["role"] == "office_admin":
+             # Can only edit own office
+             staff_user = crud.get_staff(db, user["id"])
+             if not staff_user or staff_user.office != existing.office:
+                 return jsonify({"detail": "Permission denied"}), 403
+        
+        try:
+            obj = crud.update_staff(db, staff_id, data)
+            if obj:
+                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details")
+                return jsonify(schemas.to_dict_staff(obj))
             return jsonify({"detail": "Not found"}), 404
-        obj = crud.update_staff(db, obj, data)
-        crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", f"Updated fields: {list(data.keys())}")
-        return jsonify(schemas.to_dict_staff(obj))
+        except ValueError as e:
+            return jsonify({"detail": str(e)}), 400
 
 @app.delete("/staff/<int:staff_id>")
 def delete_staff(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["super_admin"])
     if err: return err, code
-
+    
     with next(get_db()) as db:
-        obj = crud.get_staff(db, staff_id)
-        if not obj:
-            return jsonify({"detail": "Not found"}), 404
-        nis = obj.nis_no
-        crud.delete_staff(db, obj)
-        crud.create_audit_log(db, "DELETE", f"Staff: {nis}", "Deleted staff record")
-        return "", 204
-
-EXPORT_MAPPING = {
-    "nis_no": ("NIS/No", lambda x: x.nis_no),
-    "surname": ("Surname", lambda x: x.surname),
-    "other_names": ("Other Names", lambda x: x.other_names),
-    "rank": ("Rank", lambda x: x.rank),
-    "gender": ("Gender", lambda x: x.gender or ""),
-    "office": ("Office", lambda x: x.office or ""),
-    "state": ("State", lambda x: x.state.name if x.state else ""),
-    "lga": ("LGA", lambda x: x.lga.name if x.lga else ""),
-    "phone_no": ("Phone", lambda x: x.phone_no or ""),
-    "qualification": ("Qualification", lambda x: x.qualification or ""),
-    "dob": ("Date of Birth", lambda x: x.dob),
-    "dofa": ("DOFA", lambda x: x.dofa),
-    "dopa": ("DOPA", lambda x: x.dopa),
-    "dopp": ("DOPP", lambda x: x.dopp),
-    "exit_date": ("Exit Date", lambda x: x.exit_date),
-    "exit_mode": ("Exit Mode", lambda x: x.exit_mode or ""),
-    "home_town": ("Home Town", lambda x: x.home_town or ""),
-    "next_of_kin": ("Next of Kin", lambda x: x.next_of_kin or ""),
-    "nok_phone": ("NOK Phone", lambda x: x.nok_phone or ""),
-    "remark": ("Remark", lambda x: x.remark or "")
-}
+        if crud.delete_staff(db, staff_id):
+            crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record")
+            return jsonify({"detail": "Deleted"})
+        return jsonify({"detail": "Not found"}), 404
 
 @app.get("/export/excel")
 def export_excel():
-    q = request.args.get("q")
-    state_id = request.args.get("state_id", type=int)
-    lga_id = request.args.get("lga_id", type=int)
-    rank = request.args.get("rank")
-    office = request.args.get("office")
-    completeness = request.args.get("completeness")
-    columns_str = request.args.get("columns")
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
     
     with next(get_db()) as db:
-        items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, limit=10000, offset=0)
+        staff_list = crud.list_staff(db, limit=10000)
         
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Staff List"
         
-        # Determine columns
-        if columns_str:
-            selected_keys = [k for k in columns_str.split(',') if k in EXPORT_MAPPING]
-        else:
-            selected_keys = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no", "qualification", "dob", "dofa", "dopa", "dopp", "exit_date", "exit_mode"]
+        # Style: Liberation Sans
+        font_style = Font(name='Liberation Sans', size=10)
+        header_font = Font(name='Liberation Sans', size=12, bold=True)
         
-        if not selected_keys:
-             selected_keys = ["nis_no", "surname", "other_names", "rank"] # Fallback
+        # Headers
+        headers = ["NIS/No", "Surname", "Other Names", "Rank", "Gender", "Office", "State", "LGA", "Phone"]
+        ws.append(headers)
+        
+        for cell in ws[1]:
+            cell.font = header_font
+            
+        # Data
+        for idx, staff in enumerate(staff_list, start=2):
+            row = [
+                staff.nis_no, staff.surname, staff.other_names, staff.rank, staff.gender,
+                staff.office, 
+                staff.state.name if staff.state else "",
+                staff.lga.name if staff.lga else "",
+                staff.phone_no
+            ]
+            ws.append(row)
+            
+            # Zebra Striping
+            if idx % 2 == 0:
+                fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
+                for cell in ws[idx]:
+                    cell.fill = fill
+            
+            # Apply Font
+            for cell in ws[idx]:
+                cell.font = font_style
 
-        headers = [EXPORT_MAPPING[k][0] for k in selected_keys]
-        extractors = [EXPORT_MAPPING[k][1] for k in selected_keys]
+        # Footer Date
+        ws.append([])
+        footer_cell = ws.cell(row=ws.max_row + 1, column=1, value=f"Generated on {datetime.now().strftime('%d/%m/%Y')}")
+        footer_cell.font = Font(name='Liberation Sans', size=8, italic=True)
         
-        # Add S/N
-        headers.insert(0, "S/N")
-        
-        row_idx = 1
-        num_cols = len(headers)
-        
-        # 1. Office Name Heading (if filtered)
-        if office:
-            ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=num_cols)
-            cell = ws.cell(row=row_idx, column=1, value=office)
-            cell.font = Font(name='Liberation Sans', bold=True, size=14)
-            cell.alignment = Alignment(horizontal="center")
-            row_idx += 1
-            
-        # 2. Global Heading
-        ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=num_cols)
-        cell = ws.cell(row=row_idx, column=1, value="Visa/Residency Directorate")
-        cell.font = Font(name='Liberation Sans', bold=True, size=11)
-        cell.alignment = Alignment(horizontal="center")
-        row_idx += 1
-        
-        # Add headers
-        for col_idx, header in enumerate(headers, 1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=header)
-            cell.font = Font(name='Liberation Sans', bold=True)
-            cell.fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
-        row_idx += 1
-        
-        for idx, item in enumerate(items, 1):
-            row_vals = [func(item) for func in extractors]
-            row_vals.insert(0, idx) # Insert S/N
-            
-            fill_color = "FFFFFF" if idx % 2 != 0 else "D9D9D9"
-            
-            for col_idx, val in enumerate(row_vals, 1):
-                cell = ws.cell(row=row_idx, column=col_idx, value=val)
-                cell.font = Font(name='Liberation Sans')
-                cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-                
-                # Date Formatting
-                if isinstance(val, (date, datetime)):
-                    cell.number_format = 'DD/MM/YYYY'
-                    cell.alignment = Alignment(horizontal='left')
-            row_idx += 1
-                    
-        # Footer
-        ws.oddFooter.left.text = "Generated on &D"
-            
         out = io.BytesIO()
         wb.save(out)
         out.seek(0)
         
         return send_file(
             out,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             as_attachment=True,
-            download_name='staff_list.xlsx'
+            download_name=f"staff_export_{datetime.now().strftime('%Y%m%d')}.xlsx"
         )
-
-@app.get("/export/pdf")
-def export_pdf():
-    q = request.args.get("q")
-    state_id = request.args.get("state_id", type=int)
-    lga_id = request.args.get("lga_id", type=int)
-    rank = request.args.get("rank")
-    office = request.args.get("office")
-    completeness = request.args.get("completeness")
-    columns_str = request.args.get("columns")
-    
-    with next(get_db()) as db:
-        items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, limit=10000, offset=0)
-        
-        def add_footer(canvas, doc):
-            canvas.saveState()
-            canvas.setFont('Helvetica', 9)
-            date_str = datetime.now().strftime("%d/%m/%Y")
-            canvas.drawString(inch, 0.5 * inch, f"Generated on {date_str}")
-            canvas.restoreState()
-            
-        out = io.BytesIO()
-        doc = SimpleDocTemplate(out, pagesize=landscape(letter))
-        elements = []
-        
-        styles = getSampleStyleSheet()
-        
-        # Custom Styles
-        title_style = styles['Title']
-        title_style.fontName = 'Helvetica-Bold'
-        title_style.fontSize = 14
-        
-        subtitle_style = ParagraphStyle(
-            'Subtitle',
-            parent=styles['Heading2'],
-            fontName='Helvetica-Bold',
-            fontSize=11,
-            alignment=1, # Center
-            spaceAfter=12
-        )
-        
-        # 1. Office Heading
-        if office:
-            p_office = Paragraph(office, title_style)
-            elements.append(p_office)
-            
-        # 2. Global Heading
-        p_global = Paragraph("Visa/Residency Directorate", subtitle_style)
-        elements.append(p_global)
-        
-        elements.append(Spacer(1, 12))
-        
-        # Determine columns
-        if columns_str:
-            selected_keys = [k for k in columns_str.split(',') if k in EXPORT_MAPPING]
-        else:
-             # Default for PDF (fewer columns to fit)
-            selected_keys = ["nis_no", "surname", "other_names", "rank", "dopa", "gender", "office", "state", "phone_no"]
-            
-        if not selected_keys:
-             selected_keys = ["nis_no", "surname", "other_names", "rank"]
-
-        headers = [EXPORT_MAPPING[k][0] for k in selected_keys]
-        extractors = [EXPORT_MAPPING[k][1] for k in selected_keys]
-        
-        # Add S/N
-        headers.insert(0, "S/N")
-        
-        data = [headers]
-        
-        for idx, item in enumerate(items, 1):
-            row = []
-            for func in extractors:
-                val = func(item)
-                if isinstance(val, (date, datetime)):
-                    val = val.strftime('%d/%m/%Y')
-                elif val is None:
-                    val = ""
-                row.append(val)
-            row.insert(0, idx) # Insert S/N
-            data.append(row)
-            
-        table = Table(data)
-        table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('ALIGN', (0, 0), (-1, 0), 'CENTER'), # Header Center
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8), # Smaller font for headers
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('BACKGROUND', (0, 0), (-1, 0), colors.gray),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black), # Thinner grid lines
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 7), # Smaller font for data
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#D9D9D9')]),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-        ]))
-        
-        elements.append(table)
-        doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
-        out.seek(0)
-        
-        return send_file(
-            out,
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name='staff_list.pdf'
-        )
-
-
-@app.get("/dashboard/stats")
-def get_dashboard_stats():
-    user = get_current_user()
-    if not user:
-        return jsonify({"detail": "Not authenticated"}), 401
-    
-    with next(get_db()) as db:
-        stats = crud.get_dashboard_stats(db)
-        return jsonify(stats)
-
-@app.get("/offices")
-def list_offices_endpoint():
-    # Sync offices if empty (Lazy sync)
-    with next(get_db()) as db:
-        offices = crud.list_offices_model(db)
-        if not offices:
-            # Populate from staff
-            names = crud.list_offices(db)
-            for n in names:
-                if n:
-                    crud.create_office(db, n)
-            offices = crud.list_offices_model(db)
-        return jsonify([schemas.to_dict_office(o) for o in offices])
-
-@app.post("/offices")
-def create_office_endpoint():
-    user, err, code = require_role(["super_admin", "office_admin", "admin"]) # Allow admin to add offices?
-    if err: return err, code
-    
-    data = request.get_json()
-    name = data.get("name")
-    if not name:
-        return jsonify({"detail": "Name required"}), 400
-        
-    with next(get_db()) as db:
-        try:
-            office = crud.create_office(db, name)
-            return jsonify(schemas.to_dict_office(office))
-        except Exception as e:
-            return jsonify({"detail": str(e)}), 400
-
-@app.put("/offices/<int:office_id>")
-def update_office_endpoint(office_id):
-    user, err, code = require_role(["super_admin", "office_admin", "admin"])
-    if err: return err, code
-    
-    data = request.get_json()
-    name = data.get("name")
-    if not name:
-        return jsonify({"detail": "Name required"}), 400
-        
-    with next(get_db()) as db:
-        office = crud.update_office(db, office_id, name)
-        if not office:
-            return jsonify({"detail": "Office not found"}), 404
-        return jsonify(schemas.to_dict_office(office))
-
-@app.delete("/offices/<int:office_id>")
-def delete_office_endpoint(office_id):
-    user, err, code = require_role(["super_admin", "office_admin", "admin"])
-    if err: return err, code
-    
-    with next(get_db()) as db:
-        success = crud.delete_office(db, office_id)
-        if not success:
-            return jsonify({"detail": "Office not found"}), 404
-        return jsonify({"detail": "Deleted"})
-
-@app.get("/audit-logs")
-def list_audit_logs():
-    user, err, code = require_role(["super_admin"])
-    if err: return err, code
-
-    limit = request.args.get("limit", default=100, type=int)
-    offset = request.args.get("offset", default=0, type=int)
-    with next(get_db()) as db:
-        items = crud.list_audit_logs(db, limit=limit, offset=offset)
-        return jsonify([schemas.to_dict_audit_log(x) for x in items])
-
-@app.put("/staff/<int:staff_id>/role")
-def update_staff_role(staff_id: int):
-    # Verify Super Admin
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({"detail": "Not authenticated"}), 401
-    
-    token = auth_header.split(" ")[1]
-    payload = auth.decode_access_token(token)
-    if not payload or payload.get("role") != "super_admin":
-        return jsonify({"detail": "Permission denied"}), 403
-    
-    data = request.get_json()
-    new_role = data.get("role")
-    if new_role not in ["staff", "office_admin", "super_admin"]:
-        return jsonify({"detail": "Invalid role"}), 400
-        
-    with next(get_db()) as db:
-        staff = crud.get_staff(db, staff_id)
-        if not staff:
-            return jsonify({"detail": "Staff not found"}), 404
-            
-        staff.role = new_role
-        db.commit()
-        return jsonify({"message": f"Role updated to {new_role}"})
-
-@app.post("/leaves")
-def create_leave_request():
-    user = get_current_user()
-    if not user:
-        return jsonify({"detail": "Not authenticated"}), 401
-    
-    data = request.get_json()
-    
-    with next(get_db()) as db:
-        staff_id = None
-        if user["role"] == "staff":
-            staff_id = user["id"]
-        elif user["role"] in ["admin", "super_admin", "office_admin"]:
-            staff_id = data.get("staff_id")
-            if not staff_id:
-                return jsonify({"detail": "Staff ID required for admin creation"}), 400
-        else:
-            return jsonify({"detail": "Permission denied"}), 403
-
-        if not staff_id:
-             return jsonify({"detail": "Could not determine Staff ID"}), 400
-
-        leave_data = {
-            "staff_id": staff_id,
-            "start_date": parse_date_value(data.get("start_date")),
-            "end_date": parse_date_value(data.get("end_date")),
-            "leave_type": data.get("leave_type"),
-            "reason": data.get("reason"),
-            "status": "Pending"
-        }
-        
-        if not leave_data["start_date"] or not leave_data["end_date"] or not leave_data["leave_type"]:
-             return jsonify({"detail": "Missing required fields"}), 400
-             
-        leave = crud.create_leave(db, leave_data)
-        
-        # Audit Log
-        actor = user.get("sub", "Unknown")
-        crud.create_audit_log(db, "CREATE_LEAVE", f"Leave request for Staff ID {staff_id}", f"Type: {leave_data['leave_type']}")
-        
-        return jsonify(schemas.to_dict_leave(leave))
-
-@app.get("/leaves")
-def list_leaves_endpoint():
-    user = get_current_user()
-    if not user:
-        return jsonify({"detail": "Not authenticated"}), 401
-    
-    with next(get_db()) as db:
-        if user["role"] == "staff":
-            leaves = crud.list_leaves(db, staff_id=user["id"])
-        else:
-            # Admin sees all, or filtered
-            staff_id = request.args.get("staff_id")
-            status = request.args.get("status")
-            leaves = crud.list_leaves(db, staff_id=staff_id, status=status)
-            
-        return jsonify([schemas.to_dict_leave(l) for l in leaves])
-
-@app.put("/leaves/<int:leave_id>")
-def update_leave_status_endpoint(leave_id):
-    user, err, code = require_role(["super_admin", "office_admin"])
-    if err: return err, code
-        
-    data = request.get_json()
-    status = data.get("status")
-    
-    if status not in ["Approved", "Rejected", "Pending"]:
-        return jsonify({"detail": "Invalid status"}), 400
-        
-    with next(get_db()) as db:
-        leave = crud.update_leave_status(db, leave_id, status)
-        if not leave:
-            return jsonify({"detail": "Leave not found"}), 404
-            
-        # Audit Log
-        actor = user.get("sub", "Unknown")
-        crud.create_audit_log(db, "UPDATE_LEAVE", f"Leave ID {leave_id} status to {status}", f"By {actor}")
-        
-        return jsonify(schemas.to_dict_leave(leave))
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True)
