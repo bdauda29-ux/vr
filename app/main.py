@@ -4,18 +4,6 @@ from flask_cors import CORS
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from datetime import date, datetime
-try:
-    from .database import Base, engine, get_db
-    from . import models, schemas, crud, auth, database
-    from .seeds import NIGERIA_STATES_LGAS
-except ImportError as e:
-    # This block catches import errors if database connection fails at module level
-    print(f"Import Error: {e}")
-    # We still need these to be defined for the app to start, even if they fail later
-    Base = None
-    engine = None
-    get_db = None
-    
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 import io
@@ -27,14 +15,40 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import tempfile
 import os
-# from access_parser import AccessParser # Disabled for Vercel compatibility (requires mdb-tools)
+import traceback
 
+# Initialize Flask App FIRST to ensure Vercel can find it
 app = Flask(__name__, static_folder='static')
 app.config["JSON_SORT_KEYS"] = False
 CORS(app)
 
+# --- Global Error State ---
+STARTUP_ERROR = None
+
+# --- Custom Imports with Error Handling ---
+try:
+    from .database import Base, engine, get_db
+    from . import models, schemas, crud, auth, database
+    from .seeds import NIGERIA_STATES_LGAS
+except Exception as e:
+    # Catch ALL errors during import/init to prevents Vercel "Function Invocation Failed"
+    STARTUP_ERROR = f"Startup Error: {str(e)}\n{traceback.format_exc()}"
+    print(STARTUP_ERROR)
+    # Define fallback objects to prevent NameErrors in global scope if imports fail
+    Base = None
+    engine = None
+    get_db = lambda: (yield None) # Dummy generator
+    models = None
+    schemas = None
+    crud = None
+    auth = None
+    database = None
+    NIGERIA_STATES_LGAS = {}
+
 @app.route("/ping")
 def ping():
+    if STARTUP_ERROR:
+        return jsonify({"status": "error", "message": STARTUP_ERROR}), 500
     return "pong"
 
 # --- AUTH ---
