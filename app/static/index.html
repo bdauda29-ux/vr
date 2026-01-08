@@ -1148,20 +1148,28 @@
             formData.append('file', fileInput.files[0]);
             
             try {
-                const res = await fetch(`${API_URL}/import`, {
+                const res = await fetch(`${API_URL}/import/excel`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
-                const result = await res.json();
+                
+                let result;
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    result = await res.json();
+                } else {
+                    result = { detail: await res.text() };
+                }
+
                 const resDiv = document.getElementById('importResult');
                 resDiv.innerHTML = `<div class="alert alert-${res.ok ? 'success':'danger'}">
-                    ${result.detail || `Imported: ${result.imported_count}, Errors: ${result.errors.length}`}
+                    ${result.detail || `Imported: ${result.imported_count}, Errors: ${result.errors ? result.errors.length : 0}`}
                 </div>`;
                 if (res.ok) loadStaff();
             } catch (err) {
                 console.error(err);
-                alert("Upload failed");
+                alert("Upload failed: " + err.message);
             }
         }
         
