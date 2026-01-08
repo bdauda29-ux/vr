@@ -1,10 +1,17 @@
 import os
+import platform
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 DB_URL = os.getenv("DATABASE_URL")
+
+# If no DATABASE_URL is set, fallback to SQLite
 if not DB_URL or not DB_URL.strip():
-    DB_URL = "sqlite:///vss.db"
+    if platform.system() == "Windows":
+        DB_URL = "sqlite:///vss.db"
+    else:
+        # On Vercel (Linux), we must use /tmp for SQLite (ephemeral)
+        DB_URL = "sqlite:////tmp/vss.db"
 
 # Fix for SQLAlchemy requiring 'postgresql://' instead of 'postgres://'
 if DB_URL and DB_URL.startswith("postgres://"):

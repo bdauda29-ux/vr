@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file
 import flask
 from flask_cors import CORS
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError
 from datetime import date, datetime
 try:
     from .database import Base, engine, get_db
@@ -55,39 +56,46 @@ def login():
         if not username or not password:
             return jsonify({"detail": "Username and password required"}), 400
 
-        # Lazy DB Init: Check if tables exist, create if not
-        if engine:
-            try:
-                # Ensure all tables exist (safe to call repeatedly)
-                Base.metadata.create_all(bind=engine)
+        def attempt_login():
+            with next(get_db()) as db:
+                # 1. Check if Admin/Super Admin
+                user = db.query(models.User).filter(models.User.username == username).first()
+                if user:
+                    if auth.verify_password(password, user.password_hash):
+                        token = auth.create_access_token(data={"sub": user.username, "role": user.role, "id": user.id})
+                        return jsonify({"access_token": token, "token_type": "bearer", "role": user.role, "username": user.username})
                 
-                # Seed default admin if needed
-                with next(get_db()) as temp_db:
-                    from .seeds import seed_default_admin
-                    seed_default_admin(temp_db)
-            except Exception as e:
-                print(f"Lazy DB Init failed: {e}")
-                # Continue, maybe the DB is fine or the error will happen in the query below
+                # 2. Check if Staff (NIS is username and password)
+                staff = crud.get_staff_by_nis(db, username)
+                if staff:
+                    if password == staff.nis_no: # Staff Password IS their NIS
+                        token = auth.create_access_token(data={"sub": staff.nis_no, "role": staff.role, "id": staff.id})
+                        return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no})
+                
+                return jsonify({"detail": "Invalid credentials"}), 401
 
-        with next(get_db()) as db:
-            # 1. Check if Admin/Super Admin
-            user = db.query(models.User).filter(models.User.username == username).first()
-            if user:
-                if auth.verify_password(password, user.password_hash):
-                    token = auth.create_access_token(data={"sub": user.username, "role": user.role, "id": user.id})
-                    return jsonify({"access_token": token, "token_type": "bearer", "role": user.role, "username": user.username})
-            
-            # 2. Check if Staff (NIS is username and password)
-            staff = crud.get_staff_by_nis(db, username)
-            if staff:
-                if password == staff.nis_no: # Staff Password IS their NIS
-                    token = auth.create_access_token(data={"sub": staff.nis_no, "role": staff.role, "id": staff.id})
-                    return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no})
-            
-            return jsonify({"detail": "Invalid credentials"}), 401
+        try:
+            return attempt_login()
+        except Exception as e:
+            # Check for missing tables (SQLite or Postgres)
+            msg = str(e).lower()
+            if "no such table" in msg or ("relation" in msg and "does not exist" in msg):
+                print("Tables missing, attempting creation...")
+                if engine:
+                    Base.metadata.create_all(bind=engine)
+                    # Seed default admin
+                    with next(get_db()) as temp_db:
+                         from .seeds import seed_default_admin
+                         seed_default_admin(temp_db)
+                    # Retry login
+                    return attempt_login()
+            raise e
+
     except Exception as e:
         import traceback
         traceback.print_exc()
+        # Log critical info for debugging Vercel issues
+        print(f"LOGIN CRASH: {e}") 
         return jsonify({
             "detail": "Login failed due to server error",
             "error": str(e)
