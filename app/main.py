@@ -3,9 +3,18 @@ import flask
 from flask_cors import CORS
 from sqlalchemy.orm import Session
 from datetime import date, datetime
-from .database import Base, engine, get_db
-from . import models, schemas, crud, auth, database
-from .seeds import NIGERIA_STATES_LGAS
+try:
+    from .database import Base, engine, get_db
+    from . import models, schemas, crud, auth, database
+    from .seeds import NIGERIA_STATES_LGAS
+except ImportError as e:
+    # This block catches import errors if database connection fails at module level
+    print(f"Import Error: {e}")
+    # We still need these to be defined for the app to start, even if they fail later
+    Base = None
+    engine = None
+    get_db = None
+    
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 import io
@@ -125,6 +134,9 @@ def index():
 
 @app.route("/debug-db")
 def debug_db():
+    if not engine:
+        return jsonify({"status": "error", "detail": "Database engine not initialized. Check logs."}), 500
+        
     try:
         # Check if table exists
         from sqlalchemy import inspect, text
@@ -132,15 +144,22 @@ def debug_db():
         tables = inspector.get_table_names()
         
         # Try a simple query
-        with next(get_db()) as db:
-            version = db.execute(text("SELECT version()")).scalar()
-            
-            # Attempt to init tables if missing
-            if "users" not in tables:
-                Base.metadata.create_all(bind=engine)
-                from .seeds import seed_default_admin
-                seed_default_admin(db)
-                tables = inspector.get_table_names()
+        try:
+            with next(get_db()) as db:
+                version = db.execute(text("SELECT version()")).scalar()
+                
+                # Attempt to init tables if missing
+                if "users" not in tables:
+                    Base.metadata.create_all(bind=engine)
+                    from .seeds import seed_default_admin
+                    seed_default_admin(db)
+                    tables = inspector.get_table_names()
+        except Exception as query_err:
+             return jsonify({
+                "status": "error",
+                "detail": "Connection successful but query failed",
+                "error": str(query_err)
+            }), 500
 
         return jsonify({
             "status": "ok",
