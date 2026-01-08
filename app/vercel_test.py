@@ -58,10 +58,34 @@ def ping():
         
         try:
             from . import database
-            results.append("local import (from . import database): OK")
-        except ImportError:
-             import database
-             results.append("absolute import (import database): OK")
+            results.append("import database: OK")
+        except:
+             results.append("import database: FAIL")
+
+        try:
+            from . import models
+            results.append("import models: OK")
+        except Exception as e:
+             results.append(f"import models: FAIL {e}")
+
+        try:
+            from . import auth
+            results.append("import auth: OK")
+        except Exception as e:
+             results.append(f"import auth: FAIL {e}")
+
+        try:
+            from . import crud
+            results.append("import crud: OK")
+        except Exception as e:
+             results.append(f"import crud: FAIL {e}")
+
+        try:
+            from . import seeds
+            results.append("import seeds: OK")
+        except Exception as e:
+             results.append(f"import seeds: FAIL {e}")
+
     except Exception as e:
         results.append(f"local/absolute import of database: FAIL {e}")
 
