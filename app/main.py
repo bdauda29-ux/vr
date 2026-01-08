@@ -17,7 +17,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import tempfile
 import os
-from access_parser import AccessParser
+# from access_parser import AccessParser # Disabled for Vercel compatibility (requires mdb-tools)
 
 app = Flask(__name__, static_folder='static')
 app.config["JSON_SORT_KEYS"] = False
@@ -163,13 +163,13 @@ def import_excel():
     file = request.files['file']
     filename = file.filename.lower()
     
-    if not filename.endswith(('.xlsx', '.xls', '.accdb', '.mdb')):
-        return jsonify({"detail": "Invalid file type. Please upload Excel (.xlsx, .xls) or MS Access (.accdb, .mdb) file."}), 400
+    if not filename.endswith(('.xlsx', '.xls')):
+        return jsonify({"detail": "Invalid file type. Please upload Excel (.xlsx, .xls) file."}), 400
     
-    # Save to temporary file to support AccessParser which needs a file path
-    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
-        file.save(tmp.name)
-        tmp_path = tmp.name
+    # Save to /tmp for Vercel compatibility
+    tmp_dir = tempfile.gettempdir()
+    tmp_path = os.path.join(tmp_dir, filename)
+    file.save(tmp_path)
 
     try:
         data_rows = [] # List of dicts {col_name: value}
@@ -187,59 +187,6 @@ def import_excel():
                 for h, i in col_map.items():
                     row_dict[h] = row[i]
                 data_rows.append(row_dict)
-                
-        elif filename.endswith(('.accdb', '.mdb')):
-            db = AccessParser(tmp_path)
-            # Try to find a table with 'Surname' and 'NIS/No' or similar columns
-            # AccessParser.catalog is a dict of table_name -> table_obj
-            # But AccessParser.catalog might just be table names.
-            # Let's inspect db.catalog
-            
-            # Note: AccessParser API:
-            # db = AccessParser("file.accdb")
-            # db.catalog -> { "TableName": TableObj, ... }
-            # TableObj.columns -> { "ColName": ColType, ... } (Not exactly, let's just parse tables)
-            
-            target_table = None
-            
-            # Simple heuristic: Look for table with 'Surname' column
-            for table_name in db.catalog:
-                # To be safe, let's just try to parse the first few rows or check columns if possible
-                # AccessParser doesn't expose columns easily without parsing?
-                # Actually db.parse_table(table_name) returns a generator of dicts.
-                # We can check the first row keys.
-                
-                # We can't easily peek without consuming.
-                # So let's just find a table that looks like "Staff" or "Table1" or has relevant columns.
-                
-                # Actually, let's just try all tables until we find one that matches our schema
-                # OR just take the first user table (not system table).
-                # System tables usually start with MSys.
-                if table_name.startswith("MSys"):
-                    continue
-                    
-                # Let's parse this table
-                rows = list(db.parse_table(table_name))
-                if not rows:
-                    continue
-                    
-                # Check keys of first row
-                keys = rows[0].keys()
-                # Normalize keys for check
-                keys_lower = {k.lower() for k in keys}
-                
-                if "surname" in keys_lower and ("nis/no" in keys_lower or "nis_no" in keys_lower or "nis" in keys_lower):
-                    data_rows = rows
-                    target_table = table_name
-                    break
-            
-            if not data_rows and not target_table:
-                 # If no suitable table found, try to use the first non-system table
-                 for table_name in db.catalog:
-                    if not table_name.startswith("MSys"):
-                        data_rows = list(db.parse_table(table_name))
-                        if data_rows:
-                            break
                             
         # Common processing
         success_count = 0
