@@ -379,6 +379,20 @@ if engine:
         from .database import SessionLocal
         db = SessionLocal()
         try:
+            # Migration Check: Add 'role' to 'users' if missing
+            try:
+                from sqlalchemy import text, inspect
+                inspector = inspect(engine)
+                columns = [c['name'] for c in inspector.get_columns('users')]
+                if 'role' not in columns:
+                    print("MIGRATION: Adding 'role' column to users table...")
+                    with engine.connect() as conn:
+                        conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(32) DEFAULT 'admin' NOT NULL"))
+                        conn.commit()
+                    print("MIGRATION: Success.")
+            except Exception as mig_err:
+                print(f"MIGRATION ERROR: {mig_err}")
+
             seed_states_lgas(db)
             seed_super_admin(db)
         finally:
