@@ -57,15 +57,14 @@ def login():
 
         # Lazy DB Init: Check if tables exist, create if not
         if engine:
-            from sqlalchemy import inspect
             try:
-                inspector = inspect(engine)
-                if not inspector.has_table("users"):
-                     Base.metadata.create_all(bind=engine)
-                     # Seed default admin
-                     with next(get_db()) as temp_db:
-                         from .seeds import seed_default_admin
-                         seed_default_admin(temp_db)
+                # Ensure all tables exist (safe to call repeatedly)
+                Base.metadata.create_all(bind=engine)
+                
+                # Seed default admin if needed
+                with next(get_db()) as temp_db:
+                    from .seeds import seed_default_admin
+                    seed_default_admin(temp_db)
             except Exception as e:
                 print(f"Lazy DB Init failed: {e}")
                 # Continue, maybe the DB is fine or the error will happen in the query below
