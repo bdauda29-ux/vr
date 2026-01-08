@@ -119,25 +119,42 @@ def require_role(allowed_roles):
 
 @app.route("/")
 def index():
-    # Ensure DB is created on first request (Vercel cold start)
-    try:
-        # Check if table exists to avoid expensive create_all every time
-        from sqlalchemy import inspect
-        inspector = inspect(engine)
-        if not inspector.has_table("users"):
-            Base.metadata.create_all(bind=engine)
-            # Seed default admin if empty
-            from .seeds import seed_default_admin
-            with next(get_db()) as db:
-                seed_default_admin(db)
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        return jsonify({
-            "detail": "Database connection failed",
-            "error": str(e),
-            "hint": "Check your DATABASE_URL in Vercel Environment Variables. Ensure 'psycopg2-binary' is in requirements.txt"
-        }), 500
+    # SKIP DB CHECK ON INDEX to prevent timeouts/crashes on cold start
+    # We will let the frontend load, and DB errors will appear when they try to Login.
     return send_from_directory(app.static_folder, "index.html")
+
+@app.route("/debug-db")
+def debug_db():
+    try:
+        # Check if table exists
+        from sqlalchemy import inspect, text
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        # Try a simple query
+        with next(get_db()) as db:
+            version = db.execute(text("SELECT version()")).scalar()
+            
+            # Attempt to init tables if missing
+            if "users" not in tables:
+                Base.metadata.create_all(bind=engine)
+                from .seeds import seed_default_admin
+                seed_default_admin(db)
+                tables = inspector.get_table_names()
+
+        return jsonify({
+            "status": "ok",
+            "db_version": version,
+            "tables": tables,
+            "message": "Connected successfully"
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "status": "error",
+            "detail": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
 
 @app.get("/download/template")
 def download_template():
