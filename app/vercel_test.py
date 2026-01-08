@@ -51,6 +51,20 @@ def ping():
     except Exception as e:
         results.append(f"jose: FAIL {e}")
 
+    try:
+        # Try importing local modules
+        # We need to add the parent directory to sys.path if we are running as a script
+        # But Vercel runs as a module usually?
+        
+        try:
+            from . import database
+            results.append("local import (from . import database): OK")
+        except ImportError:
+             import database
+             results.append("absolute import (import database): OK")
+    except Exception as e:
+        results.append(f"local/absolute import of database: FAIL {e}")
+
     return "<br>".join(results)
 
 @app.route("/")
