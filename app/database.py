@@ -26,9 +26,18 @@ if "postgresql://" in DB_URL and "sslmode" not in DB_URL:
      else:
         DB_URL += "?sslmode=require"
 
-connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
-engine = create_engine(DB_URL, future=True, echo=False, connect_args=connect_args)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+# Fail-safe engine creation
+try:
+    connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
+    engine = create_engine(DB_URL, future=True, echo=False, connect_args=connect_args)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+except Exception as e:
+    print(f"CRITICAL DB ERROR: {e}")
+    # Fallback to in-memory SQLite to allow app to start and show error on debug page
+    fallback_url = "sqlite:///:memory:"
+    engine = create_engine(fallback_url, future=True, connect_args={"check_same_thread": False})
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
 Base = declarative_base()
 
 def get_db():
