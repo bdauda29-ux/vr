@@ -8,6 +8,9 @@ DB_URL = os.getenv("DATABASE_URL", "sqlite:///vss.db")
 if DB_URL and DB_URL.startswith("postgres://"):
     DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
 
+if DB_URL:
+    DB_URL = DB_URL.strip().replace('"', '').replace("'", "")
+
 # Vercel Read-Only File System Fix for SQLite
 if DB_URL.startswith("sqlite") and os.environ.get("VERCEL"):
     # On Vercel, we can only write to /tmp

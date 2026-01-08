@@ -116,7 +116,16 @@ def require_role(allowed_roles):
 @app.route("/")
 def index():
     # Ensure DB is created on first request (Vercel cold start)
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        # In production, you might not want to show the full error, but for debugging:
+        return jsonify({
+            "detail": "Database connection failed",
+            "error": str(e),
+            "hint": "Check your DATABASE_URL in Vercel Environment Variables"
+        }), 500
     return send_from_directory(app.static_folder, "index.html")
 
 @app.get("/download/template")
