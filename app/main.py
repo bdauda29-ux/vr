@@ -117,14 +117,21 @@ def require_role(allowed_roles):
 def index():
     # Ensure DB is created on first request (Vercel cold start)
     try:
-        Base.metadata.create_all(bind=engine)
+        # Check if table exists to avoid expensive create_all every time
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        if not inspector.has_table("users"):
+            Base.metadata.create_all(bind=engine)
+            # Seed default admin if empty
+            from .seeds import seed_default_admin
+            with next(get_db()) as db:
+                seed_default_admin(db)
     except Exception as e:
         print(f"Database connection error: {e}")
-        # In production, you might not want to show the full error, but for debugging:
         return jsonify({
             "detail": "Database connection failed",
             "error": str(e),
-            "hint": "Check your DATABASE_URL in Vercel Environment Variables"
+            "hint": "Check your DATABASE_URL in Vercel Environment Variables. Ensure 'psycopg2-binary' is in requirements.txt"
         }), 500
     return send_from_directory(app.static_folder, "index.html")
 

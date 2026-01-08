@@ -17,6 +17,13 @@ if DB_URL.startswith("sqlite") and os.environ.get("VERCEL"):
     # This is ephemeral and data will be lost on restart, but it allows the app to run
     DB_URL = "sqlite:////tmp/vss.db"
 
+# Force SSL mode for PostgreSQL on Vercel/Neon if not present
+if "postgresql://" in DB_URL and "sslmode" not in DB_URL:
+     if "?" in DB_URL:
+        DB_URL += "&sslmode=require"
+     else:
+        DB_URL += "?sslmode=require"
+
 connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
 engine = create_engine(DB_URL, future=True, echo=False, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
