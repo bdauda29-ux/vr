@@ -415,6 +415,58 @@ if engine:
     except Exception as e:
         print(f"DB Init Warning: {e}")
 
+@app.get("/offices")
+def list_offices_route():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    with next(get_db()) as db:
+        # Prefer the Office model if populated, else distinct strings from staff? 
+        # Actually, crud.list_offices_model is what we want for the directory.
+        items = crud.list_offices_model(db)
+        return jsonify([schemas.to_dict_office(i) for i in items])
+
+@app.post("/offices")
+def create_office_route():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "admin"])
+    if err: return err, code
+    
+    data = request.get_json(force=True)
+    name = data.get("name")
+    if not name: return jsonify({"detail": "Name is required"}), 400
+    
+    with next(get_db()) as db:
+        try:
+            obj = crud.create_office(db, name)
+            return jsonify(schemas.to_dict_office(obj)), 201
+        except Exception as e:
+            return jsonify({"detail": str(e)}), 400
+
+@app.put("/offices/<int:office_id>")
+def update_office_route(office_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "admin"])
+    if err: return err, code
+    
+    data = request.get_json(force=True)
+    name = data.get("name")
+    if not name: return jsonify({"detail": "Name is required"}), 400
+    
+    with next(get_db()) as db:
+        obj = crud.update_office(db, office_id, name)
+        if not obj: return jsonify({"detail": "Not found"}), 404
+        return jsonify(schemas.to_dict_office(obj))
+
+@app.delete("/offices/<int:office_id>")
+def delete_office_route(office_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        if crud.delete_office(db, office_id):
+            return jsonify({"detail": "Deleted"}), 200
+        return jsonify({"detail": "Not found"}), 404
+
 @app.get("/states")
 def get_states():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
