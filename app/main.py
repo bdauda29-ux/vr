@@ -1,50 +1,68 @@
-from flask import Flask, request, jsonify, send_from_directory, send_file
-import flask
-from flask_cors import CORS
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import OperationalError
-from datetime import date, datetime
-import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill
-import io
-import csv
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-import tempfile
+import sys
 import os
 import traceback
 
-# Initialize Flask App FIRST to ensure Vercel can find it
+# 1. Initialize Flask App IMMEDIATELY
+# This ensures 'app' exists even if other imports fail
+from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask_cors import CORS
+
 app = Flask(__name__, static_folder='static')
 app.config["JSON_SORT_KEYS"] = False
 CORS(app)
 
-# --- Global Error State ---
+# 2. Define Global Error State
 STARTUP_ERROR = None
 
-# --- Custom Imports with Error Handling ---
+# 3. Safe Imports
+# We import everything else inside a try/except block
 try:
+    # Standard Libs
+    from datetime import date, datetime
+    import io
+    import csv
+    import tempfile
+    
+    # Third Party
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    
+    # SQLAlchemy
+    from sqlalchemy.orm import Session
+    from sqlalchemy.exc import OperationalError
+
+    # Local Imports
+    # NOTE: We use relative imports assuming Vercel runs this as a module
     from .database import Base, engine, get_db
     from . import models, schemas, crud, auth, database
     from .seeds import NIGERIA_STATES_LGAS
+
 except Exception as e:
-    # Catch ALL errors during import/init to prevents Vercel "Function Invocation Failed"
+    # Catch ALL errors during import/init
     STARTUP_ERROR = f"Startup Error: {str(e)}\n{traceback.format_exc()}"
-    print(STARTUP_ERROR)
-    # Define fallback objects to prevent NameErrors in global scope if imports fail
+    print(STARTUP_ERROR) # Print to Vercel logs
+    
+    # Define dummy objects to prevent NameErrors below
     Base = None
     engine = None
-    get_db = lambda: (yield None) # Dummy generator
+    get_db = lambda: (yield None)
     models = None
     schemas = None
     crud = None
     auth = None
     database = None
     NIGERIA_STATES_LGAS = {}
-
+    
+    # Dummy classes for types
+    class Font: pass
+    class Alignment: pass
+    class PatternFill: pass
+    
 @app.route("/ping")
 def ping():
     if STARTUP_ERROR:
