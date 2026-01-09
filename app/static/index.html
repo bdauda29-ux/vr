@@ -35,6 +35,7 @@
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('dashboard')"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('personnel')"><i class="bi bi-people-fill me-2"></i> Personnel</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('offices')"><i class="bi bi-building me-2"></i> Offices</a>
+                <a class="list-group-item list-group-item-action list-group-item-dark p-3 admin-only" href="#" onclick="showPrivileges()"><i class="bi bi-person-gear me-2"></i> Privileges</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('leave')"><i class="bi bi-calendar-check me-2"></i> Leave</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3 admin-only" href="#" onclick="showView('audit')"><i class="bi bi-journal-text me-2"></i> Audit Log</a>
             </div>
@@ -714,6 +715,15 @@
             }
         }
 
+        function showPrivileges() {
+            showView('personnel');
+            const tabEl = document.getElementById('privileges-tab');
+            if (tabEl) {
+                const tab = new bootstrap.Tab(tabEl);
+                tab.show();
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
              // Role Based UI
             if (role === 'staff') {
@@ -794,12 +804,21 @@
                         tr.innerHTML = `
                             <td>${off.name}</td>
                             <td>
-                                <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, '${off.name}')">Rename</button>
+                                <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, ${JSON.stringify(off.name)})">Rename</button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteOffice(${off.id})">Remove</button>
                             </td>
                         `;
                         tbody.appendChild(tr);
                     });
+                    if (offices.length === 0) {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td colspan="2" class="text-muted text-center">No offices found</td>`;
+                        tbody.appendChild(tr);
+                    }
+                } else {
+                    const tbody = document.getElementById('officesTableBody');
+                    const data = await res.json().catch(() => ({}));
+                    tbody.innerHTML = `<tr><td colspan="2" class="text-danger text-center">${data.detail || 'Failed to load offices'}</td></tr>`;
                 }
             } catch(e) { console.error(e); }
         }

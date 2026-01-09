@@ -583,7 +583,7 @@ def update_staff(staff_id: int):
              staff_user = crud.get_staff(db, user["id"])
              if not staff_user or staff_user.office != existing.office: return jsonify({"detail": "Permission denied"}), 403
         try:
-            obj = crud.update_staff(db, staff_id, data)
+            obj = crud.update_staff(db, existing, data)
             if obj:
                 crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details")
                 return jsonify(schemas.to_dict_staff(obj))
@@ -596,10 +596,32 @@ def delete_staff(staff_id: int):
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     with next(get_db()) as db:
-        if crud.delete_staff(db, staff_id):
-            crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record")
-            return jsonify({"detail": "Deleted"})
+        obj = crud.get_staff(db, staff_id)
+        if not obj:
+            return jsonify({"detail": "Not found"}), 404
+        crud.delete_staff(db, obj)
+        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record")
+        return jsonify({"detail": "Deleted"})
         return jsonify({"detail": "Not found"}), 404
+
+@app.put("/staff/<int:staff_id>/role")
+def update_staff_role(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    data = request.get_json(force=True)
+    new_role = data.get("role")
+    if new_role not in ("staff", "office_admin", "super_admin"):
+        return jsonify({"detail": "Invalid role"}), 400
+    with next(get_db()) as db:
+        obj = crud.get_staff(db, staff_id)
+        if not obj: return jsonify({"detail": "Not found"}), 404
+        obj.role = new_role
+        db.add(obj)
+        db.commit()
+        db.refresh(obj)
+        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}")
+        return jsonify(schemas.to_dict_staff(obj))
 
 @app.get("/export/excel")
 def export_excel():
