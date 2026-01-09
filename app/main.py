@@ -676,6 +676,19 @@ def update_staff_role(staff_id: int):
         crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}")
         return jsonify(schemas.to_dict_staff(obj))
 
+@app.get("/audit-logs")
+def get_audit_logs():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    
+    limit = request.args.get("limit", 100, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    
+    with next(get_db()) as db:
+        logs = crud.list_audit_logs(db, limit=limit, offset=offset)
+        return jsonify([schemas.to_dict_audit_log(l) for l in logs])
+
 @app.get("/export/excel")
 def export_excel():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
