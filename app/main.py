@@ -436,6 +436,17 @@ if engine:
                         conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(32) DEFAULT 'admin' NOT NULL"))
                         conn.commit()
                     print("MIGRATION: Success.")
+                
+                # Migration: Add out_request fields to staff
+                staff_cols = [c['name'] for c in inspector.get_columns('staff')]
+                with engine.connect() as conn:
+                    if 'out_request_status' not in staff_cols:
+                        print("MIGRATION: Adding out_request fields to staff...")
+                        conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_status VARCHAR(32)"))
+                        conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_date DATE"))
+                        conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_reason VARCHAR(64)"))
+                        conn.commit()
+
             except Exception as mig_err:
                 print(f"MIGRATION ERROR: {mig_err}")
 
@@ -597,6 +608,16 @@ def update_staff(staff_id: int):
         if user["role"] == "office_admin":
              staff_user = crud.get_staff(db, user["id"])
              if not staff_user or staff_user.office != existing.office: return jsonify({"detail": "Permission denied"}), 403
+             # Enforce office consistency: cannot change office
+             if "office" in data and data["office"] != existing.office:
+                 return jsonify({"detail": "Permission denied: Cannot change office"}), 403
+             # Ensure office is not cleared
+             data["office"] = existing.office
+             
+             # Block direct exit for office admin
+             if "exit_date" in data or "exit_mode" in data:
+                 return jsonify({"detail": "Permission denied: Use exit request instead"}), 403
+
         try:
             obj = crud.update_staff(db, existing, data)
             if obj:
@@ -667,3 +688,75 @@ def export_excel():
         wb.save(out)
         out.seek(0)
         return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"staff_export_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+@app.post("/staff/<int:staff_id>/exit-request")
+def request_exit(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    data = request.get_json(force=True)
+    exit_date = parse_date_value(data.get("exit_date"))
+    exit_mode = data.get("exit_mode")
+    
+    if not exit_date or not exit_mode:
+        return jsonify({"detail": "Exit date and mode required"}), 400
+        
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        # Check permission (office admin only for own office)
+        if user["role"] == "office_admin":
+            admin_staff = crud.get_staff(db, user["id"])
+            if not admin_staff or admin_staff.office != staff.office:
+                return jsonify({"detail": "Permission denied"}), 403
+        
+        staff.out_request_status = "Pending"
+        staff.out_request_date = exit_date
+        staff.out_request_reason = exit_mode
+        db.commit()
+        crud.create_audit_log(db, "EXIT_REQUEST", f"Staff: {staff.nis_no}", f"Requested exit: {exit_mode} on {exit_date}")
+        return jsonify({"detail": "Request submitted"})
+
+@app.post("/staff/<int:staff_id>/exit-approve")
+def approve_exit(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        if not staff.out_request_status:
+            return jsonify({"detail": "No pending request"}), 400
+            
+        staff.exit_date = staff.out_request_date
+        staff.exit_mode = staff.out_request_reason
+        staff.out_request_status = None
+        staff.out_request_date = None
+        staff.out_request_reason = None
+        
+        db.commit()
+        crud.create_audit_log(db, "EXIT_APPROVE", f"Staff: {staff.nis_no}", "Approved exit request")
+        return jsonify(schemas.to_dict_staff(staff))
+
+@app.post("/staff/<int:staff_id>/exit-reject")
+def reject_exit(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        staff.out_request_status = None
+        staff.out_request_date = None
+        staff.out_request_reason = None
+        
+        db.commit()
+        crud.create_audit_log(db, "EXIT_REJECT", f"Staff: {staff.nis_no}", "Rejected exit request")
+        return jsonify({"detail": "Request rejected"})
+

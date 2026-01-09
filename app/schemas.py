@@ -37,6 +37,9 @@ def to_dict_staff(obj) -> Dict[str, Any]:
         "lga": to_dict_lga(obj.lga),
         "exit_date": obj.exit_date.isoformat() if obj.exit_date else None,
         "exit_mode": obj.exit_mode,
+        "out_request_status": obj.out_request_status,
+        "out_request_date": obj.out_request_date.isoformat() if obj.out_request_date else None,
+        "out_request_reason": obj.out_request_reason,
         "role": obj.role,
     }
 

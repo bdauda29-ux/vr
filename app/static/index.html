@@ -34,7 +34,7 @@
             <div class="list-group list-group-flush">
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('dashboard')"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('personnel')"><i class="bi bi-people-fill me-2"></i> Personnel</a>
-                <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('offices')"><i class="bi bi-building me-2"></i> Offices</a>
+                <a class="list-group-item list-group-item-action list-group-item-dark p-3 admin-only" href="#" onclick="showView('offices')"><i class="bi bi-building me-2"></i> Offices</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3 admin-only" href="#" onclick="showPrivileges()"><i class="bi bi-person-gear me-2"></i> Privileges</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('leave')"><i class="bi bi-calendar-check me-2"></i> Leave</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3 admin-only" href="#" onclick="showView('audit')"><i class="bi bi-journal-text me-2"></i> Audit Log</a>
@@ -646,6 +646,28 @@
         </div>
     </div>
 
+    <!-- Review Exit Modal -->
+    <div class="modal fade" id="reviewExitModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Review Exit Request</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="reviewStaffId">
+                    <p>An office admin has requested to exit this personnel.</p>
+                    <div class="alert alert-info" id="reviewExitDetails"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="processExitRequest('reject')">Reject</button>
+                    <button type="button" class="btn btn-success" onclick="processExitRequest('approve')">Approve</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script>
@@ -689,6 +711,10 @@
 
         // View Navigation
         function showView(viewId) {
+            if (viewId === 'offices' && role === 'office_admin') {
+                alert('Permission denied');
+                return;
+            }
             // Hide all views
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('d-none'));
             // Show target view
@@ -747,6 +773,9 @@
             
             const expEl = document.getElementById('exportModal');
             if (expEl) exportModal = new bootstrap.Modal(expEl);
+            
+            const reviewEl = document.getElementById('reviewExitModal');
+            if (reviewEl) reviewExitModal = new bootstrap.Modal(reviewEl);
 
             // Init DatePickers
             flatpickr(".date-picker", {
@@ -932,21 +961,25 @@
             } catch (err) { console.error(err); }
         }
 
-        function loadLGAs(stateId) {
+        async function loadLGAs(stateId) {
             const lgaSel = document.getElementById('lga_id');
             lgaSel.innerHTML = '<option value="">Select LGA...</option>';
             lgaSel.disabled = true;
             if (!stateId) return;
-            const st = allStates.find(s => s.id == stateId);
-            if (st && st.lgas) {
-                st.lgas.forEach(l => {
-                    const opt = document.createElement('option');
-                    opt.value = l.id;
-                    opt.textContent = l.name;
-                    lgaSel.appendChild(opt);
-                });
-                lgaSel.disabled = false;
-            }
+            
+            try {
+                const res = await fetch(`${API_URL}/states/${stateId}/lgas`);
+                if (res.ok) {
+                    const lgas = await res.json();
+                    lgas.forEach(l => {
+                        const opt = document.createElement('option');
+                        opt.value = l.id;
+                        opt.textContent = l.name;
+                        lgaSel.appendChild(opt);
+                    });
+                    lgaSel.disabled = false;
+                }
+            } catch(e) { console.error(e); }
         }
 
         function populateRanks() {
@@ -1028,6 +1061,24 @@
                 const separator = (dofa && dopa) ? ' / ' : '';
                 const dates = `${dofaStr}${separator}${dopaStr}`;
 
+                let actionBtns = `
+                    <button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>
+                `;
+                
+                if (role === 'super_admin') {
+                     actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
+                }
+                
+                if (s.out_request_status === 'Pending') {
+                    if (role === 'super_admin') {
+                         actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review Exit</button>`;
+                    } else {
+                         actionBtns += `<span class="badge bg-warning text-dark">Exit Pending</span>`;
+                    }
+                } else {
+                    actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openOutModal(${s.id})">Out</button>`;
+                }
+
                 tr.innerHTML = `
                     <td>${index + 1}</td>
                     <td>${s.nis_no}</td>
@@ -1037,11 +1088,7 @@
                     <td>${s.office || ''}</td>
                     <td>${location}</td>
                     <td>${s.phone_no || ''}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>
-                        ${(role === 'super_admin') ? `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>` : ''}
-                        <button class="btn btn-sm btn-warning mb-1" onclick="openOutModal(${s.id})">Out</button>
-                    </td>
+                    <td>${actionBtns}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -1125,6 +1172,11 @@
                     officeSel.add(new Option(s.office, s.office));
                 }
                 officeSel.value = s.office || "";
+                if (role === 'office_admin') {
+                    officeSel.disabled = true;
+                } else {
+                    officeSel.disabled = false;
+                }
 
                 document.getElementById('dofa').value = isoToDmy(s.dofa);
                 document.getElementById('dopa').value = isoToDmy(s.dopa);
@@ -1287,23 +1339,37 @@
 
             if (!confirm(`Are you sure you want to mark this personnel as ${reason}?`)) return;
 
+            const isRequest = (role === 'office_admin');
+            const url = isRequest ? `${API_URL}/staff/${id}/exit-request` : `${API_URL}/staff/${id}`; // Super admin uses direct update for now, or we can use exit-request for them too?
+            // Actually, existing logic used PUT /staff/{id}.
+            // For office_admin, we use POST /staff/{id}/exit-request
+            
             try {
-                const payload = {
-                    exit_date: dateStr,
-                    exit_mode: reason
-                };
-
-                const res = await fetch(`${API_URL}/staff/${id}`, {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify(payload)
-                });
+                let res;
+                if (isRequest) {
+                     res = await fetch(`${API_URL}/staff/${id}/exit-request`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ exit_date: dateStr, exit_mode: reason })
+                    });
+                } else {
+                     // Super admin direct update (legacy way, or we can use new endpoints?)
+                     // Use legacy PUT for super admin direct exit
+                     res = await fetch(`${API_URL}/staff/${id}`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ exit_date: dateStr, exit_mode: reason })
+                    });
+                }
 
                 if (res.ok) {
-                    alert("Personnel status updated successfully");
+                    alert(isRequest ? "Exit request submitted for approval" : "Personnel status updated successfully");
                     outModal.hide();
                     loadStaff(); 
                 } else {
@@ -1314,6 +1380,37 @@
                 console.error(e);
                 alert("An error occurred");
             }
+        }
+
+        function openReviewExitModal(id, date, reason) {
+            document.getElementById('reviewStaffId').value = id;
+            document.getElementById('reviewExitDetails').textContent = `Reason: ${reason}, Effective: ${isoToDmy(date)}`;
+            reviewExitModal.show();
+        }
+
+        async function processExitRequest(action) {
+            const id = document.getElementById('reviewStaffId').value;
+            if(!confirm(`Are you sure you want to ${action} this request?`)) return;
+            
+            const endpoint = action === 'approve' ? 'exit-approve' : 'exit-reject';
+            
+            try {
+                const res = await fetch(`${API_URL}/staff/${id}/${endpoint}`, {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (res.ok) {
+                    alert(`Request ${action}d successfully`);
+                    reviewExitModal.hide();
+                    loadStaff();
+                } else {
+                    const err = await res.json();
+                    alert("Error: " + (err.detail || "Failed"));
+                }
+            } catch(e) { console.error(e); }
         }
         
         async function loadPrivileges() {
