@@ -61,7 +61,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="card text-white bg-primary mb-3 cursor-pointer" onclick="showView('personnel')" style="cursor: pointer;">
-                                <div class="card-header">Total Personnel</div>
+                                <div class="card-header" id="dash-card1-title">Total Personnel</div>
                                 <div class="card-body">
                                     <h1 class="card-title display-4 fw-bold" id="dash-total-staff">0</h1>
                                     <p class="card-text">Click to view list</p>
@@ -70,10 +70,10 @@
                         </div>
                         <div class="col-md-6">
                             <div class="card text-white bg-success mb-3 cursor-pointer" onclick="showView('offices')" style="cursor: pointer;">
-                                <div class="card-header">Total Offices</div>
+                                <div class="card-header" id="dash-card2-title">Total Offices</div>
                                 <div class="card-body">
                                     <h1 class="card-title display-4 fw-bold" id="dash-total-offices">0</h1>
-                                    <p class="card-text">Click to view offices</p>
+                                    <p class="card-text" id="dash-card2-text">Click to view offices</p>
                                 </div>
                             </div>
                         </div>
@@ -775,8 +775,26 @@
                 });
                 if(res.ok) {
                     const data = await res.json();
-                    document.getElementById('dash-total-staff').textContent = data.total_staff;
-                    document.getElementById('dash-total-offices').textContent = data.total_offices;
+                    const card1Title = document.getElementById('dash-card1-title');
+                    const card2Title = document.getElementById('dash-card2-title');
+                    const card2Text = document.getElementById('dash-card2-text');
+
+                    if (role === 'office_admin') {
+                        const officeName = data.office_name || 'Your Office';
+                        if (card1Title) card1Title.textContent = `Total Personnel (${officeName})`;
+                        if (card2Title) card2Title.textContent = 'Office Name';
+                        if (card2Text) card2Text.textContent = 'Your assigned office';
+
+                        document.getElementById('dash-total-staff').textContent = data.total_staff ?? 0;
+                        document.getElementById('dash-total-offices').textContent = data.office_name || '';
+                    } else {
+                        if (card1Title) card1Title.textContent = 'Total Personnel';
+                        if (card2Title) card2Title.textContent = 'Total Offices';
+                        if (card2Text) card2Text.textContent = 'Click to view offices';
+
+                        document.getElementById('dash-total-staff').textContent = data.total_staff ?? 0;
+                        document.getElementById('dash-total-offices').textContent = data.total_offices ?? 0;
+                    }
                 }
             } catch(e) { console.error(e); }
         }

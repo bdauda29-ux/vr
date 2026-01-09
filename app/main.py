@@ -41,7 +41,7 @@ try:
     # SQLAlchemy
     from sqlalchemy.orm import Session
     from sqlalchemy.exc import OperationalError
-    from sqlalchemy import select, distinct
+    from sqlalchemy import select, distinct, func
 
     # Local Imports
     from .database import Base, engine, get_db
@@ -170,7 +170,22 @@ def dashboard_stats():
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     with next(get_db()) as db:
-        return jsonify(crud.get_dashboard_stats(db))
+        if user.get("role") == "office_admin":
+            staff_user = crud.get_staff(db, user.get("id"))
+            office_name = staff_user.office if staff_user else None
+            if not office_name:
+                return jsonify({"total_staff": 0, "office_name": None})
+            total_staff = db.scalar(
+                select(func.count(models.Staff.id)).where(
+                    models.Staff.exit_date.is_(None),
+                    models.Staff.office == office_name,
+                )
+            )
+            return jsonify({"total_staff": total_staff, "office_name": office_name})
+
+        stats = crud.get_dashboard_stats(db)
+        stats["office_name"] = None
+        return jsonify(stats)
 
 # --- END AUTH ---
 
