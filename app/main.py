@@ -580,6 +580,12 @@ def create_staff():
             data[k] = parsed
     if "gender" not in data or data["gender"] is None: data["gender"] = ""
     with next(get_db()) as db:
+        if user["role"] == "office_admin":
+             staff_user = crud.get_staff(db, user["id"])
+             if not staff_user or not staff_user.office:
+                 return jsonify({"detail": "Admin has no assigned office"}), 403
+             data["office"] = staff_user.office
+
         try:
             obj = crud.create_staff(db, data)
             crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff")

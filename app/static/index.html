@@ -1209,6 +1209,17 @@
         function showAddForm() {
             const formTab = new bootstrap.Tab(document.getElementById('form-tab'));
             formTab.show();
+            
+            // If office admin, pre-select office
+            if (role === 'office_admin' && currentOfficeName) {
+                const officeSel = document.getElementById('office');
+                // Add option if not exists
+                if(!Array.from(officeSel.options).some(o=>o.value===currentOfficeName)) {
+                    officeSel.add(new Option(currentOfficeName, currentOfficeName));
+                }
+                officeSel.value = currentOfficeName;
+                officeSel.disabled = true;
+            }
         }
 
         async function deleteStaff(id) {
