@@ -762,6 +762,7 @@
             }
 
             // Init Common Data
+            if (role === 'office_admin') fetchUserOffice();
             fetchStates();
             populateRanks();
             loadOffices(); // For dropdown
@@ -797,6 +798,19 @@
         });
 
         // Dashboard Logic
+        async function fetchUserOffice() {
+            if (role !== 'office_admin') return;
+            try {
+                const res = await fetch(`${API_URL}/dashboard/stats`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if(res.ok) {
+                    const data = await res.json();
+                    currentOfficeName = data.office_name;
+                }
+            } catch(e) { console.error("Failed to fetch office info", e); }
+        }
+
         async function loadDashboardStats() {
             try {
                 const res = await fetch(`${API_URL}/dashboard/stats`, {
@@ -1193,7 +1207,7 @@
                 document.getElementById('nok_phone').value = s.nok_phone || "";
                 document.getElementById('remark').value = s.remark || "";
                 
-                showAddForm();
+                showAddForm(true);
                 document.getElementById('formTitle').textContent = "Edit Personnel";
             } catch (err) { console.error(err); }
         }
@@ -1206,19 +1220,31 @@
             document.getElementById('staffForm').reset();
         }
 
-        function showAddForm() {
+        async function showAddForm(isEdit = false) {
             const formTab = new bootstrap.Tab(document.getElementById('form-tab'));
             formTab.show();
             
+            if (!isEdit) {
+                document.getElementById('staffForm').reset();
+                document.getElementById('staffId').value = '';
+                document.getElementById('formTitle').textContent = "Add New Personnel";
+            }
+
             // If office admin, pre-select office
-            if (role === 'office_admin' && currentOfficeName) {
-                const officeSel = document.getElementById('office');
-                // Add option if not exists
-                if(!Array.from(officeSel.options).some(o=>o.value===currentOfficeName)) {
-                    officeSel.add(new Option(currentOfficeName, currentOfficeName));
+            if (role === 'office_admin') {
+                if (!currentOfficeName) await fetchUserOffice();
+                
+                if (currentOfficeName) {
+                    const officeSel = document.getElementById('office');
+                    // Add option if not exists
+                    if(!Array.from(officeSel.options).some(o=>o.value===currentOfficeName)) {
+                        officeSel.add(new Option(currentOfficeName, currentOfficeName));
+                    }
+                    if (!isEdit) {
+                        officeSel.value = currentOfficeName;
+                    }
+                    officeSel.disabled = true;
                 }
-                officeSel.value = currentOfficeName;
-                officeSel.disabled = true;
             }
         }
 
