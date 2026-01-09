@@ -117,13 +117,13 @@ def login():
                     
                     if verification_success:
                         token = auth.create_access_token(data={"sub": user.username, "role": user.role, "id": user.id})
-                        return jsonify({"access_token": token, "token_type": "bearer", "role": user.role, "username": user.username})
+                        return jsonify({"access_token": token, "token_type": "bearer", "role": user.role, "username": user.username, "id": user.id})
                 
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
                     if password == staff.nis_no:
                         token = auth.create_access_token(data={"sub": staff.nis_no, "role": staff.role, "id": staff.id})
-                        return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no})
+                        return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no, "id": staff.id})
                 
                 return jsonify({"detail": "Invalid credentials"}), 401
 
@@ -553,6 +553,7 @@ def list_staff_endpoint():
     rank = request.args.get("rank")
     office = request.args.get("office")
     completeness = request.args.get("completeness")
+    status = request.args.get("status", "active")
     limit = request.args.get("limit", 100, type=int)
     offset = request.args.get("offset", 0, type=int)
     
@@ -561,7 +562,7 @@ def list_staff_endpoint():
             staff_user = crud.get_staff(db, user["id"])
             if not staff_user or not staff_user.office: return jsonify([]), 200
             office = staff_user.office
-        items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, limit=limit, offset=offset)
+        items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, status=status, limit=limit, offset=offset)
         return jsonify([schemas.to_dict_staff(item) for item in items])
 
 @app.post("/staff")
@@ -611,6 +612,16 @@ def update_staff(staff_id: int):
     with next(get_db()) as db:
         existing = crud.get_staff(db, staff_id)
         if not existing: return jsonify({"detail": "Not found"}), 404
+        
+        # Staff Self-Edit Logic
+        if user["role"] == "staff":
+            if user["id"] != staff_id:
+                return jsonify({"detail": "Permission denied"}), 403
+            # Prevent sensitive field changes
+            for restricted in ["office", "rank", "role", "exit_date", "exit_mode", "out_request_status"]:
+                if restricted in data and data[restricted] != getattr(existing, restricted):
+                    return jsonify({"detail": f"Permission denied: Cannot change {restricted}"}), 403
+        
         if user["role"] == "office_admin":
              staff_user = crud.get_staff(db, user["id"])
              if not staff_user or staff_user.office != existing.office: return jsonify({"detail": "Permission denied"}), 403
@@ -765,4 +776,28 @@ def reject_exit(staff_id: int):
         db.commit()
         crud.create_audit_log(db, "EXIT_REJECT", f"Staff: {staff.nis_no}", "Rejected exit request")
         return jsonify({"detail": "Request rejected"})
+
+@app.post("/staff/<int:staff_id>/undo-exit")
+def undo_exit(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        if not staff.exit_date:
+            return jsonify({"detail": "Staff is not exited"}), 400
+            
+        staff.exit_date = None
+        staff.exit_mode = None
+        # Also clear request fields if they linger
+        staff.out_request_status = None
+        staff.out_request_date = None
+        staff.out_request_reason = None
+        
+        db.commit()
+        crud.create_audit_log(db, "UNDO_EXIT", f"Staff: {staff.nis_no}", "Undid exit/posting out")
+        return jsonify(schemas.to_dict_staff(staff))
 

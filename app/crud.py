@@ -29,6 +29,7 @@ def list_staff(
     rank: Optional[str] = None,
     office: Optional[str] = None,
     completeness: Optional[str] = None,
+    status: Optional[str] = "active",
     limit: int = 100,
     offset: int = 0,
 ) -> List[models.Staff]:
@@ -51,6 +52,11 @@ def list_staff(
         models.Staff.nis_no
     ).offset(offset).limit(limit)
     
+    if status == "active":
+        stmt = stmt.where(models.Staff.exit_date.is_(None))
+    elif status == "exited":
+        stmt = stmt.where(models.Staff.exit_date.is_not(None))
+
     if state_id is not None:
         stmt = stmt.where(models.Staff.state_id == state_id)
     if lga_id is not None:

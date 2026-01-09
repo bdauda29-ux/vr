@@ -102,6 +102,14 @@
                         <div class="tab-pane fade show active" id="list-pane" role="tabpanel">
                             <div class="card">
                                 <div class="card-body">
+                                    <ul class="nav nav-pills mb-3 admin-only" id="mainStatusTabs">
+                                        <li class="nav-item">
+                                            <a class="nav-link active" href="#" onclick="setMainStatus('active', this)">Active Personnel</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a class="nav-link" href="#" onclick="setMainStatus('exited', this)">Posted Out / Exited</a>
+                                        </li>
+                                    </ul>
                                     <div class="row mb-3">
                                         <div class="col-md-3">
                                             <input type="text" id="searchInput" class="form-control" placeholder="Search surname, NIS...">
@@ -680,6 +688,9 @@
         let leaveModal;
         let exportModal;
         let currentStatusFilter = 'completed'; // Default to completed
+        let currentStatus = 'active'; // 'active' or 'exited'
+        let userId = localStorage.getItem('userId');
+        let currentOfficeName = '';
         const RANKS = [
             "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI",
             "ASI 1", "ASI 2", "II", "AII", "IA 1", "IA 2", "IA 3"
@@ -753,9 +764,26 @@
         document.addEventListener('DOMContentLoaded', () => {
              // Role Based UI
             if (role === 'staff') {
-                // Staff should redirect to success/personal page or limited view
-                // The user previously said staff goes to success page, but let's handle it here if they land here
-                window.location.href = '/success.html'; 
+                document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+                
+                // Show form view directly
+                showView('personnel');
+                
+                // Show form tab
+                const formTabBtn = document.getElementById('form-tab');
+                formTabBtn.classList.remove('d-none');
+                const formTab = new bootstrap.Tab(formTabBtn);
+                formTab.show();
+                
+                // Hide list tab navigation
+                const listTabBtn = document.getElementById('list-tab');
+                if(listTabBtn) listTabBtn.parentElement.classList.add('d-none');
+                
+                // Load own data if userId exists
+                if(userId) {
+                     editStaff(userId);
+                }
+                
                 return;
             } else if (role === 'office_admin') {
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
@@ -1040,6 +1068,7 @@
             if (r) url += `&rank=${encodeURIComponent(r)}`;
             if (o) url += `&office=${encodeURIComponent(o)}`;
             if (currentStatusFilter) url += `&completeness=${currentStatusFilter}`;
+            if (currentStatus) url += `&status=${currentStatus}`;
 
             try {
                 const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }});
@@ -1048,12 +1077,36 @@
                 renderTable(data);
             } catch (err) { console.error(err); }
         }
+
+        function setMainStatus(status, el) {
+            currentStatus = status;
+            document.querySelectorAll('#mainStatusTabs .nav-link').forEach(a => a.classList.remove('active'));
+            el.classList.add('active');
+            loadStaff();
+        }
         
         function setStatusFilter(status, el) {
             currentStatusFilter = status;
             document.querySelectorAll('#statusTabs .nav-link').forEach(a => a.classList.remove('active'));
             el.classList.add('active');
             loadStaff();
+        }
+
+        async function undoExit(id) {
+            if(!confirm("Are you sure you want to undo this exit? The staff will be active again.")) return;
+            try {
+                const res = await fetch(`${API_URL}/staff/${id}/undo-exit`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if(res.ok) {
+                    alert("Exit undone successfully");
+                    loadStaff();
+                } else {
+                    const data = await res.json();
+                    alert("Failed: " + (data.detail || "Unknown error"));
+                }
+            } catch(e) { console.error(e); }
         }
 
         function renderTable(data) {
@@ -1075,22 +1128,30 @@
                 const separator = (dofa && dopa) ? ' / ' : '';
                 const dates = `${dofaStr}${separator}${dopaStr}`;
 
-                let actionBtns = `
-                    <button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>
-                `;
-                
-                if (role === 'super_admin') {
-                     actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
-                }
-                
-                if (s.out_request_status === 'Pending') {
-                    if (role === 'super_admin') {
-                         actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review Exit</button>`;
-                    } else {
-                         actionBtns += `<span class="badge bg-warning text-dark">Exit Pending</span>`;
-                    }
+                let actionBtns = ``;
+
+                if (currentStatus === 'exited') {
+                     if (role === 'super_admin') {
+                         actionBtns += `<button class="btn btn-sm btn-info mb-1" onclick="undoExit(${s.id})">Undo Exit</button>`;
+                     } else {
+                        actionBtns += `<span class="badge bg-secondary">Posted Out</span>`;
+                     }
                 } else {
-                    actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openOutModal(${s.id})">Out</button>`;
+                    actionBtns += `<button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>`;
+                    
+                    if (role === 'super_admin') {
+                         actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
+                    }
+                    
+                    if (s.out_request_status === 'Pending') {
+                        if (role === 'super_admin') {
+                             actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review Exit</button>`;
+                        } else {
+                             actionBtns += `<span class="badge bg-warning text-dark">Exit Pending</span>`;
+                        }
+                    } else {
+                        actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openOutModal(${s.id})">Out</button>`;
+                    }
                 }
 
                 tr.innerHTML = `
@@ -1149,10 +1210,15 @@
                 });
                 if (res.ok) {
                     alert('Saved Successfully');
-                    document.getElementById('staffForm').reset();
-                    document.getElementById('staffId').value = '';
-                    showList();
-                    loadStaff();
+                    if (role === 'staff') {
+                         // Reload data to show updates
+                         editStaff(userId);
+                    } else {
+                        document.getElementById('staffForm').reset();
+                        document.getElementById('staffId').value = '';
+                        showList();
+                        loadStaff();
+                    }
                 } else {
                     const err = await res.json();
                     alert('Error: ' + (err.detail || JSON.stringify(err)));

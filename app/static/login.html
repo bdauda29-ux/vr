@@ -90,6 +90,7 @@
                     localStorage.setItem('token', data.access_token);
                     localStorage.setItem('role', data.role);
                     localStorage.setItem('username', data.username);
+                    if (data.id) localStorage.setItem('userId', data.id);
                     
                     // Redirect
                     window.location.href = '/';
