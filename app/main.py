@@ -188,7 +188,10 @@ def get_current_user():
 def require_role(allowed_roles):
     user = get_current_user()
     if not user: return None, jsonify({"detail": "Not authenticated"}), 401
-    if user["role"] not in allowed_roles: return None, jsonify({"detail": "Permission denied"}), 403
+    role = user.get("role")
+    if role not in allowed_roles: 
+        print(f"PERMISSION DENIED: User role '{role}' not in {allowed_roles}")
+        return None, jsonify({"detail": f"Permission denied (Role: {role})"}), 403
     return user, None, None
 
 @app.route("/")
@@ -389,6 +392,10 @@ if engine:
                 pwd_hash = auth.get_password_hash("admin")
                 admin = models.User(username="admin", password_hash=pwd_hash, role="super_admin")
                 db.add(admin)
+                db.commit()
+            elif admin.role != "super_admin":
+                print(f"UPGRADING admin user from {admin.role} to super_admin")
+                admin.role = "super_admin"
                 db.commit()
 
         from .database import SessionLocal
