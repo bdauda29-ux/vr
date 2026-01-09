@@ -125,12 +125,18 @@ def list_audit_logs(db: Session, limit: int = 100, offset: int = 0) -> List[mode
     return list(db.scalars(select(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).offset(offset).limit(limit)))
 
 def get_dashboard_stats(db: Session):
-    total_staff = db.scalar(select(func.count(models.Staff.id)))
+    total_staff = db.scalar(
+        select(func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None))
+    )
     # Count distinct offices, ignoring None or empty strings
     # Note: SQLite might behave differently with NULLs in count(distinct), but let's filter explicitly
     total_offices = db.scalar(
         select(func.count(distinct(models.Staff.office)))
-        .where(models.Staff.office.is_not(None), models.Staff.office != "")
+        .where(
+            models.Staff.exit_date.is_(None),
+            models.Staff.office.is_not(None),
+            models.Staff.office != ""
+        )
     )
     return {
         "total_staff": total_staff,
