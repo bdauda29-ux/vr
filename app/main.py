@@ -41,6 +41,7 @@ try:
     # SQLAlchemy
     from sqlalchemy.orm import Session
     from sqlalchemy.exc import OperationalError
+    from sqlalchemy import select, distinct
 
     # Local Imports
     from .database import Base, engine, get_db
@@ -434,9 +435,31 @@ if engine:
 def list_offices_route():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     with next(get_db()) as db:
-        # Prefer the Office model if populated, else distinct strings from staff? 
-        # Actually, crud.list_offices_model is what we want for the directory.
         items = crud.list_offices_model(db)
+        existing_names = {i.name.strip().lower() for i in items if i and i.name and i.name.strip()}
+        staff_office_names = list(
+            db.scalars(
+                select(distinct(models.Staff.office))
+                .where(models.Staff.office.is_not(None), models.Staff.office != "")
+                .order_by(models.Staff.office)
+            )
+        )
+        added = False
+        for name in staff_office_names:
+            if not name:
+                continue
+            clean = str(name).strip()
+            if not clean:
+                continue
+            key = clean.lower()
+            if key in existing_names:
+                continue
+            db.add(models.Office(name=clean))
+            existing_names.add(key)
+            added = True
+        if added:
+            db.commit()
+            items = crud.list_offices_model(db)
         return jsonify([schemas.to_dict_office(i) for i in items])
 
 @app.post("/offices")
