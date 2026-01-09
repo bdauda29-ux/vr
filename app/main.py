@@ -163,6 +163,14 @@ def get_current_user_info():
     
     return jsonify(payload)
 
+@app.get("/dashboard/stats")
+def dashboard_stats():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    with next(get_db()) as db:
+        return jsonify(crud.get_dashboard_stats(db))
+
 # --- END AUTH ---
 
 def parse_date_value(value):
