@@ -45,7 +45,7 @@ try:
 
     # Local Imports
     from .database import Base, engine, get_db
-    from . import models, schemas, crud, auth, database
+    from . import models, schemas, crud, auth, database, migrations
     from .seeds import NIGERIA_STATES_LGAS
 
 except Exception as e:
@@ -443,35 +443,8 @@ if engine:
         from .database import SessionLocal
         db = SessionLocal()
         try:
-            # Migration Check: Add 'role' to 'users' if missing
             try:
-                from sqlalchemy import text, inspect
-                inspector = inspect(engine)
-                columns = [c['name'] for c in inspector.get_columns('users')]
-                if 'role' not in columns:
-                    print("MIGRATION: Adding 'role' column to users table...")
-                    with engine.connect() as conn:
-                        conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(32) DEFAULT 'admin' NOT NULL"))
-                        conn.commit()
-                    print("MIGRATION: Success.")
-                
-                # Migration: Add out_request fields to staff
-                staff_cols = [c['name'] for c in inspector.get_columns('staff')]
-                with engine.connect() as conn:
-                    if 'out_request_status' not in staff_cols:
-                        print("MIGRATION: Adding out_request fields to staff...")
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_status VARCHAR(32)"))
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_date DATE"))
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_reason VARCHAR(64)"))
-                        conn.commit()
-
-                # Migration: Add password_hash to staff
-                if 'password_hash' not in staff_cols:
-                    print("MIGRATION: Adding password_hash to staff...")
-                    with engine.connect() as conn:
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN password_hash VARCHAR(128)"))
-                        conn.commit()
-
+                migrations.run_migrations()
             except Exception as mig_err:
                 print(f"MIGRATION ERROR: {mig_err}")
 
