@@ -1172,7 +1172,8 @@
                      <td>${s.rank}</td>
                      <td>${s.office || ''}</td>
                      <td>
-                         <button class="btn btn-sm btn-secondary" onclick="resetUserPassword(${s.id})">Reset Pwd</button>
+                         <button class="btn btn-sm btn-secondary me-1" onclick="resetUserPassword(${s.id})">Reset Pwd</button>
+                         <button class="btn btn-sm btn-warning" onclick="resetUserLogin(${s.id})">Reset Login</button>
                      </td>
                  `;
                  tbody.appendChild(tr);
@@ -1839,6 +1840,37 @@
                     loadLeaveRequests();
                 } else {
                     alert("Failed to update status");
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function resetUserPassword(id) {
+             if(!confirm("Reset password to default (NIS Number)?")) return;
+             try {
+                 const res = await fetch(`${API_URL}/staff/${id}/reset-password`, {
+                     method: 'POST',
+                     headers: { 'Authorization': `Bearer ${token}` }
+                 });
+                 if(res.ok) {
+                     alert("Password reset successfully");
+                 } else {
+                     alert("Failed to reset password");
+                 }
+             } catch(e) { console.error(e); }
+        }
+
+        async function resetUserLogin(id) {
+            if(!confirm("Reset login count for this user? They will be allowed to log in again.")) return;
+            try {
+                const res = await fetch(`${API_URL}/staff/${id}/reset-login`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if(res.ok) {
+                    alert("Login count reset successfully");
+                } else {
+                    const data = await res.json();
+                    alert("Failed: " + (data.detail || "Unknown error"));
                 }
             } catch(e) { console.error(e); }
         }

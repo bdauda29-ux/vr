@@ -121,6 +121,10 @@ def login():
                 
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
+                    # Check login limit
+                    if staff.login_count >= 2:
+                        return jsonify({"detail": "Login limit exceeded. Please contact Super Admin to reset."}), 403
+
                     verification_success = False
                     if staff.password_hash:
                          try:
@@ -132,6 +136,10 @@ def login():
                          verification_success = True
 
                     if verification_success:
+                        # Increment login count
+                        staff.login_count += 1
+                        db.commit()
+                        
                         token = auth.create_access_token(data={"sub": staff.nis_no, "role": staff.role, "id": staff.id})
                         return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no, "id": staff.id})
                 
@@ -672,7 +680,38 @@ def delete_staff(staff_id: int):
         crud.delete_staff(db, obj)
         crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record")
         return jsonify({"detail": "Deleted"})
-        return jsonify({"detail": "Not found"}), 404
+
+@app.post("/staff/<int:staff_id>/reset-login")
+def reset_login_count(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        obj = crud.get_staff(db, staff_id)
+        if not obj: return jsonify({"detail": "Not found"}), 404
+        
+        obj.login_count = 0
+        db.add(obj)
+        db.commit()
+        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count")
+        return jsonify({"detail": "Login count reset successfully"})
+
+@app.post("/staff/<int:staff_id>/reset-password")
+def reset_staff_password(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        obj = crud.get_staff(db, staff_id)
+        if not obj: return jsonify({"detail": "Not found"}), 404
+        
+        obj.password_hash = None # Reset to use NIS number
+        db.add(obj)
+        db.commit()
+        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default")
+        return jsonify({"detail": "Password reset successfully"})
 
 @app.put("/staff/<int:staff_id>/role")
 def update_staff_role(staff_id: int):
