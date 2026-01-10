@@ -121,19 +121,7 @@ def login():
                 
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
-                    is_valid = False
-                    # Check custom password first
-                    if staff.password_hash:
-                        try:
-                            if auth.verify_password(password, staff.password_hash):
-                                is_valid = True
-                        except ValueError:
-                            pass
-                    # Fallback to NIS No if no custom password
-                    elif password == staff.nis_no:
-                        is_valid = True
-
-                    if is_valid:
+                    if password == staff.nis_no:
                         token = auth.create_access_token(data={"sub": staff.nis_no, "role": staff.role, "id": staff.id})
                         return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no, "id": staff.id})
                 
@@ -175,101 +163,6 @@ def get_current_user_info():
         return jsonify({"detail": "Invalid token"}), 401
     
     return jsonify(payload)
-
-@app.post("/auth/change-password")
-def change_password():
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user = get_current_user()
-    if not user: return jsonify({"detail": "Not authenticated"}), 401
-    
-    data = request.get_json(force=True)
-    current_password = data.get("current_password")
-    new_password = data.get("new_password")
-    
-    if not current_password or not new_password:
-        return jsonify({"detail": "Missing fields"}), 400
-        
-    with next(get_db()) as db:
-        # Check if user is in User table
-        db_user = db.get(models.User, user["id"]) if user.get("role") in ["admin", "super_admin"] and "nis_no" not in user else None
-        # Note: JWT payload for Staff has "sub"=nis_no, User has "sub"=username. 
-        # But both have "id". If "nis_no" is in token, it's staff? 
-        # My login logic sets "sub" to username/nis_no.
-        # Let's rely on ID and table check.
-        
-        # Actually, simpler: check User first, then Staff.
-        # But ID might collide if both tables use integer PKs starting from 1.
-        # In login, I return "id".
-        # If I am logged in as Staff, I should check Staff table.
-        # If I am logged in as User (admin), I should check User table.
-        # The JWT payload doesn't explicitly say "type".
-        # But Staff payload has "sub" = nis_no (usually string/number). User has "sub" = username.
-        
-        # Let's check both or infer.
-        # Best way: Try User, if verify fails or not found, try Staff.
-        # Wait, ID collision is real.
-        # I should verify based on "sub".
-        
-        sub = user.get("sub")
-        
-        # Try User
-        u = db.query(models.User).filter(models.User.username == sub).first()
-        if u:
-            # Verify current
-            try:
-                if not auth.verify_password(current_password, u.password_hash):
-                    return jsonify({"detail": "Incorrect current password"}), 400
-            except ValueError:
-                 # If legacy hash fails, we can't verify, so we can't allow change?
-                 # Or we assume if it failed verification, it's wrong.
-                 return jsonify({"detail": "Incorrect current password"}), 400
-            
-            # Update
-            u.password_hash = auth.get_password_hash(new_password)
-            db.commit()
-            return jsonify({"detail": "Password updated"})
-            
-        # Try Staff
-        s = crud.get_staff_by_nis(db, sub)
-        if s:
-            # Verify current
-            # If s.password_hash is None, current MUST be nis_no
-            verified = False
-            if s.password_hash:
-                try:
-                    if auth.verify_password(current_password, s.password_hash):
-                        verified = True
-                except ValueError: pass
-            else:
-                if current_password == s.nis_no:
-                    verified = True
-            
-            if not verified:
-                return jsonify({"detail": "Incorrect current password"}), 400
-                
-            s.password_hash = auth.get_password_hash(new_password)
-            db.add(s)
-            db.commit()
-            return jsonify({"detail": "Password updated"})
-            
-        return jsonify({"detail": "User not found"}), 404
-
-@app.post("/staff/<int:staff_id>/reset-password")
-def reset_staff_password(staff_id: int):
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
-    if err: return err, code
-    
-    with next(get_db()) as db:
-        s = crud.get_staff(db, staff_id)
-        if not s: return jsonify({"detail": "Staff not found"}), 404
-        
-        # Reset to default (None -> NIS No)
-        s.password_hash = None
-        db.add(s)
-        db.commit()
-        crud.create_audit_log(db, "PASSWORD_RESET", f"Staff: {s.nis_no}", "Reset password to default")
-        return jsonify({"detail": "Password reset to default (NIS No)"})
 
 @app.get("/dashboard/stats")
 def dashboard_stats():

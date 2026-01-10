@@ -64,4 +64,3 @@ def to_dict_audit_log(obj) -> Dict[str, Any]:
         "timestamp": obj.timestamp.isoformat() if obj.timestamp else None,
         "details": obj.details,
     }
-
