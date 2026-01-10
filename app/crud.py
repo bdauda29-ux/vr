@@ -15,6 +15,16 @@ def list_states(db: Session) -> List[models.State]:
 def list_lgas_by_state(db: Session, state_id: int) -> List[models.LGA]:
     return list(db.scalars(select(models.LGA).where(models.LGA.state_id == state_id).order_by(models.LGA.name)))
 
+def get_user(db: Session, user_id: int) -> Optional[models.User]:
+    return db.get(models.User, user_id)
+
+def update_user_password(db: Session, user: models.User, password_hash: str) -> models.User:
+    user.password_hash = password_hash
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
 def get_staff(db: Session, staff_id: int) -> Optional[models.Staff]:
     return db.get(models.Staff, staff_id)
 

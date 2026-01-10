@@ -60,13 +60,13 @@ class Staff(Base):
     remark = Column(String(256), nullable=True)
     exit_date = Column(Date, nullable=True)
     exit_mode = Column(String(64), nullable=True) # Posted Out, Deceased, Retired, etc.
-    password_hash = Column(String(128), nullable=True)
     
     # Out Request Fields
     out_request_status = Column(String(32), nullable=True, default=None) # Pending, Approved, Rejected
     out_request_date = Column(Date, nullable=True)
     out_request_reason = Column(String(64), nullable=True)
 
+    password_hash = Column(String(128), nullable=True) # For custom passwords
     role = Column(String(32), nullable=False, default="staff") # staff, office_admin, super_admin
     state = relationship("State")
     lga = relationship("LGA")

@@ -5,11 +5,6 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 DB_URL = os.getenv("DATABASE_URL")
 
-# Check for placeholder/invalid DB_URL and force SQLite if found
-if DB_URL and "user:password@host:port" in DB_URL:
-    print("DEBUG: Detected placeholder DATABASE_URL, falling back to SQLite.")
-    DB_URL = None
-
 # If no DATABASE_URL is set, fallback to SQLite
 if not DB_URL or not DB_URL.strip():
     if platform.system() == "Windows":
@@ -40,7 +35,6 @@ if "postgresql://" in DB_URL and "sslmode" not in DB_URL:
 
 # Fail-safe engine creation
 try:
-    print(f"DEBUG: Initializing engine with DB_URL: {DB_URL}")
     connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
     engine = create_engine(DB_URL, future=True, echo=False, connect_args=connect_args)
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
