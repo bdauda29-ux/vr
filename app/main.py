@@ -121,7 +121,17 @@ def login():
                 
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
-                    if password == staff.nis_no:
+                    verification_success = False
+                    if staff.password_hash:
+                         try:
+                             if auth.verify_password(password, staff.password_hash):
+                                 verification_success = True
+                         except ValueError:
+                             pass
+                    elif password == staff.nis_no:
+                         verification_success = True
+
+                    if verification_success:
                         token = auth.create_access_token(data={"sub": staff.nis_no, "role": staff.role, "id": staff.id})
                         return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no, "id": staff.id})
                 
@@ -445,6 +455,13 @@ if engine:
                         conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_status VARCHAR(32)"))
                         conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_date DATE"))
                         conn.execute(text("ALTER TABLE staff ADD COLUMN out_request_reason VARCHAR(64)"))
+                        conn.commit()
+
+                # Migration: Add password_hash to staff
+                if 'password_hash' not in staff_cols:
+                    print("MIGRATION: Adding password_hash to staff...")
+                    with engine.connect() as conn:
+                        conn.execute(text("ALTER TABLE staff ADD COLUMN password_hash VARCHAR(128)"))
                         conn.commit()
 
             except Exception as mig_err:

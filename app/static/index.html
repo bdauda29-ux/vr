@@ -1139,6 +1139,10 @@
                 } else {
                     actionBtns += `<button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>`;
                     
+                    if (role === 'super_admin' || role === 'admin') {
+                         actionBtns += `<button class="btn btn-sm btn-secondary mb-1" onclick="resetUserPassword(${s.id})">Reset Pwd</button>`;
+                    }
+
                     if (role === 'super_admin') {
                          actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
                     }
