@@ -841,6 +841,40 @@
             await fetchStates();
             await loadOffices(); // For dropdown
 
+            // Init Modals
+            const outEl = document.getElementById('outModal');
+            if (outEl) outModal = new bootstrap.Modal(outEl);
+            
+            const expEl = document.getElementById('exportModal');
+            if (expEl) exportModal = new bootstrap.Modal(expEl);
+            
+            const reviewEl = document.getElementById('reviewExitModal');
+            if (reviewEl) reviewExitModal = new bootstrap.Modal(reviewEl);
+
+            // Init DatePickers
+            flatpickr(".date-picker", {
+                dateFormat: "d/m/Y",
+                allowInput: true
+            });
+
+            // Init Form Listener
+            const staffForm = document.getElementById('staffForm');
+            if (staffForm) {
+                staffForm.removeEventListener('submit', handleFormSubmit); // Prevent duplicates
+                staffForm.addEventListener('submit', handleFormSubmit);
+            }
+            
+            // Listen for tab changes to load specific data
+            const privilegesTab = document.getElementById('privileges-tab');
+            if(privilegesTab) {
+                privilegesTab.addEventListener('shown.bs.tab', loadPrivileges);
+            }
+            
+            const resetTab = document.getElementById('password-reset-tab');
+            if(resetTab) {
+                resetTab.addEventListener('shown.bs.tab', loadResetList);
+            }
+
              // Role Based UI
             if (role === 'staff') {
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
@@ -874,36 +908,6 @@
             }
 
             loadStaff();
-
-            // Init Modals
-            const outEl = document.getElementById('outModal');
-            if (outEl) outModal = new bootstrap.Modal(outEl);
-            
-            const expEl = document.getElementById('exportModal');
-            if (expEl) exportModal = new bootstrap.Modal(expEl);
-            
-            const reviewEl = document.getElementById('reviewExitModal');
-            if (reviewEl) reviewExitModal = new bootstrap.Modal(reviewEl);
-
-            // Init DatePickers
-            flatpickr(".date-picker", {
-                dateFormat: "d/m/Y",
-                allowInput: true
-            });
-
-            // Init Form Listener
-            document.getElementById('staffForm').addEventListener('submit', handleFormSubmit);
-            
-            // Listen for tab changes to load specific data
-            const privilegesTab = document.getElementById('privileges-tab');
-            if(privilegesTab) {
-                privilegesTab.addEventListener('shown.bs.tab', loadPrivileges);
-            }
-            
-            const resetTab = document.getElementById('password-reset-tab');
-            if(resetTab) {
-                resetTab.addEventListener('shown.bs.tab', loadResetList);
-            }
 
             // Default View
             showView('dashboard');
@@ -1325,7 +1329,8 @@
                     body: JSON.stringify(payload)
                 });
                 if (res.ok) {
-                    if (role === 'staff') {
+                    const currentRole = localStorage.getItem('role');
+                    if (currentRole === 'staff') {
                          showView('success');
                     } else {
                         alert('Saved Successfully');
