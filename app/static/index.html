@@ -24,6 +24,14 @@
         .required:after { content: " *"; color: red; }
         .nav-link { cursor: pointer; }
         .small-font { font-size: 0.85em; }
+        
+        /* Sidebar Submenu Arrow Rotation */
+        a[aria-expanded="true"] .bi-chevron-down {
+            transform: rotate(180deg);
+        }
+        .bi-chevron-down {
+            transition: transform 0.2s ease-in-out;
+        }
     </style>
 </head>
 <body>
@@ -33,9 +41,21 @@
             <div class="sidebar-heading border-bottom bg-dark text-white text-center fw-bold">VSS Admin</div>
             <div class="list-group list-group-flush">
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('dashboard')"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a>
-                <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('personnel')"><i class="bi bi-people-fill me-2"></i> Personnel</a>
+                
+                <!-- Personnel Submenu -->
+                <a class="list-group-item list-group-item-action list-group-item-dark p-3 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#personnelSubmenu" role="button" aria-expanded="false" aria-controls="personnelSubmenu">
+                    <span><i class="bi bi-people-fill me-2"></i> Personnel</span>
+                    <i class="bi bi-chevron-down small-font"></i>
+                </a>
+                <div class="collapse" id="personnelSubmenu">
+                    <a class="list-group-item list-group-item-action list-group-item-dark p-3 ps-5 small-font" href="#" onclick="showPersonnelTab('list-tab')">Personnel List</a>
+                    <a class="list-group-item list-group-item-action list-group-item-dark p-3 ps-5 small-font" href="#" onclick="showPersonnelTab('form-tab')">Add New</a>
+                    <a class="list-group-item list-group-item-action list-group-item-dark p-3 ps-5 small-font admin-only" href="#" onclick="showPersonnelTab('import-tab')">Bulk Import</a>
+                    <a class="list-group-item list-group-item-action list-group-item-dark p-3 ps-5 small-font admin-only" href="#" onclick="showPersonnelTab('privileges-tab')">Privileges</a>
+                    <a class="list-group-item list-group-item-action list-group-item-dark p-3 ps-5 small-font admin-only" href="#" onclick="showPersonnelTab('password-reset-tab')">Password Reset</a>
+                </div>
+
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3 admin-only" href="#" onclick="showView('offices')"><i class="bi bi-building me-2"></i> Offices</a>
-                <a class="list-group-item list-group-item-action list-group-item-dark p-3 admin-only" href="#" onclick="showPrivileges()"><i class="bi bi-person-gear me-2"></i> Privileges</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3" href="#" onclick="showView('leave')"><i class="bi bi-calendar-check me-2"></i> Leave</a>
                 <a class="list-group-item list-group-item-action list-group-item-dark p-3 admin-only" href="#" onclick="showView('audit')"><i class="bi bi-journal-text me-2"></i> Audit Log</a>
             </div>
@@ -801,13 +821,17 @@
             }
         }
 
-        function showPrivileges() {
+        function showPersonnelTab(tabId) {
             showView('personnel');
-            const tabEl = document.getElementById('privileges-tab');
+            const tabEl = document.getElementById(tabId);
             if (tabEl) {
                 const tab = new bootstrap.Tab(tabEl);
                 tab.show();
             }
+        }
+
+        function showPrivileges() {
+            showPersonnelTab('privileges-tab');
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
