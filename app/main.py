@@ -569,26 +569,31 @@ def get_lgas(state_id: int):
 @app.get("/staff")
 def list_staff_endpoint():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user = get_current_user()
-    if not user: return jsonify({"detail": "Not authenticated"}), 401
-    
-    q = request.args.get("q")
-    state_id = request.args.get("state_id", type=int)
-    lga_id = request.args.get("lga_id", type=int)
-    rank = request.args.get("rank")
-    office = request.args.get("office")
-    completeness = request.args.get("completeness")
-    status = request.args.get("status", "active")
-    limit = request.args.get("limit", 100, type=int)
-    offset = request.args.get("offset", 0, type=int)
-    
-    with next(get_db()) as db:
-        if user["role"] == "office_admin":
-            staff_user = crud.get_staff(db, user["id"])
-            if not staff_user or not staff_user.office: return jsonify([]), 200
-            office = staff_user.office
-        items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, status=status, limit=limit, offset=offset)
-        return jsonify([schemas.to_dict_staff(item) for item in items])
+    try:
+        user = get_current_user()
+        if not user: return jsonify({"detail": "Not authenticated"}), 401
+        
+        q = request.args.get("q")
+        state_id = request.args.get("state_id", type=int)
+        lga_id = request.args.get("lga_id", type=int)
+        rank = request.args.get("rank")
+        office = request.args.get("office")
+        completeness = request.args.get("completeness")
+        status = request.args.get("status", "active")
+        limit = request.args.get("limit", 100, type=int)
+        offset = request.args.get("offset", 0, type=int)
+        
+        with next(get_db()) as db:
+            if user["role"] == "office_admin":
+                staff_user = crud.get_staff(db, user["id"])
+                if not staff_user or not staff_user.office: return jsonify([]), 200
+                office = staff_user.office
+            items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, status=status, limit=limit, offset=offset)
+            return jsonify([schemas.to_dict_staff(item) for item in items])
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}", "trace": traceback.format_exc()}), 500
 
 @app.post("/staff")
 def create_staff():
