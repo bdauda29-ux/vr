@@ -820,6 +820,11 @@
             if(privilegesTab) {
                 privilegesTab.addEventListener('shown.bs.tab', loadPrivileges);
             }
+            
+            const resetTab = document.getElementById('password-reset-tab');
+            if(resetTab) {
+                resetTab.addEventListener('shown.bs.tab', loadResetList);
+            }
 
             // Default View
             showView('dashboard');
@@ -1056,6 +1061,38 @@
                     });
                 }
             } catch(e) { console.error(e); }
+        }
+
+
+        async function loadResetList() {
+            const q = document.getElementById('resetSearchInput').value;
+            let url = `${API_URL}/staff?limit=50`; // Default to active staff
+            if (q) url += `&q=${encodeURIComponent(q)}`;
+            
+            try {
+                const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }});
+                if (!res.ok) throw new Error("Failed");
+                const data = await res.json();
+                renderResetTable(data);
+            } catch (err) { console.error(err); }
+        }
+
+        function renderResetTable(data) {
+             const tbody = document.getElementById('resetTableBody');
+             tbody.innerHTML = '';
+             data.forEach(s => {
+                 const tr = document.createElement('tr');
+                 tr.innerHTML = `
+                     <td>${s.nis_no}</td>
+                     <td>${s.surname} ${s.other_names}</td>
+                     <td>${s.rank}</td>
+                     <td>${s.office || ''}</td>
+                     <td>
+                         <button class="btn btn-sm btn-secondary" onclick="resetUserPassword(${s.id})">Reset Pwd</button>
+                     </td>
+                 `;
+                 tbody.appendChild(tr);
+             });
         }
 
         async function loadStaff() {
