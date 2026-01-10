@@ -25,6 +25,7 @@
                 <a class="list-group-item list-group-item-action p-3 admin-only" href="#" onclick="showPrivileges()"><i class="bi bi-person-gear me-2"></i> Privileges</a>
                 <a class="list-group-item list-group-item-action p-3" href="#" onclick="showView('leave')"><i class="bi bi-calendar-check me-2"></i> Leave</a>
                 <a class="list-group-item list-group-item-action p-3 admin-only" href="#" onclick="showView('audit')"><i class="bi bi-journal-text me-2"></i> Audit Log</a>
+                <a class="list-group-item list-group-item-action p-3" href="#" onclick="showChangePasswordModal()"><i class="bi bi-key me-2"></i> Change Password</a>
             </div>
             <div class="mt-auto p-3 border-top text-center text-white" style="border-top-color: rgba(255,255,255,0.1) !important;">
                 <small id="userDisplaySidebar"></small>
@@ -1128,6 +1129,7 @@
                     
                     if (role === 'super_admin') {
                          actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
+                         actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="resetPassword(${s.id})">Reset Pwd</button>`;
                     }
                     
                     if (s.out_request_status === 'Pending') {
@@ -1702,6 +1704,114 @@
                     alert("Failed to update status");
                 }
             } catch(e) { console.error(e); }
+        }
+    </script>
+    <!-- Change Password Modal -->
+    <div class="modal fade" id="changePasswordModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="changePasswordForm">
+                        <div class="mb-3">
+                            <label class="form-label">Current Password</label>
+                            <input type="password" class="form-control" id="cp_current" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">New Password</label>
+                            <input type="password" class="form-control" id="cp_new" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirm New Password</label>
+                            <input type="password" class="form-control" id="cp_confirm" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="submitChangePassword()">Update Password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ... (Existing script code is implicit, we are just appending functions before end of script block if we could, but we are outside script block in this SearchReplace context usually)
+        // Wait, SearchReplace replaces lines. I need to be careful.
+        // I will add the modal HTML before <script> tag or at end of body.
+        // And then add JS functions inside the script tag or in a new script tag.
+        
+        // Let's add everything at the end of body.
+    </script>
+    
+    <script>
+        const changePasswordModal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
+
+        function showChangePasswordModal() {
+            document.getElementById('changePasswordForm').reset();
+            changePasswordModal.show();
+        }
+
+        async function submitChangePassword() {
+            const current = document.getElementById('cp_current').value;
+            const newPass = document.getElementById('cp_new').value;
+            const confirmPass = document.getElementById('cp_confirm').value;
+
+            if (!current || !newPass || !confirmPass) {
+                alert("All fields are required");
+                return;
+            }
+
+            if (newPass !== confirmPass) {
+                alert("New passwords do not match");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/change-password`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` 
+                    },
+                    body: JSON.stringify({ current_password: current, new_password: newPass })
+                });
+                
+                const data = await res.json();
+                if (res.ok) {
+                    alert("Password updated successfully");
+                    changePasswordModal.hide();
+                } else {
+                    alert("Error: " + (data.detail || "Failed"));
+                }
+            } catch (e) {
+                console.error(e);
+                alert("An error occurred");
+            }
+        }
+
+        async function resetPassword(id) {
+            if (!confirm("Are you sure you want to reset this user's password to default (NIS No)?")) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/staff/${id}/reset-password`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await res.json();
+                if (res.ok) {
+                    alert("Password reset successfully");
+                } else {
+                    alert("Error: " + (data.detail || "Failed"));
+                }
+            } catch (e) {
+                console.error(e);
+                alert("An error occurred");
+            }
         }
     </script>
 </body>

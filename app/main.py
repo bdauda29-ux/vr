@@ -121,7 +121,14 @@ def login():
                 
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
-                    if password == staff.nis_no:
+                    authenticated = False
+                    if staff.password_hash:
+                        if auth.verify_password(password, staff.password_hash):
+                            authenticated = True
+                    elif password == staff.nis_no:
+                        authenticated = True
+                        
+                    if authenticated:
                         token = auth.create_access_token(data={"sub": staff.nis_no, "role": staff.role, "id": staff.id})
                         return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no, "id": staff.id})
                 
@@ -149,6 +156,68 @@ def login():
             "error": str(e),
             "trace": traceback.format_exc()
         }), 500
+
+@app.post("/change-password")
+def change_password():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    data = request.get_json(force=True)
+    current_password = data.get("current_password")
+    new_password = data.get("new_password")
+    
+    if not current_password or not new_password:
+        return jsonify({"detail": "Current and new password required"}), 400
+        
+    with next(get_db()) as db:
+        # Check if user is Admin (User model)
+        if user["role"] in ["super_admin", "admin"]:
+             db_user = db.query(models.User).filter(models.User.username == user["sub"]).first()
+             if db_user:
+                 # Check if we are dealing with a Staff user who happens to be an admin (unlikely given separate tables but possible logic overlap)
+                 # The 'sub' for User is username, for Staff is nis_no.
+                 # Let's verify password against User table first
+                 try:
+                     if auth.verify_password(current_password, db_user.password_hash):
+                         db_user.password_hash = auth.get_password_hash(new_password)
+                         db.commit()
+                         return jsonify({"detail": "Password updated successfully"})
+                 except ValueError:
+                     pass # Fallthrough if hash invalid
+
+        # Check Staff table
+        staff = crud.get_staff(db, user["id"])
+        if staff:
+            # Verify current password
+            if staff.password_hash:
+                if not auth.verify_password(current_password, staff.password_hash):
+                     return jsonify({"detail": "Incorrect current password"}), 400
+            else:
+                if current_password != staff.nis_no:
+                     return jsonify({"detail": "Incorrect current password"}), 400
+            
+            staff.password_hash = auth.get_password_hash(new_password)
+            db.commit()
+            return jsonify({"detail": "Password updated successfully"})
+            
+        return jsonify({"detail": "User not found or password incorrect"}), 400
+
+@app.post("/staff/<int:staff_id>/reset-password")
+def reset_password(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Staff not found"}), 404
+        
+        # Reset to default (remove hash)
+        staff.password_hash = None
+        db.commit()
+        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {staff.nis_no}", f"Password reset by {user['sub']}")
+        return jsonify({"detail": "Password reset to default (NIS No)"})
 
 @app.get("/me")
 def get_current_user_info():

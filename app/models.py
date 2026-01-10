@@ -60,6 +60,7 @@ class Staff(Base):
     remark = Column(String(256), nullable=True)
     exit_date = Column(Date, nullable=True)
     exit_mode = Column(String(64), nullable=True) # Posted Out, Deceased, Retired, etc.
+    password_hash = Column(String(128), nullable=True)
     
     # Out Request Fields
     out_request_status = Column(String(32), nullable=True, default=None) # Pending, Approved, Rejected
