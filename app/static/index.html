@@ -836,6 +836,14 @@
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
+            // 1. Init Form Listener (Highest Priority)
+            const staffForm = document.getElementById('staffForm');
+            if (staffForm) {
+                // Ensure no duplicates and force handleFormSubmit
+                staffForm.removeEventListener('submit', handleFormSubmit);
+                staffForm.addEventListener('submit', handleFormSubmit);
+            }
+
             // Init Common Data
             populateRanks();
             await fetchStates();
@@ -857,13 +865,6 @@
                 allowInput: true
             });
 
-            // Init Form Listener
-            const staffForm = document.getElementById('staffForm');
-            if (staffForm) {
-                staffForm.removeEventListener('submit', handleFormSubmit); // Prevent duplicates
-                staffForm.addEventListener('submit', handleFormSubmit);
-            }
-            
             // Listen for tab changes to load specific data
             const privilegesTab = document.getElementById('privileges-tab');
             if(privilegesTab) {
@@ -1291,6 +1292,8 @@
 
         async function handleFormSubmit(e) {
             e.preventDefault();
+            console.log("Submitting form..."); // Debug
+
             const id = document.getElementById('staffId').value;
             
             const payload = {
@@ -1331,6 +1334,7 @@
                 if (res.ok) {
                     const currentRole = localStorage.getItem('role');
                     if (currentRole === 'staff') {
+                         console.log("Showing success view for staff");
                          showView('success');
                     } else {
                         alert('Saved Successfully');
