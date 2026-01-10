@@ -95,6 +95,9 @@
                         <li class="nav-item admin-only" role="presentation">
                             <button class="nav-link" id="privileges-tab" data-bs-toggle="tab" data-bs-target="#privileges-pane" type="button">Privileges</button>
                         </li>
+                        <li class="nav-item admin-only" role="presentation">
+                            <button class="nav-link" id="password-reset-tab" data-bs-toggle="tab" data-bs-target="#password-reset-pane" type="button">Password Reset</button>
+                        </li>
                     </ul>
 
                     <div class="tab-content" id="personnelTabContent">
@@ -373,6 +376,37 @@
                                             </thead>
                                             <tbody id="privilegesTableBody">
                                             </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Password Reset Pane -->
+                        <div class="tab-pane fade" id="password-reset-pane" role="tabpanel">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">Reset User Passwords</h5>
+                                    <div class="row mb-3">
+                                        <div class="col-md-4">
+                                            <input type="text" id="resetSearchInput" class="form-control" placeholder="Search surname, NIS...">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <button class="btn btn-primary w-100" onclick="loadResetList()"><i class="bi bi-search"></i> Search</button>
+                                        </div>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover align-middle">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>NIS/No</th>
+                                                    <th>Name</th>
+                                                    <th>Rank</th>
+                                                    <th>Office</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="resetTableBody"></tbody>
                                         </table>
                                     </div>
                                 </div>
@@ -1175,10 +1209,6 @@
                      }
                 } else {
                     actionBtns += `<button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>`;
-                    
-                    if (role === 'super_admin' || role === 'admin') {
-                         actionBtns += `<button class="btn btn-sm btn-secondary mb-1" onclick="resetUserPassword(${s.id})">Reset Pwd</button>`;
-                    }
 
                     if (role === 'super_admin') {
                          actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
