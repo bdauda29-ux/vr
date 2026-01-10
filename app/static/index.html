@@ -795,10 +795,17 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Init Common Data
+            populateRanks();
+            await fetchStates();
+            await loadOffices(); // For dropdown
+
              // Role Based UI
             if (role === 'staff') {
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+                document.getElementById('sidebar-wrapper').classList.add('d-none'); // Hide sidebar for staff
+                document.getElementById('sidebarToggle').classList.add('d-none'); // Hide toggle
                 
                 // Show form view directly
                 showView('personnel');
@@ -809,25 +816,23 @@
                 const formTab = new bootstrap.Tab(formTabBtn);
                 formTab.show();
                 
-                // Hide list tab navigation
+                // Hide list tab navigation and cancel button
                 const listTabBtn = document.getElementById('list-tab');
                 if(listTabBtn) listTabBtn.parentElement.classList.add('d-none');
+                const cancelBtn = document.querySelector('#staffForm button[onclick="showList()"]');
+                if(cancelBtn) cancelBtn.classList.add('d-none');
                 
                 // Load own data if userId exists
                 if(userId) {
-                     editStaff(userId);
+                     await editStaff(userId);
                 }
                 
                 return;
             } else if (role === 'office_admin') {
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+                await fetchUserOffice();
             }
 
-            // Init Common Data
-            if (role === 'office_admin') fetchUserOffice();
-            fetchStates();
-            populateRanks();
-            loadOffices(); // For dropdown
             loadStaff();
 
             // Init Modals
@@ -1334,10 +1339,12 @@
                 document.getElementById('dopp').value = isoToDmy(s.dopp);
                 
                 document.getElementById('state_id').value = s.state ? s.state.id : "";
-                loadLGAs(s.state ? s.state.id : "");
-                setTimeout(() => {
+                if (s.state && s.state.id) {
+                    await loadLGAs(s.state.id);
                     document.getElementById('lga_id').value = s.lga ? s.lga.id : "";
-                }, 100);
+                } else {
+                    document.getElementById('lga_id').innerHTML = '<option value="">Select LGA...</option>';
+                }
                 
                 document.getElementById('home_town').value = s.home_town || "";
                 document.getElementById('next_of_kin').value = s.next_of_kin || "";
