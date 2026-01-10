@@ -523,7 +523,7 @@
                             <h2 class="mt-4">Update Successful!</h2>
                             <p class="lead text-muted">Your personnel information has been saved successfully.</p>
                             <div class="mt-4">
-                                <button class="btn btn-primary px-4 me-2" onclick="editStaff(userId)">Continue Editing</button>
+                                <button class="btn btn-primary px-4 me-2" onclick="showPersonnelTab('form-tab'); editStaff(userId)">Continue Editing</button>
                                 <button class="btn btn-outline-danger px-4" onclick="logout()">Logout</button>
                             </div>
                         </div>
@@ -806,9 +806,10 @@
                 'personnel': 'Personnel Management',
                 'offices': 'Offices Directory',
                 'leave': 'Leave Management',
-                'audit': 'Audit Logs'
+                'audit': 'Audit Logs',
+                'success': 'Action Successful'
             };
-            document.getElementById('pageTitle').textContent = titles[viewId];
+            document.getElementById('pageTitle').textContent = titles[viewId] || 'VSS Admin';
 
             // Trigger loads
             if(viewId === 'dashboard') loadDashboardStats();
