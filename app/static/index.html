@@ -1194,10 +1194,17 @@
 
             try {
                 const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }});
-                if (!res.ok) throw new Error("Failed");
+                if (!res.ok) {
+                     const errText = await res.text();
+                     throw new Error(`Failed to load staff: ${res.status} ${errText}`);
+                }
                 const data = await res.json();
+                if (!Array.isArray(data)) throw new Error("Invalid data format received");
                 renderTable(data);
-            } catch (err) { console.error(err); }
+            } catch (err) { 
+                console.error(err); 
+                document.getElementById('staffTableBody').innerHTML = `<tr><td colspan="9" class="text-danger text-center">Error loading data: ${err.message}</td></tr>`;
+            }
         }
 
         function setMainStatus(status, el) {
