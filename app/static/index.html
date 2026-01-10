@@ -1047,6 +1047,9 @@
         }
 
         async function loadStaff() {
+            // Check auth
+            if (!token) return;
+
             const q = document.getElementById('searchInput').value;
             const r = document.getElementById('filterRank').value;
             const o = document.getElementById('filterOffice').value;
@@ -1060,10 +1063,17 @@
 
             try {
                 const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }});
-                if (!res.ok) throw new Error("Failed");
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || "Failed to load staff list");
+                }
                 const data = await res.json();
                 renderTable(data);
-            } catch (err) { console.error(err); }
+            } catch (err) { 
+                console.error(err);
+                const tbody = document.getElementById('staffTableBody');
+                if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="text-danger text-center">Error loading data: ${err.message}</td></tr>`;
+            }
         }
 
         function setMainStatus(status, el) {
@@ -1134,7 +1144,8 @@
                     
                     if (s.out_request_status === 'Pending') {
                         if (role === 'super_admin') {
-                             actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review Exit</button>`;
+                             const safeReason = s.out_request_reason ? s.out_request_reason.replace(/'/g, "\\'") : "";
+                             actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${safeReason}')">Review Exit</button>`;
                         } else {
                              actionBtns += `<span class="badge bg-warning text-dark">Exit Pending</span>`;
                         }
@@ -1738,15 +1749,6 @@
         </div>
     </div>
 
-    <script>
-        // ... (Existing script code is implicit, we are just appending functions before end of script block if we could, but we are outside script block in this SearchReplace context usually)
-        // Wait, SearchReplace replaces lines. I need to be careful.
-        // I will add the modal HTML before <script> tag or at end of body.
-        // And then add JS functions inside the script tag or in a new script tag.
-        
-        // Let's add everything at the end of body.
-    </script>
-    
     <script>
         const changePasswordModal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
 
