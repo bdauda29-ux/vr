@@ -710,6 +710,52 @@ def update_staff_role(staff_id: int):
         crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}")
         return jsonify(schemas.to_dict_staff(obj))
 
+@app.post("/change-password")
+def change_password():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user_info = get_current_user()
+    if not user_info: return jsonify({"detail": "Not authenticated"}), 401
+    
+    data = request.get_json(force=True)
+    old_password = data.get("old_password")
+    new_password = data.get("new_password")
+    
+    if not old_password or not new_password:
+        return jsonify({"detail": "Old and new passwords are required"}), 400
+        
+    with next(get_db()) as db:
+        # Check if it's the main admin user
+        if user_info["role"] == "super_admin" and user_info["sub"] == "admin":
+             user_obj = db.query(models.User).filter(models.User.username == "admin").first()
+             if not user_obj: return jsonify({"detail": "User not found"}), 404
+             
+             if not auth.verify_password(old_password, user_obj.password_hash):
+                 return jsonify({"detail": "Incorrect old password"}), 400
+                 
+             user_obj.password_hash = auth.get_password_hash(new_password)
+             db.commit()
+             crud.create_audit_log(db, "PASSWORD_CHANGE", "admin", "Super Admin changed password")
+             return jsonify({"detail": "Password changed successfully"})
+        
+        # Otherwise check staff table
+        staff = crud.get_staff(db, user_info["id"])
+        if not staff: return jsonify({"detail": "User not found"}), 404
+        
+        # Verify old password
+        valid_old = False
+        if staff.password_hash:
+             if auth.verify_password(old_password, staff.password_hash): valid_old = True
+        elif old_password == staff.nis_no:
+             valid_old = True
+             
+        if not valid_old:
+            return jsonify({"detail": "Incorrect old password"}), 400
+            
+        staff.password_hash = auth.get_password_hash(new_password)
+        db.commit()
+        crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password")
+        return jsonify({"detail": "Password changed successfully"})
+
 @app.get("/audit-logs")
 def get_audit_logs():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
