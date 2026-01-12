@@ -798,12 +798,12 @@ def export_excel():
             offset=0,
         )
 
-        def other_names_initials(other_names: str) -> str:
-            if not other_names:
-                return ""
+        def tokenize_alpha_words(text: str) -> list[str]:
+            if not text:
+                return []
             parts = []
             buf = []
-            for ch in str(other_names).strip():
+            for ch in str(text).strip():
                 if ch.isalpha():
                     buf.append(ch)
                 else:
@@ -812,7 +812,64 @@ def export_excel():
                         buf = []
             if buf:
                 parts.append("".join(buf))
-            return "".join([p[0].upper() for p in parts if p])
+            return [p for p in parts if p]
+
+        def initials_from_words(words: list[str]) -> str:
+            return "".join([w[0].upper() for w in words if w])
+
+        def normalize_rank_code(value: str) -> str:
+            if not value:
+                return ""
+            return "".join([ch for ch in str(value).upper() if ch.isalnum()])
+
+        senior_ranks = {
+            "DCG",
+            "ACG",
+            "CIS",
+            "DCI",
+            "ACI",
+            "CSI",
+            "SI",
+            "DSI",
+            "ASI1",
+            "ASI2",
+        }
+        junior_ranks = {
+            "II",
+            "AII",
+            "IA1",
+            "IA2",
+            "IA3",
+        }
+
+        def merged_name_by_rank(staff) -> str:
+            other_words = tokenize_alpha_words(staff.other_names or "")
+            surname_full = (staff.surname or "").strip()
+            surname_words = tokenize_alpha_words(staff.surname or "")
+
+            other_initials = initials_from_words(other_words)
+            surname_initials = initials_from_words(surname_words)
+
+            rank_code = normalize_rank_code(staff.rank or "")
+
+            if rank_code in senior_ranks:
+                if other_initials and surname_full:
+                    return f"{other_initials} {surname_full}".strip()
+                return (surname_full or other_initials).strip()
+
+            if rank_code in junior_ranks:
+                if not other_words:
+                    return surname_full
+                first_name = other_words[0].upper()
+                rest_initials = initials_from_words(other_words[1:])
+                tail = f"{rest_initials}{surname_initials}".strip()
+                if tail:
+                    return f"{first_name} {tail}".strip()
+                return first_name
+
+            if surname_full:
+                return f"{surname_full}{(' ' + other_initials) if other_initials else ''}".strip()
+            return other_initials
 
         def get_value(staff, col_key: str):
             if col_key == "nis_no":
@@ -886,9 +943,7 @@ def export_excel():
             row = []
             for col_key in columns:
                 if col_key == "__name__":
-                    init = other_names_initials(staff.other_names)
-                    surname = (staff.surname or "").strip()
-                    row.append(f"{surname}{(' ' + init) if init else ''}".strip())
+                    row.append(merged_name_by_rank(staff))
                 else:
                     row.append(get_value(staff, col_key))
             ws.append(row)
