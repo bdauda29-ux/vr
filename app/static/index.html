@@ -649,6 +649,10 @@
                                 <input class="form-check-input" type="checkbox" value="state" id="col_state" checked>
                                 <label class="form-check-label" for="col_state">State</label>
                             </div>
+                            <div class="form-check mt-3">
+                                <input class="form-check-input" type="checkbox" id="merge_name">
+                                <label class="form-check-label" for="merge_name">Merge Name (Surname + initials)</label>
+                            </div>
                         </div>
                         <div class="col-6">
                             <div class="form-check">
@@ -1544,18 +1548,19 @@
         function confirmExport() {
             const type = document.getElementById('exportType').value;
             const checkboxes = document.querySelectorAll('#exportModal input[type="checkbox"]:checked');
-            const selected = Array.from(checkboxes).map(cb => cb.value);
+            const selected = Array.from(checkboxes).filter(cb => cb.id !== 'merge_name').map(cb => cb.value);
+            const mergeName = document.getElementById('merge_name').checked;
             
             if (selected.length === 0) {
                 alert("Please select at least one column");
                 return;
             }
             
-            exportData(type, selected);
+            exportData(type, selected, mergeName);
             exportModal.hide();
         }
 
-        function exportData(type, columns) {
+        function exportData(type, columns, mergeName) {
             const q = document.getElementById('searchInput').value;
             const r = document.getElementById('filterRank').value;
             const o = document.getElementById('filterOffice').value;
@@ -1567,6 +1572,7 @@
             if (o) url += `&office=${encodeURIComponent(o)}`;
             if (c) url += `&completeness=${c}`;
             if (columns) url += `&columns=${columns.join(',')}`;
+            if (mergeName) url += `&merge_name=1`;
             
             window.location.href = url;
         }

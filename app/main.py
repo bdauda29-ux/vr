@@ -775,17 +775,122 @@ def export_excel():
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     with next(get_db()) as db:
-        staff_list = crud.list_staff(db, limit=10000)
+        q = request.args.get("q")
+        rank = request.args.get("rank")
+        office = request.args.get("office")
+        completeness = request.args.get("completeness")
+        status = request.args.get("status", "active")
+        columns_raw = request.args.get("columns")
+        merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
+
+        columns = []
+        if columns_raw:
+            columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
+
+        staff_list = crud.list_staff(
+            db,
+            q=q,
+            rank=rank,
+            office=office,
+            completeness=completeness,
+            status=status,
+            limit=10000,
+            offset=0,
+        )
+
+        def other_names_initials(other_names: str) -> str:
+            if not other_names:
+                return ""
+            parts = []
+            buf = []
+            for ch in str(other_names).strip():
+                if ch.isalpha():
+                    buf.append(ch)
+                else:
+                    if buf:
+                        parts.append("".join(buf))
+                        buf = []
+            if buf:
+                parts.append("".join(buf))
+            return "".join([p[0].upper() for p in parts if p])
+
+        def get_value(staff, col_key: str):
+            if col_key == "nis_no":
+                return staff.nis_no
+            if col_key == "surname":
+                return staff.surname
+            if col_key == "other_names":
+                return staff.other_names
+            if col_key == "rank":
+                return staff.rank
+            if col_key == "gender":
+                return staff.gender
+            if col_key == "office":
+                return staff.office
+            if col_key == "state":
+                return staff.state.name if staff.state else ""
+            if col_key == "lga":
+                return staff.lga.name if staff.lga else ""
+            if col_key == "phone_no":
+                return staff.phone_no
+            if col_key == "qualification":
+                return staff.qualification
+            if col_key == "dob":
+                return staff.dob.isoformat() if staff.dob else ""
+            if col_key == "dofa":
+                return staff.dofa.isoformat() if staff.dofa else ""
+            if col_key == "dopa":
+                return staff.dopa.isoformat() if staff.dopa else ""
+            if col_key == "dopp":
+                return staff.dopp.isoformat() if staff.dopp else ""
+            return ""
+
+        label_map = {
+            "nis_no": "NIS No",
+            "surname": "Surname",
+            "other_names": "Other Names",
+            "rank": "Rank",
+            "gender": "Gender",
+            "office": "Office",
+            "state": "State",
+            "lga": "LGA",
+            "phone_no": "Phone No",
+            "qualification": "Qualification",
+            "dob": "Date of Birth",
+            "dofa": "DOFA",
+            "dopa": "DOPA",
+            "dopp": "DOPP",
+        }
+
+        if not columns:
+            columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
+
+        if merge_name and ("surname" in columns or "other_names" in columns):
+            columns = [c for c in columns if c not in ("surname", "other_names")]
+            name_col_key = "__name__"
+            insert_at = 0
+            if "nis_no" in columns:
+                insert_at = columns.index("nis_no") + 1
+            columns.insert(insert_at, name_col_key)
+            label_map[name_col_key] = "Name"
+
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Staff List"
         font_style = Font(name='Liberation Sans', size=10)
         header_font = Font(name='Liberation Sans', size=12, bold=True)
-        headers = ["NIS/No", "Surname", "Other Names", "Rank", "Gender", "Office", "State", "LGA", "Phone"]
+        headers = [label_map.get(c, c) for c in columns]
         ws.append(headers)
         for cell in ws[1]: cell.font = header_font
         for idx, staff in enumerate(staff_list, start=2):
-            row = [staff.nis_no, staff.surname, staff.other_names, staff.rank, staff.gender, staff.office, staff.state.name if staff.state else "", staff.lga.name if staff.lga else "", staff.phone_no]
+            row = []
+            for col_key in columns:
+                if col_key == "__name__":
+                    init = other_names_initials(staff.other_names)
+                    surname = (staff.surname or "").strip()
+                    row.append(f"{surname}{(' ' + init) if init else ''}".strip())
+                else:
+                    row.append(get_value(staff, col_key))
             ws.append(row)
             if idx % 2 == 0:
                 fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
@@ -893,4 +998,3 @@ def undo_exit(staff_id: int):
         db.commit()
         crud.create_audit_log(db, "UNDO_EXIT", f"Staff: {staff.nis_no}", "Undid exit/posting out")
         return jsonify(schemas.to_dict_staff(staff))
-
