@@ -959,6 +959,11 @@ def export_excel():
         if not columns:
             columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
 
+        # Ensure S/N is first
+        if "sn" in columns:
+            columns.remove("sn")
+        columns.insert(0, "sn")
+
         if merge_name and ("surname" in columns or "other_names" in columns):
             columns = [c for c in columns if c not in ("surname", "other_names")]
             name_col_key = "__name__"
@@ -967,34 +972,49 @@ def export_excel():
                 insert_at = columns.index("nis_no") + 1
             columns.insert(insert_at, name_col_key)
             label_map[name_col_key] = "Name"
+        
+        # Uppercase headers
+        label_map["sn"] = "S/N"
+        
+        # Filename logic
+        filename_base = "Visa_Residency_Directorate"
+        if office:
+            filename_base = office
+        elif rank:
+            filename_base = rank
+        
+        safe_filename = "".join([c for c in filename_base if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
 
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Staff List"
         font_style = Font(name='Liberation Sans', size=10)
         header_font = Font(name='Liberation Sans', size=12, bold=True)
-        headers = [label_map.get(c, c) for c in columns]
+        headers = [label_map.get(c, c).upper() for c in columns]
         ws.append(headers)
         for cell in ws[1]: cell.font = header_font
-        for idx, staff in enumerate(staff_list, start=2):
+        for idx, staff in enumerate(staff_list, start=1):
             row = []
             for col_key in columns:
-                if col_key == "__name__":
+                if col_key == "sn":
+                    row.append(idx)
+                elif col_key == "__name__":
                     row.append(merged_name_by_rank(staff))
                 else:
                     row.append(get_value(staff, col_key))
             ws.append(row)
-            if idx % 2 == 0:
+            row_idx = idx + 1 # 1-based index + header row
+            if row_idx % 2 == 0:
                 fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
-                for cell in ws[idx]: cell.fill = fill
-            for cell in ws[idx]: cell.font = font_style
+                for cell in ws[row_idx]: cell.fill = fill
+            for cell in ws[row_idx]: cell.font = font_style
         ws.append([])
         footer_cell = ws.cell(row=ws.max_row + 1, column=1, value=f"Generated on {datetime.now().strftime('%d/%m/%Y')}")
         footer_cell.font = Font(name='Liberation Sans', size=8, italic=True)
         out = io.BytesIO()
         wb.save(out)
         out.seek(0)
-        return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"staff_export_{datetime.now().strftime('%Y%m%d')}.xlsx")
+        return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"{safe_filename}_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
 @app.get("/export/pdf")
 def export_pdf():
@@ -1015,6 +1035,11 @@ def export_pdf():
             columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
         if not columns:
             columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
+
+        # Ensure S/N is first
+        if "sn" in columns:
+            columns.remove("sn")
+        columns.insert(0, "sn")
 
         staff_list = crud.list_staff(
             db,
@@ -1124,6 +1149,7 @@ def export_pdf():
             "dofa": "DOFA",
             "dopa": "DOPA",
             "dopp": "DOPP",
+            "sn": "S/N",
         }
 
         headers_keys = list(columns)
@@ -1136,11 +1162,13 @@ def export_pdf():
             headers_keys.insert(insert_at, name_col_key)
             label_map[name_col_key] = "Name"
 
-        data_table = [[label_map.get(k, k) for k in headers_keys]]
-        for staff in staff_list:
+        data_table = [[label_map.get(k, k).upper() for k in headers_keys]]
+        for idx, staff in enumerate(staff_list, start=1):
             row = []
             for k in headers_keys:
-                if k == "__name__":
+                if k == "sn":
+                    row.append(str(idx))
+                elif k == "__name__":
                     row.append(merged_name_by_rank(staff))
                 else:
                     row.append(get_value(staff, k))
@@ -1170,6 +1198,8 @@ def export_pdf():
              subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], alignment=1, fontSize=10)
              elements.append(Paragraph(subtitle_text, subtitle_style))
         
+        safe_filename = "".join([c for c in main_title if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
+
         elements.append(Spacer(1, 0.2 * inch))
         
         # Calculate column widths to fit page
@@ -1212,7 +1242,7 @@ def export_pdf():
 
         doc.build(elements, onFirstPage=footer, onLaterPages=footer)
         out.seek(0)
-        return send_file(out, mimetype="application/pdf", as_attachment=True, download_name=f"staff_export_{datetime.now().strftime('%Y%m%d')}.pdf")
+        return send_file(out, mimetype="application/pdf", as_attachment=True, download_name=f"{safe_filename}_{datetime.now().strftime('%Y%m%d')}.pdf")
 
 @app.post("/staff/<int:staff_id>/exit-request")
 def request_exit(staff_id: int):

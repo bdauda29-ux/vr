@@ -627,71 +627,124 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="row">
-                        <div class="col-6">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="nis_no" id="col_nis_no" checked>
-                                <label class="form-check-label" for="col_nis_no">NIS No</label>
+                    <p class="text-muted small mb-2">Check to include, use arrows to reorder.</p>
+                    <ul class="list-group" id="exportColumnList">
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="nis_no" checked>
+                            <span class="flex-grow-1">NIS No</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="surname" id="col_surname" checked>
-                                <label class="form-check-label" for="col_surname">Surname</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="surname" checked>
+                            <span class="flex-grow-1">Surname</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="other_names" id="col_other_names" checked>
-                                <label class="form-check-label" for="col_other_names">Other Names</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="other_names" checked>
+                            <span class="flex-grow-1">Other Names</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="rank" id="col_rank" checked>
-                                <label class="form-check-label" for="col_rank">Rank</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="rank" checked>
+                            <span class="flex-grow-1">Rank</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="gender" id="col_gender" checked>
-                                <label class="form-check-label" for="col_gender">Gender</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="gender" checked>
+                            <span class="flex-grow-1">Gender</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="office" id="col_office" checked>
-                                <label class="form-check-label" for="col_office">Office</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="office" checked>
+                            <span class="flex-grow-1">Office</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="state" id="col_state" checked>
-                                <label class="form-check-label" for="col_state">State</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="state" checked>
+                            <span class="flex-grow-1">State</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check mt-3">
-                                <input class="form-check-input" type="checkbox" id="merge_name">
-                                <label class="form-check-label" for="merge_name">Merge Name (Surname + initials)</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="lga" checked>
+                            <span class="flex-grow-1">LGA</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="lga" id="col_lga" checked>
-                                <label class="form-check-label" for="col_lga">LGA</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="phone_no" checked>
+                            <span class="flex-grow-1">Phone No</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="phone_no" id="col_phone_no" checked>
-                                <label class="form-check-label" for="col_phone_no">Phone No</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="qualification">
+                            <span class="flex-grow-1">Qualification</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="qualification" id="col_qualification">
-                                <label class="form-check-label" for="col_qualification">Qualification</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="dob">
+                            <span class="flex-grow-1">Date of Birth</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="dob" id="col_dob">
-                                <label class="form-check-label" for="col_dob">Date of Birth</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="dofa" checked>
+                            <span class="flex-grow-1">DOFA</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="dofa" id="col_dofa" checked>
-                                <label class="form-check-label" for="col_dofa">DOFA</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="dopa" checked>
+                            <span class="flex-grow-1">DOPA</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="dopa" id="col_dopa" checked>
-                                <label class="form-check-label" for="col_dopa">DOPA</label>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="dopp">
+                            <span class="flex-grow-1">DOPP</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="dopp" id="col_dopp">
-                                <label class="form-check-label" for="col_dopp">DOPP</label>
-                            </div>
-                        </div>
+                        </li>
+                    </ul>
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" id="merge_name">
+                        <label class="form-check-label" for="merge_name">Merge Name (Surname + initials)</label>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1574,10 +1627,28 @@
             exportModal.show();
         }
 
+        function moveColumn(btn, direction) {
+            const li = btn.closest('li');
+            const parent = li.parentNode;
+            if (direction === -1) {
+                // Move Up
+                const prev = li.previousElementSibling;
+                if (prev) {
+                    parent.insertBefore(li, prev);
+                }
+            } else {
+                // Move Down
+                const next = li.nextElementSibling;
+                if (next) {
+                    parent.insertBefore(next, li);
+                }
+            }
+        }
+
         function confirmExport() {
             const type = document.getElementById('exportType').value;
-            const checkboxes = document.querySelectorAll('#exportModal input[type="checkbox"]:checked');
-            const selected = Array.from(checkboxes).filter(cb => cb.id !== 'merge_name').map(cb => cb.value);
+            const checkboxes = document.querySelectorAll('#exportColumnList input[type="checkbox"]:checked');
+            const selected = Array.from(checkboxes).map(cb => cb.value);
             const mergeName = document.getElementById('merge_name').checked;
             
             if (selected.length === 0) {
