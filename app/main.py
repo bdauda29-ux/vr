@@ -937,6 +937,14 @@ def export_excel():
                 return staff.dopa.strftime('%d/%m/%Y') if staff.dopa else ""
             if col_key == "dopp":
                 return staff.dopp.strftime('%d/%m/%Y') if staff.dopp else ""
+            if col_key == "home_town":
+                return staff.home_town
+            if col_key == "next_of_kin":
+                return staff.next_of_kin
+            if col_key == "nok_phone":
+                return staff.nok_phone
+            if col_key == "remark":
+                return staff.remark
             return ""
 
         label_map = {
@@ -954,6 +962,10 @@ def export_excel():
             "dofa": "DOFA",
             "dopa": "DOPA",
             "dopp": "DOPP",
+            "home_town": "Home Town",
+            "next_of_kin": "Next of Kin",
+            "nok_phone": "Next of Kin Phone",
+            "remark": "Remark",
         }
 
         if not columns:
@@ -1132,6 +1144,14 @@ def export_pdf():
                 return staff.dopa.strftime('%d/%m/%Y') if staff.dopa else ""
             if col_key == "dopp":
                 return staff.dopp.strftime('%d/%m/%Y') if staff.dopp else ""
+            if col_key == "home_town":
+                return staff.home_town or ""
+            if col_key == "next_of_kin":
+                return staff.next_of_kin or ""
+            if col_key == "nok_phone":
+                return staff.nok_phone or ""
+            if col_key == "remark":
+                return staff.remark or ""
             return ""
 
         label_map = {
@@ -1149,6 +1169,10 @@ def export_pdf():
             "dofa": "DOFA",
             "dopa": "DOPA",
             "dopp": "DOPP",
+            "home_town": "Home Town",
+            "next_of_kin": "Next of Kin",
+            "nok_phone": "Next of Kin Phone",
+            "remark": "Remark",
             "sn": "S/N",
         }
 
