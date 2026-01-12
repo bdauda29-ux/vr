@@ -964,7 +964,7 @@ def export_excel():
             "dopp": "DOPP",
             "home_town": "Home Town",
             "next_of_kin": "Next of Kin",
-            "nok_phone": "Next of Kin Phone",
+            "nok_phone": "NOK Phone",
             "remark": "Remark",
         }
 
@@ -1199,7 +1199,7 @@ def export_pdf():
             "dopp": "DOPP",
             "home_town": "Home Town",
             "next_of_kin": "Next of Kin",
-            "nok_phone": "Next of Kin Phone",
+            "nok_phone": "NOK Phone",
             "remark": "Remark",
             "sn": "S/N",
         }
@@ -1300,21 +1300,21 @@ def export_pdf():
             scale_factor = avail_width / current_total
             final_widths = [w * scale_factor for w in final_widths]
 
+        # Dynamic Font Size logic
+        font_size = 8
+        if len(headers_keys) > 12: font_size = 7
+
         # Prepare styles for wrapping text
         cell_style = ParagraphStyle(
             'CellStyle',
             parent=styles['Normal'],
-            fontSize=8,
-            leading=10, # Line spacing
+            fontSize=font_size,
+            leading=font_size + 2, # Line spacing
             alignment=0 # Left align
         )
         
         # Update data_table with Paragraphs for long text columns
-        # We need to rebuild data_table or modify it. 
-        # Since data_table is already built with strings, let's rebuild the rows part.
-        # But wait, headers are row 0.
-        
-        formatted_data = [data_table[0]] # Keep headers as strings (or wrap them too? Strings are usually fine for headers)
+        formatted_data = [data_table[0]]
         
         for idx, staff in enumerate(staff_list, start=1):
             row = []
@@ -1335,10 +1335,6 @@ def export_pdf():
             formatted_data.append(row)
 
         table = Table(formatted_data, repeatRows=1, colWidths=final_widths)
-        
-        # Dynamic Font Size logic is less critical now due to wrapping, but good for non-wrapped cells
-        font_size = 8
-        if len(headers_keys) > 12: font_size = 7
         
         style = TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
