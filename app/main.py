@@ -121,8 +121,8 @@ def login():
                 
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
-                    # Check login limit
-                    if staff.login_count >= 2:
+                    # Check login limit (skip for admins)
+                    if staff.role not in ("office_admin", "super_admin") and staff.login_count >= 2:
                         return jsonify({"detail": "Login limit exceeded. Please contact Super Admin to reset."}), 403
 
                     verification_success = False
@@ -842,6 +842,23 @@ def export_excel():
             "IA3",
         }
 
+        # Rank Sort Logic
+        rank_order = {
+            "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
+            "CSI": 6, "SI": 7, "DSI": 8, "ASI 1": 9, "ASI1": 9,
+            "ASI 2": 10, "ASI2": 10, "II": 11, "AII": 12,
+            "IA 1": 13, "IA1": 13, "IA 2": 14, "IA2": 14, "IA 3": 15, "IA3": 15
+        }
+        
+        def get_rank_priority(staff):
+             r = normalize_rank_code(staff.rank)
+             if staff.rank and staff.rank.upper() in rank_order: return rank_order[staff.rank.upper()]
+             for k, v in rank_order.items():
+                 if normalize_rank_code(k) == r: return v
+             return 999
+
+        staff_list.sort(key=get_rank_priority)
+
         def merged_name_by_rank(staff) -> str:
             other_words = tokenize_alpha_words(staff.other_names or "")
             surname_full = (staff.surname or "").strip()
@@ -871,6 +888,26 @@ def export_excel():
                 return f"{surname_full}{(' ' + other_initials) if other_initials else ''}".strip()
             return other_initials
 
+        # Rank Sort Logic
+        rank_order = {
+            "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
+            "CSI": 6, "SI": 7, "DSI": 8, "ASI 1": 9, "ASI1": 9,
+            "ASI 2": 10, "ASI2": 10, "II": 11, "AII": 12,
+            "IA 1": 13, "IA1": 13, "IA 2": 14, "IA2": 14, "IA 3": 15, "IA3": 15
+        }
+        
+        def get_rank_priority(staff):
+             r = normalize_rank_code(staff.rank)
+             # Try direct match first
+             if staff.rank and staff.rank.upper() in rank_order:
+                 return rank_order[staff.rank.upper()]
+             # Try normalized match
+             for k, v in rank_order.items():
+                 if normalize_rank_code(k) == r: return v
+             return 999
+
+        staff_list.sort(key=get_rank_priority)
+
         def get_value(staff, col_key: str):
             if col_key == "nis_no":
                 return staff.nis_no
@@ -893,13 +930,13 @@ def export_excel():
             if col_key == "qualification":
                 return staff.qualification
             if col_key == "dob":
-                return staff.dob.isoformat() if staff.dob else ""
+                return staff.dob.strftime('%d/%m/%Y') if staff.dob else ""
             if col_key == "dofa":
-                return staff.dofa.isoformat() if staff.dofa else ""
+                return staff.dofa.strftime('%d/%m/%Y') if staff.dofa else ""
             if col_key == "dopa":
-                return staff.dopa.isoformat() if staff.dopa else ""
+                return staff.dopa.strftime('%d/%m/%Y') if staff.dopa else ""
             if col_key == "dopp":
-                return staff.dopp.isoformat() if staff.dopp else ""
+                return staff.dopp.strftime('%d/%m/%Y') if staff.dopp else ""
             return ""
 
         label_map = {
@@ -1063,13 +1100,13 @@ def export_pdf():
             if col_key == "qualification":
                 return staff.qualification or ""
             if col_key == "dob":
-                return staff.dob.isoformat() if staff.dob else ""
+                return staff.dob.strftime('%d/%m/%Y') if staff.dob else ""
             if col_key == "dofa":
-                return staff.dofa.isoformat() if staff.dofa else ""
+                return staff.dofa.strftime('%d/%m/%Y') if staff.dofa else ""
             if col_key == "dopa":
-                return staff.dopa.isoformat() if staff.dopa else ""
+                return staff.dopa.strftime('%d/%m/%Y') if staff.dopa else ""
             if col_key == "dopp":
-                return staff.dopp.isoformat() if staff.dopp else ""
+                return staff.dopp.strftime('%d/%m/%Y') if staff.dopp else ""
             return ""
 
         label_map = {
@@ -1110,28 +1147,70 @@ def export_pdf():
             data_table.append(row)
 
         out = io.BytesIO()
-        doc = SimpleDocTemplate(out, pagesize=landscape(letter))
+        doc = SimpleDocTemplate(out, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
         styles = getSampleStyleSheet()
         elements = []
-        title = Paragraph("Staff List", styles["Title"])
-        elements.append(title)
+        
+        # Headings
+        main_title = "Visa/Residency Directorate"
+        subtitle_text = ""
+        
+        if office:
+             main_title = office
+             subtitle_text = "Visa/Residency Directorate"
+        elif rank:
+             main_title = rank
+             subtitle_text = "Visa/Residency Directorate"
+        
+        title_style = styles["Title"]
+        title_style.fontSize = 14
+        elements.append(Paragraph(main_title, title_style))
+        
+        if subtitle_text:
+             subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], alignment=1, fontSize=10)
+             elements.append(Paragraph(subtitle_text, subtitle_style))
+        
         elements.append(Spacer(1, 0.2 * inch))
-        table = Table(data_table, repeatRows=1)
+        
+        # Calculate column widths to fit page
+        # Landscape letter width is approx 792 points. Margins are 72+72=144. Usable ~650.
+        # We'll use a simple distribution based on character count estimation or equal width
+        col_count = len(headers_keys)
+        avail_width = 750 # Reduced margins slightly
+        col_width = avail_width / col_count if col_count > 0 else 0
+        
+        table = Table(data_table, repeatRows=1, colWidths=[col_width]*col_count)
+        
+        # Dynamic Font Size
+        font_size = 9
+        if col_count > 10: font_size = 8
+        if col_count > 12: font_size = 7
+        
         style = TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
             ("ALIGN", (0, 0), (-1, -1), "LEFT"),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, 0), 10),
-            ("FONTSIZE", (0, 1), (-1, -1), 9),
+            ("FONTSIZE", (0, 0), (-1, 0), font_size + 1),
+            ("FONTSIZE", (0, 1), (-1, -1), font_size),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ])
         table.setStyle(style)
         for i in range(1, len(data_table)):
             if i % 2 == 0:
                 table.setStyle(TableStyle([("BACKGROUND", (0, i), (-1, i), colors.whitesmoke)]))
         elements.append(table)
-        doc.build(elements)
+        
+        def footer(canvas, doc):
+            canvas.saveState()
+            canvas.setFont('Helvetica-Oblique', 8)
+            page_num = canvas.getPageNumber()
+            text = f"Page {page_num} | Generated on {datetime.now().strftime('%d/%m/%Y')}"
+            canvas.drawRightString(landscape(letter)[0] - 30, 20, text)
+            canvas.restoreState()
+
+        doc.build(elements, onFirstPage=footer, onLaterPages=footer)
         out.seek(0)
         return send_file(out, mimetype="application/pdf", as_attachment=True, download_name=f"staff_export_{datetime.now().strftime('%Y%m%d')}.pdf")
 
