@@ -988,23 +988,51 @@ def export_excel():
         # Uppercase headers
         label_map["sn"] = "S/N"
         
-        # Filename logic
-        filename_base = "Visa_Residency_Directorate"
-        if office:
-            filename_base = office
-        elif rank:
-            filename_base = rank
+        # Headings logic
+        main_title = "Visa/Residency Directorate"
+        subtitle_text = ""
         
-        safe_filename = "".join([c for c in filename_base if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
+        if office:
+             main_title = office
+             subtitle_text = "Visa/Residency Directorate"
+        elif rank:
+             main_title = rank
+             subtitle_text = "Visa/Residency Directorate"
+        
+        safe_filename = "".join([c for c in main_title if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
 
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Staff List"
+        
         font_style = Font(name='Liberation Sans', size=10)
         header_font = Font(name='Liberation Sans', size=12, bold=True)
+        title_font = Font(name='Liberation Sans', size=14, bold=True)
+        subtitle_font = Font(name='Liberation Sans', size=10, italic=False)
+        center_align = Alignment(horizontal='center', vertical='center')
+        
+        current_row = 1
+        # Main Title
+        ws.cell(row=current_row, column=1, value=main_title)
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=len(columns))
+        cell = ws.cell(row=current_row, column=1)
+        cell.font = title_font
+        cell.alignment = center_align
+        current_row += 1
+        
+        # Subtitle
+        if subtitle_text:
+            ws.cell(row=current_row, column=1, value=subtitle_text)
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=len(columns))
+            cell = ws.cell(row=current_row, column=1)
+            cell.font = subtitle_font
+            cell.alignment = center_align
+            current_row += 1
+            
         headers = [label_map.get(c, c).upper() for c in columns]
         ws.append(headers)
-        for cell in ws[1]: cell.font = header_font
+        header_row_idx = current_row
+        for cell in ws[header_row_idx]: cell.font = header_font
         for idx, staff in enumerate(staff_list, start=1):
             row = []
             for col_key in columns:
@@ -1015,7 +1043,7 @@ def export_excel():
                 else:
                     row.append(get_value(staff, col_key))
             ws.append(row)
-            row_idx = idx + 1 # 1-based index + header row
+            row_idx = idx + header_row_idx # 1-based index + header row
             if row_idx % 2 == 0:
                 fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
                 for cell in ws[row_idx]: cell.fill = fill
