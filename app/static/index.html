@@ -1560,21 +1560,56 @@
             exportModal.hide();
         }
 
-        function exportData(type, columns, mergeName) {
+        async function exportData(type, columns, mergeName) {
             const q = document.getElementById('searchInput').value;
             const r = document.getElementById('filterRank').value;
             const o = document.getElementById('filterOffice').value;
             const c = currentStatusFilter;
             
-            let url = `${API_URL}/export/${type}?`;
-            if (q) url += `&q=${encodeURIComponent(q)}`;
-            if (r) url += `&rank=${encodeURIComponent(r)}`;
-            if (o) url += `&office=${encodeURIComponent(o)}`;
-            if (c) url += `&completeness=${c}`;
-            if (columns) url += `&columns=${columns.join(',')}`;
-            if (mergeName) url += `&merge_name=1`;
+            const params = new URLSearchParams();
+            if (q) params.append('q', q);
+            if (r) params.append('rank', r);
+            if (o) params.append('office', o);
+            if (c) params.append('completeness', c);
+            if (columns && columns.length) params.append('columns', columns.join(','));
+            if (mergeName) params.append('merge_name', '1');
+
+            const url = `${API_URL}/export/${type}?${params.toString()}`;
             
-            window.location.href = url;
+            try {
+                const res = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) {
+                    let msg = 'Export failed';
+                    try {
+                        const err = await res.json();
+                        if (err && err.detail) msg = err.detail;
+                    } catch(e) {}
+                    alert(msg);
+                    return;
+                }
+                const blob = await res.blob();
+                const disposition = res.headers.get('Content-Disposition') || '';
+                let filename = '';
+                const match = disposition.match(/filename="?([^"]+)"?/i);
+                if (match && match[1]) filename = match[1];
+                if (!filename) {
+                    const ext = type === 'pdf' ? 'pdf' : 'xlsx';
+                    filename = `staff_export_${new Date().toISOString().slice(0,10)}.${ext}`;
+                }
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(downloadUrl);
+            } catch (e) {
+                console.error(e);
+                alert('Export failed: ' + e.message);
+            }
         }
 
         async function loadAuditLogs() {

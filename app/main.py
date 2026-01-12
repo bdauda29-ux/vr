@@ -959,6 +959,182 @@ def export_excel():
         out.seek(0)
         return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"staff_export_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
+@app.get("/export/pdf")
+def export_pdf():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    with next(get_db()) as db:
+        q = request.args.get("q")
+        rank = request.args.get("rank")
+        office = request.args.get("office")
+        completeness = request.args.get("completeness")
+        status = request.args.get("status", "active")
+        columns_raw = request.args.get("columns")
+        merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
+
+        columns = []
+        if columns_raw:
+            columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
+        if not columns:
+            columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
+
+        staff_list = crud.list_staff(
+            db,
+            q=q,
+            rank=rank,
+            office=office,
+            completeness=completeness,
+            status=status,
+            limit=10000,
+            offset=0,
+        )
+
+        def tokenize_alpha_words(text: str) -> list[str]:
+            if not text:
+                return []
+            parts = []
+            buf = []
+            for ch in str(text).strip():
+                if ch.isalpha():
+                    buf.append(ch)
+                else:
+                    if buf:
+                        parts.append("".join(buf))
+                        buf = []
+            if buf:
+                parts.append("".join(buf))
+            return [p for p in parts if p]
+
+        def initials_from_words(words: list[str]) -> str:
+            return "".join([w[0].upper() for w in words if w])
+
+        def normalize_rank_code(value: str) -> str:
+            if not value:
+                return ""
+            return "".join([ch for ch in str(value).upper() if ch.isalnum()])
+
+        senior_ranks = {"DCG","ACG","CIS","DCI","ACI","CSI","SI","DSI","ASI1","ASI2"}
+        junior_ranks = {"II","AII","IA1","IA2","IA3"}
+
+        def merged_name_by_rank(staff) -> str:
+            other_words = tokenize_alpha_words(staff.other_names or "")
+            surname_full = (staff.surname or "").strip()
+            surname_words = tokenize_alpha_words(staff.surname or "")
+            other_initials = initials_from_words(other_words)
+            surname_initials = initials_from_words(surname_words)
+            rank_code = normalize_rank_code(staff.rank or "")
+            if rank_code in senior_ranks:
+                if other_initials and surname_full:
+                    return f"{other_initials} {surname_full}".strip()
+                return (surname_full or other_initials).strip()
+            if rank_code in junior_ranks:
+                if not other_words:
+                    return surname_full
+                first_name = other_words[0].upper()
+                rest_initials = initials_from_words(other_words[1:])
+                tail = f"{rest_initials}{surname_initials}".strip()
+                if tail:
+                    return f"{first_name} {tail}".strip()
+                return first_name
+            if surname_full:
+                return f"{surname_full}{(' ' + other_initials) if other_initials else ''}".strip()
+            return other_initials
+
+        def get_value(staff, col_key: str):
+            if col_key == "nis_no":
+                return staff.nis_no or ""
+            if col_key == "surname":
+                return staff.surname or ""
+            if col_key == "other_names":
+                return staff.other_names or ""
+            if col_key == "rank":
+                return staff.rank or ""
+            if col_key == "gender":
+                return staff.gender or ""
+            if col_key == "office":
+                return staff.office or ""
+            if col_key == "state":
+                return staff.state.name if staff.state else ""
+            if col_key == "lga":
+                return staff.lga.name if staff.lga else ""
+            if col_key == "phone_no":
+                return staff.phone_no or ""
+            if col_key == "qualification":
+                return staff.qualification or ""
+            if col_key == "dob":
+                return staff.dob.isoformat() if staff.dob else ""
+            if col_key == "dofa":
+                return staff.dofa.isoformat() if staff.dofa else ""
+            if col_key == "dopa":
+                return staff.dopa.isoformat() if staff.dopa else ""
+            if col_key == "dopp":
+                return staff.dopp.isoformat() if staff.dopp else ""
+            return ""
+
+        label_map = {
+            "nis_no": "NIS No",
+            "surname": "Surname",
+            "other_names": "Other Names",
+            "rank": "Rank",
+            "gender": "Gender",
+            "office": "Office",
+            "state": "State",
+            "lga": "LGA",
+            "phone_no": "Phone No",
+            "qualification": "Qualification",
+            "dob": "Date of Birth",
+            "dofa": "DOFA",
+            "dopa": "DOPA",
+            "dopp": "DOPP",
+        }
+
+        headers_keys = list(columns)
+        if merge_name and ("surname" in headers_keys or "other_names" in headers_keys):
+            headers_keys = [c for c in headers_keys if c not in ("surname", "other_names")]
+            name_col_key = "__name__"
+            insert_at = 0
+            if "nis_no" in headers_keys:
+                insert_at = headers_keys.index("nis_no") + 1
+            headers_keys.insert(insert_at, name_col_key)
+            label_map[name_col_key] = "Name"
+
+        data_table = [[label_map.get(k, k) for k in headers_keys]]
+        for staff in staff_list:
+            row = []
+            for k in headers_keys:
+                if k == "__name__":
+                    row.append(merged_name_by_rank(staff))
+                else:
+                    row.append(get_value(staff, k))
+            data_table.append(row)
+
+        out = io.BytesIO()
+        doc = SimpleDocTemplate(out, pagesize=landscape(letter))
+        styles = getSampleStyleSheet()
+        elements = []
+        title = Paragraph("Staff List", styles["Title"])
+        elements.append(title)
+        elements.append(Spacer(1, 0.2 * inch))
+        table = Table(data_table, repeatRows=1)
+        style = TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 10),
+            ("FONTSIZE", (0, 1), (-1, -1), 9),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ])
+        table.setStyle(style)
+        for i in range(1, len(data_table)):
+            if i % 2 == 0:
+                table.setStyle(TableStyle([("BACKGROUND", (0, i), (-1, i), colors.whitesmoke)]))
+        elements.append(table)
+        doc.build(elements)
+        out.seek(0)
+        return send_file(out, mimetype="application/pdf", as_attachment=True, download_name=f"staff_export_{datetime.now().strftime('%Y%m%d')}.pdf")
+
 @app.post("/staff/<int:staff_id>/exit-request")
 def request_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
