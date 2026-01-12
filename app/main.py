@@ -621,7 +621,7 @@ def update_staff(staff_id: int):
             if user["id"] != staff_id:
                 return jsonify({"detail": "Permission denied"}), 403
             # Prevent sensitive field changes
-            for restricted in ["office", "rank", "role", "exit_date", "exit_mode", "out_request_status"]:
+            for restricted in ["office", "rank", "role", "exit_date", "exit_mode", "out_request_status", "dopp"]:
                 if restricted in data and data[restricted] != getattr(existing, restricted):
                     return jsonify({"detail": f"Permission denied: Cannot change {restricted}"}), 403
         

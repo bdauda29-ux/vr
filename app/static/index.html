@@ -9,16 +9,64 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         body { overflow-x: hidden; }
-        #sidebar-wrapper { min-height: 100vh; margin-left: -15rem; transition: margin 0.25s ease-out; }
+        
+        /* Sidebar Styles */
+        #sidebar-wrapper {
+            min-height: 100vh;
+            margin-left: -15rem;
+            transition: margin 0.25s ease-out;
+            position: fixed; /* Overlay on mobile */
+            z-index: 1000;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
         #sidebar-wrapper .sidebar-heading { padding: 0.875rem 1.25rem; font-size: 1.2rem; }
         #sidebar-wrapper .list-group { width: 15rem; }
-        #page-content-wrapper { min-width: 100vw; }
-        body.sb-sidenav-toggled #sidebar-wrapper { margin-left: 0; }
-        @media (min-width: 768px) {
-            #sidebar-wrapper { margin-left: 0; }
-            #page-content-wrapper { min-width: 0; width: 100%; }
-            body.sb-sidenav-toggled #sidebar-wrapper { margin-left: -15rem; }
+        
+        #page-content-wrapper {
+            width: 100%;
+            min-height: 100vh;
         }
+
+        /* Mobile Toggle State */
+        body.sb-sidenav-toggled #sidebar-wrapper { margin-left: 0; }
+        
+        /* Overlay effect for content when sidebar is open on mobile */
+        body.sb-sidenav-toggled #page-content-wrapper::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+
+        /* Desktop Styles */
+        @media (min-width: 768px) {
+            #sidebar-wrapper {
+                margin-left: 0;
+                position: sticky; /* Sticky sidebar on desktop */
+                top: 0;
+                height: 100vh;
+                overflow-y: auto;
+                z-index: 1;
+            }
+            #page-content-wrapper { min-width: 0; width: 100%; }
+            
+            body.sb-sidenav-toggled #sidebar-wrapper { margin-left: -15rem; }
+            
+            /* Remove overlay on desktop */
+            body.sb-sidenav-toggled #page-content-wrapper::before { display: none; }
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 767.98px) {
+            .table { font-size: 0.8rem; }
+            h1.display-4 { font-size: 2.5rem; }
+            .btn-group-sm > .btn, .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+            .card-body { padding: 1rem; }
+        }
+
         .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; margin-bottom: 20px; }
         .form-label { font-weight: 500; }
         .required:after { content: " *"; color: red; }
@@ -134,30 +182,30 @@
                                             <a class="nav-link" href="#" onclick="setMainStatus('exited', this)">Posted Out / Exited</a>
                                         </li>
                                     </ul>
-                                    <div class="row mb-3">
-                                        <div class="col-md-3">
+                                    <div class="row mb-3 g-2">
+                                        <div class="col-12 col-md-3">
                                             <input type="text" id="searchInput" class="form-control" placeholder="Search surname, NIS...">
                                         </div>
-                                        <div class="col-md-2">
+                                        <div class="col-6 col-md-2">
                                             <select id="filterRank" class="form-select" onchange="loadStaff()">
                                                 <option value="">All Ranks</option>
                                             </select>
                                         </div>
-                                        <div class="col-md-2">
+                                        <div class="col-6 col-md-2">
                                             <select id="filterOffice" class="form-select" onchange="loadStaff()">
                                                 <option value="">All Offices</option>
                                             </select>
                                         </div>
-                                        <div class="col-md-1">
+                                        <div class="col-12 col-md-1">
                                             <button class="btn btn-primary w-100" onclick="loadStaff()"><i class="bi bi-search"></i></button>
                                         </div>
-                                        <div class="col-md-2 text-end">
-                                            <button class="btn btn-success w-100" onclick="showAddForm()"><i class="bi bi-plus-lg"></i> Add New</button>
+                                        <div class="col-6 col-md-2 text-md-end">
+                                            <button class="btn btn-success w-100" onclick="showAddForm()"><i class="bi bi-plus-lg"></i> Add</button>
                                         </div>
-                                        <div class="col-md-2 text-end">
-                                            <div class="btn-group">
-                                                <button class="btn btn-success btn-sm" onclick="openExportModal('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
-                                                <button class="btn btn-danger btn-sm" onclick="openExportModal('pdf')"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                                        <div class="col-6 col-md-2 text-md-end">
+                                            <div class="btn-group w-100">
+                                                <button class="btn btn-success btn-sm w-50" onclick="openExportModal('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
+                                                <button class="btn btn-danger btn-sm w-50" onclick="openExportModal('pdf')"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
                                             </div>
                                         </div>
                                     </div>
@@ -938,6 +986,12 @@
                 const cancelBtn = document.querySelector('#staffForm button[onclick="showList()"]');
                 if(cancelBtn) cancelBtn.classList.add('d-none');
                 
+                const doppInput = document.getElementById('dopp');
+                if (doppInput) {
+                    doppInput.disabled = true;
+                    doppInput.placeholder = 'Locked';
+                }
+                
                 // Load own data if userId exists
                 if(userId) {
                      await editStaff(userId);
@@ -1372,6 +1426,10 @@
             const url = id ? `${API_URL}/staff/${id}` : `${API_URL}/staff`;
 
             try {
+                const currentRole = localStorage.getItem('role');
+                if (currentRole === 'staff') {
+                    delete payload.dopp;
+                }
                 const res = await fetch(url, {
                     method: method,
                     headers: { 
@@ -1381,7 +1439,6 @@
                     body: JSON.stringify(payload)
                 });
                 if (res.ok) {
-                    const currentRole = localStorage.getItem('role');
                     if (currentRole === 'staff') {
                          console.log("Showing success view for staff");
                          showView('success');
