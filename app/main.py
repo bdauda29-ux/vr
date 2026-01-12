@@ -1226,19 +1226,91 @@ def export_pdf():
 
         elements.append(Spacer(1, 0.2 * inch))
         
-        # Calculate column widths to fit page
-        # Landscape letter width is approx 792 points. Margins are 72+72=144. Usable ~650.
-        # We'll use a simple distribution based on character count estimation or equal width
-        col_count = len(headers_keys)
-        avail_width = 750 # Reduced margins slightly
-        col_width = avail_width / col_count if col_count > 0 else 0
+        # Calculate column widths
+        avail_width = 760 # Slightly wider than before (landscape letter is ~792, margins 30+30=60, usable 732. Let's use 750-760)
         
-        table = Table(data_table, repeatRows=1, colWidths=[col_width]*col_count)
+        # Base widths for known short/fixed columns
+        width_map = {
+            "sn": 25,
+            "rank": 35,
+            "gender": 40,
+            "nis_no": 45,
+            "qualification": 40,
+            "dob": 55, "dofa": 55, "dopa": 55, "dopp": 55,
+            "phone_no": 65,
+            "state": 60, "lga": 60,
+            "grade_level": 30, "step": 25,
+            "nok_phone": 65
+        }
         
-        # Dynamic Font Size
-        font_size = 9
-        if col_count > 10: font_size = 8
-        if col_count > 12: font_size = 7
+        # Flexible columns that should absorb extra space
+        flex_cols = ["surname", "other_names", "__name__", "office", "remark", "home_town", "next_of_kin"]
+        
+        # Assign initial widths
+        final_widths = []
+        flex_indices = []
+        current_total = 0
+        
+        for idx, k in enumerate(headers_keys):
+            w = width_map.get(k, 80) # Default 80 for flex/unknown
+            if k in flex_cols:
+                flex_indices.append(idx)
+                w = 80 # Base width for flex
+            final_widths.append(w)
+            current_total += w
+            
+        # Adjust to fit avail_width
+        if current_total < avail_width:
+            # Distribute surplus to flex columns
+            surplus = avail_width - current_total
+            if flex_indices:
+                add_per_col = surplus / len(flex_indices)
+                for idx in flex_indices:
+                    final_widths[idx] += add_per_col
+        else:
+            # Scale down proportionally if exceeding page width
+            scale_factor = avail_width / current_total
+            final_widths = [w * scale_factor for w in final_widths]
+
+        # Prepare styles for wrapping text
+        cell_style = ParagraphStyle(
+            'CellStyle',
+            parent=styles['Normal'],
+            fontSize=8,
+            leading=10, # Line spacing
+            alignment=0 # Left align
+        )
+        
+        # Update data_table with Paragraphs for long text columns
+        # We need to rebuild data_table or modify it. 
+        # Since data_table is already built with strings, let's rebuild the rows part.
+        # But wait, headers are row 0.
+        
+        formatted_data = [data_table[0]] # Keep headers as strings (or wrap them too? Strings are usually fine for headers)
+        
+        for idx, staff in enumerate(staff_list, start=1):
+            row = []
+            for k in headers_keys:
+                val = ""
+                if k == "sn":
+                    val = str(idx)
+                elif k == "__name__":
+                    val = merged_name_by_rank(staff)
+                else:
+                    val = str(get_value(staff, k))
+                
+                # Wrap long text in Paragraph
+                if k in flex_cols and val:
+                    row.append(Paragraph(val, cell_style))
+                else:
+                    row.append(val)
+            formatted_data.append(row)
+
+        table = Table(formatted_data, repeatRows=1, colWidths=final_widths)
+        
+        # Dynamic Font Size logic is less critical now due to wrapping, but good for non-wrapped cells
+        font_size = 8
+        if len(headers_keys) > 12: font_size = 7
         
         style = TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
@@ -1249,9 +1321,12 @@ def export_pdf():
             ("FONTSIZE", (0, 1), (-1, -1), font_size),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            # Remove padding to save space?
+            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
         ])
         table.setStyle(style)
-        for i in range(1, len(data_table)):
+        for i in range(1, len(formatted_data)):
             if i % 2 == 0:
                 table.setStyle(TableStyle([("BACKGROUND", (0, i), (-1, i), colors.whitesmoke)]))
         elements.append(table)
