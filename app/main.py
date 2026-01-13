@@ -48,6 +48,13 @@ try:
     from . import models, schemas, crud, auth, database, migrations
     from .seeds import NIGERIA_STATES_LGAS
 
+    # Run migrations on startup
+    try:
+        migrations.run_migrations()
+    except Exception as e:
+        print(f"Migration failed on startup: {e}")
+
+
 except Exception as e:
     STARTUP_ERROR = f"Startup Error: {str(e)}\n{traceback.format_exc()}"
     print(STARTUP_ERROR)
@@ -943,6 +950,8 @@ def export_excel():
                 return staff.next_of_kin
             if col_key == "nok_phone":
                 return staff.nok_phone
+            if col_key == "email":
+                return staff.email
             if col_key == "remark":
                 return staff.remark
             return ""
@@ -965,6 +974,7 @@ def export_excel():
             "home_town": "Home Town",
             "next_of_kin": "Next of Kin",
             "nok_phone": "NOK Phone",
+            "email": "Email",
             "remark": "Remark",
         }
 
@@ -1178,6 +1188,8 @@ def export_pdf():
                 return staff.next_of_kin or ""
             if col_key == "nok_phone":
                 return staff.nok_phone or ""
+            if col_key == "email":
+                return staff.email or ""
             if col_key == "remark":
                 return staff.remark or ""
             return ""
@@ -1200,6 +1212,7 @@ def export_pdf():
             "home_town": "Home Town",
             "next_of_kin": "Next of Kin",
             "nok_phone": "NOK Phone",
+            "email": "Email",
             "remark": "Remark",
             "sn": "S/N",
         }

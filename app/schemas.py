@@ -32,6 +32,7 @@ def to_dict_staff(obj) -> Dict[str, Any]:
         "next_of_kin": obj.next_of_kin,
         "nok_phone": obj.nok_phone,
         "office": obj.office,
+        "email": obj.email,
         "remark": obj.remark,
         "state": to_dict_state(obj.state),
         "lga": to_dict_lga(obj.lga),

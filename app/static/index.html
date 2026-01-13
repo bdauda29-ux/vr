@@ -231,7 +231,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="row mb-3">
-                                                    <div class="col-md-3">
+                                                    <div class="col-md-2">
                                                         <label class="form-label">Gender</label>
                                                         <select class="form-select" id="gender">
                                                             <option value="">Select...</option>
@@ -239,7 +239,7 @@
                                                             <option value="Female">Female</option>
                                                         </select>
                                                     </div>
-                                                    <div class="col-md-3">
+                                                    <div class="col-md-2">
                                                         <label class="form-label">DOB</label>
                                                         <input type="text" class="form-control date-picker" id="dob" placeholder="dd/mm/yyyy" inputmode="numeric">
                                                     </div>
@@ -248,6 +248,10 @@
                                                         <input type="text" class="form-control" id="phone_no">
                                                     </div>
                                                     <div class="col-md-3">
+                                                        <label class="form-label">Email</label>
+                                                        <input type="email" class="form-control" id="email">
+                                                    </div>
+                                                    <div class="col-md-2">
                                                         <label class="form-label">Qualification</label>
                                                         <select class="form-select" id="qualification">
                                                             <option value="">Select...</option>
@@ -696,6 +700,14 @@
                         <li class="list-group-item d-flex align-items-center">
                             <input class="form-check-input me-2" type="checkbox" value="phone_no" checked>
                             <span class="flex-grow-1">Phone No</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <input class="form-check-input me-2" type="checkbox" value="email">
+                            <span class="flex-grow-1">Email</span>
                             <div class="btn-group btn-group-sm">
                                 <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, -1)"><i class="bi bi-arrow-up"></i></button>
                                 <button type="button" class="btn btn-outline-secondary" onclick="moveColumn(this, 1)"><i class="bi bi-arrow-down"></i></button>
@@ -1464,6 +1476,7 @@
                 gender: document.getElementById('gender').value,
                 dob: userDateToIsoOrNull(document.getElementById('dob').value),
                 phone_no: document.getElementById('phone_no').value,
+                email: document.getElementById('email').value,
                 qualification: document.getElementById('qualification').value,
                 
                 office: document.getElementById('office').value,
@@ -1531,6 +1544,7 @@
                 document.getElementById('gender').value = s.gender;
                 document.getElementById('dob').value = isoToDmy(s.dob);
                 document.getElementById('phone_no').value = s.phone_no;
+                document.getElementById('email').value = s.email || "";
                 document.getElementById('qualification').value = s.qualification;
                 
                 // For office, we might need to add it to options if not present
@@ -1696,13 +1710,13 @@
             const q = document.getElementById('searchInput').value;
             const r = document.getElementById('filterRank').value;
             const o = document.getElementById('filterOffice').value;
-            const c = currentStatusFilter;
+            // const c = currentStatusFilter; // User requested export to include all (complete & incomplete)
             
             const params = new URLSearchParams();
             if (q) params.append('q', q);
             if (r) params.append('rank', r);
             if (o) params.append('office', o);
-            if (c) params.append('completeness', c);
+            // if (c) params.append('completeness', c);
             if (columns && columns.length) params.append('columns', columns.join(','));
             if (mergeName) params.append('merge_name', '1');
 

@@ -15,6 +15,15 @@ def run_migrations():
             print("Column 'login_count' added successfully.")
         else:
             print("Column 'login_count' already exists.")
+
+        if 'email' not in columns:
+            print("Column 'email' missing. Adding it...")
+            with engine.connect() as conn:
+                with conn.begin():
+                    conn.execute(text("ALTER TABLE staff ADD COLUMN email VARCHAR(128)"))
+            print("Column 'email' added successfully.")
+        else:
+            print("Column 'email' already exists.")
             
     except Exception as e:
         print(f"Migration Error: {e}")

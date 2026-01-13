@@ -57,6 +57,7 @@ class Staff(Base):
     next_of_kin = Column(String(128), nullable=True)
     nok_phone = Column(String(32), nullable=True)
     office = Column(String(64), nullable=True, index=True)
+    email = Column(String(128), nullable=True, index=True)
     remark = Column(String(256), nullable=True)
     exit_date = Column(Date, nullable=True)
     exit_mode = Column(String(64), nullable=True) # Posted Out, Deceased, Retired, etc.
