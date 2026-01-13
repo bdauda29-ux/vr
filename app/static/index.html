@@ -1788,7 +1788,9 @@
             try {
                 const currentRole = localStorage.getItem('role');
                 if (currentRole === 'staff') {
-                    delete payload.dopp;
+                    // Remove restricted fields for staff
+                    const restricted = ["office", "rank", "role", "exit_date", "exit_mode", "out_request_status", "dopp"];
+                    restricted.forEach(f => delete payload[f]);
                 }
                 const res = await fetch(url, {
                     method: method,
@@ -1868,6 +1870,14 @@
                 
                 showAddForm(true);
                 document.getElementById('formTitle').textContent = "Edit Personnel";
+                
+                // Disable restricted fields for staff
+                if (role === 'staff') {
+                     ['rank', 'office', 'dopp'].forEach(id => {
+                         const el = document.getElementById(id);
+                         if(el) el.disabled = true;
+                     });
+                }
             } catch (err) { console.error(err); }
         }
 
