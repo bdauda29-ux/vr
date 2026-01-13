@@ -1098,6 +1098,14 @@
             showView('dashboard');
         });
 
+        function roleLabel(r) {
+            if (r === 'super_admin') return 'Super Admin';
+            if (r === 'office_admin') return 'Office Admin';
+            if (r === 'main_admin') return 'Main Admin';
+            if (r === 'staff') return 'Staff';
+            return r || '';
+        }
+
         // Dashboard Logic
         async function fetchUserOffice() {
             if (role !== 'office_admin') return;
@@ -2129,11 +2137,12 @@
                         <td>${s.nis_no}</td>
                         <td>${s.surname} ${s.other_names}</td>
                         <td>${s.rank}</td>
-                        <td><span class="badge bg-${s.role === 'super_admin' ? 'danger' : (s.role === 'office_admin' ? 'warning' : 'info')}">${s.role}</span></td>
+                        <td><span class="badge bg-${s.role === 'super_admin' ? 'danger' : (s.role === 'office_admin' ? 'warning' : (s.role === 'main_admin' ? 'primary' : 'info'))}">${roleLabel(s.role)}</span></td>
                         <td>
                             <div class="btn-group btn-group-sm">
                                 <button class="btn btn-outline-secondary" onclick="updateRole(${s.id}, 'staff')" ${s.role === 'staff' ? 'disabled' : ''}>Staff</button>
                                 <button class="btn btn-outline-warning" onclick="updateRole(${s.id}, 'office_admin')" ${s.role === 'office_admin' ? 'disabled' : ''}>Office Admin</button>
+                                <button class="btn btn-outline-primary" onclick="updateRole(${s.id}, 'main_admin')" ${s.role === 'main_admin' ? 'disabled' : ''}>Main Admin</button>
                                 <button class="btn btn-outline-danger" onclick="updateRole(${s.id}, 'super_admin')" ${s.role === 'super_admin' ? 'disabled' : ''}>Super Admin</button>
                             </div>
                         </td>
