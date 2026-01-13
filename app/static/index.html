@@ -1059,6 +1059,30 @@
             if (role === 'staff') {
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
                 
+                // Customize Dashboard for Staff
+                const dashView = document.getElementById('view-dashboard');
+                if (dashView) {
+                    dashView.innerHTML = `
+                        <div class="row justify-content-center mt-5">
+                            <div class="col-md-6 text-center">
+                                <div class="card shadow">
+                                    <div class="card-body p-5">
+                                        <h3 class="card-title mb-4">Welcome, ${localStorage.getItem('username') || 'Staff'}</h3>
+                                        <div class="d-grid gap-3">
+                                            <button class="btn btn-primary btn-lg" onclick="openChangePasswordModal()">
+                                                <i class="bi bi-key me-2"></i>Change Password
+                                            </button>
+                                            <button class="btn btn-danger btn-lg" onclick="logout()">
+                                                <i class="bi bi-box-arrow-right me-2"></i>Logout
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 // Show form view directly
                 showView('personnel');
                 
@@ -1078,6 +1102,10 @@
                 if (doppInput) {
                     doppInput.disabled = true;
                     doppInput.placeholder = 'Locked';
+                }
+                const rankInput = document.getElementById('rank');
+                if (rankInput) {
+                    rankInput.disabled = true;
                 }
                 
                 // Load own data if userId exists
