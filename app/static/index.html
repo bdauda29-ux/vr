@@ -190,7 +190,7 @@
                                     </ul>
 
                                     <div class="table-responsive">
-                                        <table class="table table-hover align-middle">
+                                        <table id="staffTable" class="table table-hover align-middle" style="width:max-content;min-width:100%">
                                             <thead class="table-light" id="staffTableHead">
                                                 <tr>
                                                     <th>S/N</th>
@@ -926,6 +926,7 @@
 
         // State Management
         let allStates = [];
+        let officesList = [];
         let outModal;
         let leaveModal;
         let exportModal;
@@ -1322,9 +1323,10 @@
                     formSel.innerHTML = '<option value="">Select...</option>';
                     filterSel.innerHTML = '<option value="">All Offices</option>';
                     
-                    offices.forEach(o => {
-                         formSel.add(new Option(o.name, o.name));
-                         filterSel.add(new Option(o.name, o.name));
+                    officesList = offices.map(o => o.name);
+                    officesList.forEach(name => {
+                         formSel.add(new Option(name, name));
+                         filterSel.add(new Option(name, name));
                     });
                 }
             } catch(e) { console.error(e); }
@@ -1478,20 +1480,33 @@
                 const dopa = isoToDmy(s.dopa);
                 const dopp = isoToDmy(s.dopp);
                 const dob = isoToDmy(s.dob);
+                const rankOpts = RANKS.map(r => `<option value="${r}" ${s.rank===r?'selected':''}>${r}</option>`).join('');
+                const genderOpts = ['Male','Female'].map(g => `<option value="${g}" ${s.gender===g?'selected':''}>${g}</option>`).join('');
+                const officeOpts = officesList.map(o => `<option value="${o}" ${s.office===o?'selected':''}>${o}</option>`).join('');
+                const stateOpts = allStates.map(st => `<option value="${st.id}" ${s.state && s.state.id===st.id?'selected':''}>${st.name}</option>`).join('');
                 tr.innerHTML = `
                     <td>${index + 1}</td>
                     <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
                     <td contenteditable="true" data-field="surname" data-original="${s.surname || ''}">${s.surname || ''}</td>
                     <td contenteditable="true" data-field="other_names" data-original="${s.other_names || ''}">${s.other_names || ''}</td>
-                    <td contenteditable="true" data-field="rank" data-original="${s.rank || ''}">${s.rank || ''}</td>
-                    <td contenteditable="true" data-field="gender" data-original="${s.gender || ''}">${s.gender || ''}</td>
+                    <td><select class="form-select form-select-sm" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select></td>
+                    <td><select class="form-select form-select-sm" data-select-field="gender" data-original="${s.gender || ''}">${genderOpts}</select></td>
                     <td contenteditable="true" data-field="dob" data-original="${dob || ''}">${dob || ''}</td>
                     <td contenteditable="true" data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
                     <td contenteditable="true" data-field="email" data-original="${s.email || ''}">${s.email || ''}</td>
                     <td contenteditable="true" data-field="qualification" data-original="${s.qualification || ''}">${s.qualification || ''}</td>
-                    <td contenteditable="true" data-field="office" data-original="${s.office || ''}">${s.office || ''}</td>
-                    <td>${sName}</td>
-                    <td>${lName}</td>
+                    <td><select class="form-select form-select-sm" data-select-field="office" data-original="${s.office || ''}">${officeOpts}</select></td>
+                    <td>
+                        <select class="form-select form-select-sm" data-select-field="state_id" data-original="${s.state ? s.state.id : ''}">
+                            <option value="">Select...</option>
+                            ${stateOpts}
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm" data-select-field="lga_id" data-original="${s.lga ? s.lga.id : ''}">
+                            <option value="">${s.state ? 'Select LGA...' : 'Select State First'}</option>
+                        </select>
+                    </td>
                     <td contenteditable="true" data-field="dofa" data-original="${dofa || ''}">${dofa || ''}</td>
                     <td contenteditable="true" data-field="dopa" data-original="${dopa || ''}">${dopa || ''}</td>
                     <td contenteditable="true" data-field="dopp" data-original="${dopp || ''}">${dopp || ''}</td>
@@ -1505,11 +1520,22 @@
                     </td>
                 `;
                 tbody.appendChild(tr);
+                
+                // Populate LGA select per row if state present
+                const lgaSel = tr.querySelector('select[data-select-field="lga_id"]');
+                const stateSel = tr.querySelector('select[data-select-field="state_id"]');
+                if (stateSel && lgaSel && stateSel.value) {
+                    loadLGAsForRow(stateSel.value, lgaSel, s.lga ? s.lga.id : null);
+                }
             });
         }
 
-        async function updateStaffField(id, field, value, td) {
+        async function updateStaffField(id, field, value, el) {
             try {
+                // Ensure numeric id values are numbers
+                if (field.endsWith('_id') && typeof value === 'string' && value) {
+                    value = parseInt(value, 10);
+                }
                 const res = await fetch(`${API_URL}/staff/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -1519,13 +1545,25 @@
                     let msg = '';
                     try { const err = await res.json(); msg = err.detail || ''; } catch(e) {}
                     alert(`Update failed: ${msg || res.status}`);
-                    td.textContent = td.dataset.original || '';
+                    if (el && el.tagName === 'SELECT') {
+                        el.value = el.dataset.original || '';
+                    } else if (el) {
+                        el.textContent = el.dataset.original || '';
+                    }
                     return;
                 }
-                td.dataset.original = td.textContent.trim();
+                if (el && el.tagName === 'SELECT') {
+                    el.dataset.original = el.value;
+                } else if (el) {
+                    el.dataset.original = el.textContent.trim();
+                }
             } catch (e) {
                 alert(`Network error: ${e.message}`);
-                td.textContent = td.dataset.original || '';
+                if (el && el.tagName === 'SELECT') {
+                    el.value = el.dataset.original || '';
+                } else if (el) {
+                    el.textContent = el.dataset.original || '';
+                }
             }
         }
 
@@ -1540,6 +1578,46 @@
             if (newVal === oldVal) return;
             updateStaffField(id, field, newVal, td);
         }, true);
+
+        document.getElementById('staffTableBody').addEventListener('change', function(e) {
+            const sel = e.target.closest('select[data-select-field]');
+            if (!sel) return;
+            const tr = sel.closest('tr');
+            const id = tr.dataset.staffId;
+            const field = sel.dataset.selectField;
+            const newVal = sel.value;
+            const oldVal = sel.dataset.original || '';
+            if (newVal === oldVal) return;
+            
+            // If state changed, reload LGA options and clear lga
+            if (field === 'state_id') {
+                const lgaSel = tr.querySelector('select[data-select-field="lga_id"]');
+                if (lgaSel) {
+                    lgaSel.innerHTML = '<option value="">Select LGA...</option>';
+                    lgaSel.disabled = true;
+                    loadLGAsForRow(newVal, lgaSel, null).then(() => { lgaSel.disabled = false; });
+                }
+            }
+            updateStaffField(id, field, newVal, sel);
+        });
+        
+        async function loadLGAsForRow(stateId, targetSelect, selectedLgaId) {
+            if (!stateId || !targetSelect) return;
+            try {
+                const res = await fetch(`${API_URL}/states/${stateId}/lgas`);
+                if (res.ok) {
+                    const lgas = await res.json();
+                    targetSelect.innerHTML = '<option value="">Select LGA...</option>';
+                    lgas.forEach(l => {
+                        const opt = document.createElement('option');
+                        opt.value = l.id;
+                        opt.textContent = l.name;
+                        targetSelect.appendChild(opt);
+                    });
+                    if (selectedLgaId) targetSelect.value = selectedLgaId;
+                }
+            } catch(e) { console.error(e); }
+        }
 
         async function undoExit(id) {
             if(!confirm("Are you sure you want to undo this exit? The staff will be active again.")) return;
