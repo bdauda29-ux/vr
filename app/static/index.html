@@ -118,13 +118,13 @@
                         <li class="nav-item d-none" role="presentation">
                             <button class="nav-link" id="form-tab" data-bs-toggle="tab" data-bs-target="#form-pane" type="button">Add / Edit Personnel</button>
                         </li>
-                        <li class="nav-item admin-only" role="presentation">
+                        <li class="nav-item admin-only d-none" role="presentation">
                             <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import-pane" type="button">Bulk Import</button>
                         </li>
-                        <li class="nav-item admin-only" role="presentation">
+                        <li class="nav-item admin-only d-none" role="presentation">
                             <button class="nav-link" id="privileges-tab" data-bs-toggle="tab" data-bs-target="#privileges-pane" type="button">Privileges</button>
                         </li>
-                        <li class="nav-item admin-only" role="presentation">
+                        <li class="nav-item admin-only d-none" role="presentation">
                             <button class="nav-link" id="password-reset-tab" data-bs-toggle="tab" data-bs-target="#password-reset-pane" type="button">Password Reset</button>
                         </li>
                     </ul>
@@ -166,6 +166,9 @@
                                         <div class="col-12 col-md-1">
                                             <button class="btn btn-primary w-100" onclick="loadStaff()"><i class="bi bi-search"></i></button>
                                         </div>
+                                        <div class="col-12 col-md-2">
+                                            <button class="btn btn-outline-secondary w-100" onclick="clearFilters()"><i class="bi bi-x-circle"></i> Clear Filters</button>
+                                        </div>
                                         <div class="col-6 col-md-2 text-md-end">
                                             <button class="btn btn-success w-100" onclick="showAddForm()"><i class="bi bi-plus-lg"></i> Add</button>
                                         </div>
@@ -188,7 +191,7 @@
 
                                     <div class="table-responsive">
                                         <table class="table table-hover align-middle">
-                                            <thead class="table-light">
+                                            <thead class="table-light" id="staffTableHead">
                                                 <tr>
                                                     <th>S/N</th>
                                                     <th>NIS/No</th>
@@ -1077,6 +1080,15 @@
             } else if (role === 'office_admin') {
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
                 await fetchUserOffice();
+            } else if (role === 'main_admin') {
+                // Hide Bulk Import, Privileges, and Audit Log tabs for main_admin
+                const importTab = document.getElementById('import-tab')?.parentElement;
+                const privilegesTabBtn = document.getElementById('privileges-tab')?.parentElement;
+                const auditLogNav = document.querySelector('a[onclick="showView(\'audit\')"]')?.parentElement;
+                
+                if (importTab) importTab.classList.add('d-none');
+                if (privilegesTabBtn) privilegesTabBtn.classList.add('d-none');
+                if (auditLogNav) auditLogNav.classList.add('d-none');
             }
 
             loadStaff();
@@ -1373,7 +1385,12 @@
                 }
                 const data = await res.json();
                 if (!Array.isArray(data)) throw new Error("Invalid data format received");
-                renderTable(data);
+                if (role === 'super_admin') {
+                    buildSuperAdminTableHeader();
+                    renderTableSuperAdmin(data);
+                } else {
+                    renderTable(data);
+                }
             } catch (err) { 
                 console.error(err); 
                 document.getElementById('staffTableBody').innerHTML = `<tr><td colspan="9" class="text-danger text-center">Error loading data: ${err.message}</td></tr>`;
@@ -1393,6 +1410,136 @@
             el.classList.add('active');
             loadStaff();
         }
+        
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('filterRank').value = '';
+            document.getElementById('filterOffice').value = '';
+            document.getElementById('sortDopp').value = '';
+            
+            currentStatus = 'active';
+            currentStatusFilter = 'completed';
+            
+            // Reset tab UI states
+            const mainTabs = document.querySelectorAll('#mainStatusTabs .nav-link');
+            if (mainTabs.length >= 2) {
+                mainTabs.forEach(a => a.classList.remove('active'));
+                mainTabs[0].classList.add('active'); // Active Personnel
+            }
+            const statusTabs = document.querySelectorAll('#statusTabs .nav-link');
+            if (statusTabs.length >= 2) {
+                statusTabs.forEach(a => a.classList.remove('active'));
+                statusTabs[0].classList.add('active'); // Completed
+            }
+            
+            loadStaff();
+        }
+
+        function buildSuperAdminTableHeader() {
+            const thead = document.getElementById('staffTableHead');
+            if (!thead) return;
+            const html = `
+                <tr>
+                    <th>S/N</th>
+                    <th>NIS/No</th>
+                    <th>Surname</th>
+                    <th>Other Names</th>
+                    <th>Rank</th>
+                    <th>Gender</th>
+                    <th>DOB</th>
+                    <th>Phone</th>
+                    <th>Email</th>
+                    <th>Qual</th>
+                    <th>Office</th>
+                    <th>State</th>
+                    <th>LGA</th>
+                    <th>DOFA</th>
+                    <th>DOPA</th>
+                    <th>DOPP</th>
+                    <th>Home Town</th>
+                    <th>Next of Kin</th>
+                    <th>NOK Phone</th>
+                    <th>Remark</th>
+                    <th>Actions</th>
+                </tr>
+            `;
+            thead.innerHTML = html;
+        }
+
+        function renderTableSuperAdmin(data) {
+            const tbody = document.getElementById('staffTableBody');
+            tbody.innerHTML = '';
+            data.forEach((s, index) => {
+                const tr = document.createElement('tr');
+                tr.dataset.staffId = s.id;
+                const sName = s.state ? s.state.name : '';
+                const lName = s.lga ? s.lga.name : '';
+                const dofa = isoToDmy(s.dofa);
+                const dopa = isoToDmy(s.dopa);
+                const dopp = isoToDmy(s.dopp);
+                const dob = isoToDmy(s.dob);
+                tr.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
+                    <td contenteditable="true" data-field="surname" data-original="${s.surname || ''}">${s.surname || ''}</td>
+                    <td contenteditable="true" data-field="other_names" data-original="${s.other_names || ''}">${s.other_names || ''}</td>
+                    <td contenteditable="true" data-field="rank" data-original="${s.rank || ''}">${s.rank || ''}</td>
+                    <td contenteditable="true" data-field="gender" data-original="${s.gender || ''}">${s.gender || ''}</td>
+                    <td contenteditable="true" data-field="dob" data-original="${dob || ''}">${dob || ''}</td>
+                    <td contenteditable="true" data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
+                    <td contenteditable="true" data-field="email" data-original="${s.email || ''}">${s.email || ''}</td>
+                    <td contenteditable="true" data-field="qualification" data-original="${s.qualification || ''}">${s.qualification || ''}</td>
+                    <td contenteditable="true" data-field="office" data-original="${s.office || ''}">${s.office || ''}</td>
+                    <td>${sName}</td>
+                    <td>${lName}</td>
+                    <td contenteditable="true" data-field="dofa" data-original="${dofa || ''}">${dofa || ''}</td>
+                    <td contenteditable="true" data-field="dopa" data-original="${dopa || ''}">${dopa || ''}</td>
+                    <td contenteditable="true" data-field="dopp" data-original="${dopp || ''}">${dopp || ''}</td>
+                    <td contenteditable="true" data-field="home_town" data-original="${s.home_town || ''}">${s.home_town || ''}</td>
+                    <td contenteditable="true" data-field="next_of_kin" data-original="${s.next_of_kin || ''}">${s.next_of_kin || ''}</td>
+                    <td contenteditable="true" data-field="nok_phone" data-original="${s.nok_phone || ''}">${s.nok_phone || ''}</td>
+                    <td contenteditable="true" data-field="remark" data-original="${s.remark || ''}">${s.remark || ''}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>
+                        <button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function updateStaffField(id, field, value, td) {
+            try {
+                const res = await fetch(`${API_URL}/staff/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ [field]: value })
+                });
+                if (!res.ok) {
+                    let msg = '';
+                    try { const err = await res.json(); msg = err.detail || ''; } catch(e) {}
+                    alert(`Update failed: ${msg || res.status}`);
+                    td.textContent = td.dataset.original || '';
+                    return;
+                }
+                td.dataset.original = td.textContent.trim();
+            } catch (e) {
+                alert(`Network error: ${e.message}`);
+                td.textContent = td.dataset.original || '';
+            }
+        }
+
+        document.getElementById('staffTableBody').addEventListener('blur', function(e) {
+            const td = e.target.closest('td[contenteditable="true"]');
+            if (!td) return;
+            const tr = td.closest('tr');
+            const id = tr.dataset.staffId;
+            const field = td.dataset.field;
+            const newVal = td.textContent.trim();
+            const oldVal = td.dataset.original || '';
+            if (newVal === oldVal) return;
+            updateStaffField(id, field, newVal, td);
+        }, true);
 
         async function undoExit(id) {
             if(!confirm("Are you sure you want to undo this exit? The staff will be active again.")) return;

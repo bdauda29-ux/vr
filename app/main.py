@@ -238,7 +238,11 @@ def require_role(allowed_roles):
     user = get_current_user()
     if not user: return None, jsonify({"detail": "Not authenticated"}), 401
     role = user.get("role")
-    if role not in allowed_roles: 
+    # Treat main_admin as equivalent to super_admin for permissions
+    effective_role = role
+    if role == "main_admin" and "super_admin" in allowed_roles:
+        effective_role = "super_admin"
+    if effective_role not in allowed_roles: 
         print(f"PERMISSION DENIED: User role '{role}' not in {allowed_roles}")
         return None, jsonify({"detail": f"Permission denied (Role: {role})"}), 403
     return user, None, None
@@ -706,7 +710,7 @@ def update_staff_role(staff_id: int):
     if err: return err, code
     data = request.get_json(force=True)
     new_role = data.get("role")
-    if new_role not in ("staff", "office_admin", "super_admin"):
+    if new_role not in ("staff", "office_admin", "super_admin", "main_admin"):
         return jsonify({"detail": "Invalid role"}), 400
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
@@ -1275,49 +1279,53 @@ def export_pdf():
         # Calculate column widths
         avail_width = 760 # Slightly wider than before (landscape letter is ~792, margins 30+30=60, usable 732. Let's use 750-760)
         
-        # Base widths for known short/fixed columns
-        width_map = {
+        # Determine column widths based on maximum character lengths (header + data)
+        # Estimate width per character using current font size
+        # This heuristic reduces overlap by allocating width proportionally to content length
+        char_width = font_size * 0.6
+        min_width_map = {
             "sn": 25,
             "rank": 35,
             "gender": 40,
             "nis_no": 45,
-            "office": 45,
             "qualification": 40,
             "dob": 55, "dofa": 55, "dopa": 55, "dopp": 55,
             "phone_no": 65,
             "state": 60, "lga": 60,
             "grade_level": 30, "step": 25,
-            "nok_phone": 65
+            "nok_phone": 65,
         }
-        
-        # Flexible columns that should absorb extra space
-        flex_cols = ["surname", "other_names", "__name__", "remark", "home_town", "next_of_kin"]
-        
-        # Assign initial widths
-        final_widths = []
-        flex_indices = []
-        current_total = 0
-        
-        for idx, k in enumerate(headers_keys):
-            w = width_map.get(k, 80) # Default 80 for flex/unknown
-            if k in flex_cols:
-                flex_indices.append(idx)
-                w = 80 # Base width for flex
-            final_widths.append(w)
-            current_total += w
-            
-        # Adjust to fit avail_width
-        if current_total < avail_width:
-            # Distribute surplus to flex columns
-            surplus = avail_width - current_total
-            if flex_indices:
-                add_per_col = surplus / len(flex_indices)
-                for idx in flex_indices:
-                    final_widths[idx] += add_per_col
+        max_len_map = {}
+        # Initialize with header lengths
+        for k in headers_keys:
+            header_text = label_map.get(k, k)
+            max_len_map[k] = len(str(header_text))
+        # Account for SN max length (number of rows)
+        if "sn" in headers_keys:
+            max_len_map["sn"] = max(max_len_map.get("sn", 0), len(str(len(staff_list))))
+        # Compute max data length per column
+        for staff in staff_list:
+            for k in headers_keys:
+                if k == "sn":
+                    s = ""  # already handled by max row count
+                elif k == "__name__":
+                    s = merged_name_by_rank(staff)
+                else:
+                    s = str(get_value(staff, k))
+                max_len_map[k] = max(max_len_map.get(k, 0), len(s or ""))
+        # Raw widths from lengths
+        raw_widths = []
+        for k in headers_keys:
+            base = (max_len_map.get(k, 1) + 2) * char_width  # +2 padding chars
+            min_w = min_width_map.get(k, 40)
+            raw_widths.append(max(base, min_w))
+        # Scale to fit available width
+        total_raw = sum(raw_widths)
+        if total_raw > 0:
+            scale = avail_width / total_raw
         else:
-            # Scale down proportionally if exceeding page width
-            scale_factor = avail_width / current_total
-            final_widths = [w * scale_factor for w in final_widths]
+            scale = 1.0
+        final_widths = [w * scale for w in raw_widths]
 
         # Dynamic Font Size logic (reduce to avoid overlap)
         font_size = 7
@@ -1332,7 +1340,7 @@ def export_pdf():
             alignment=0 # Left align
         )
         
-        # Update data_table with Paragraphs for long text columns
+        # Update data_table with Paragraphs for all columns to enable wrapping
         formatted_data = [data_table[0]]
         
         for idx, staff in enumerate(staff_list, start=1):
@@ -1346,11 +1354,11 @@ def export_pdf():
                 else:
                     val = str(get_value(staff, k))
                 
-                # Wrap long text in Paragraph
-                if k in flex_cols and val:
+                # Wrap all text in Paragraph to avoid overlap
+                if val:
                     row.append(Paragraph(val, cell_style))
                 else:
-                    row.append(val)
+                    row.append("")
             formatted_data.append(row)
 
         table = Table(formatted_data, repeatRows=1, colWidths=final_widths)

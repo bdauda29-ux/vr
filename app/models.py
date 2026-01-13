@@ -68,7 +68,7 @@ class Staff(Base):
     out_request_reason = Column(String(64), nullable=True)
 
     password_hash = Column(String(128), nullable=True) # For custom passwords
-    role = Column(String(32), nullable=False, default="staff") # staff, office_admin, super_admin
+    role = Column(String(32), nullable=False, default="staff") # staff, office_admin, super_admin, main_admin
     login_count = Column(Integer, default=0, nullable=False)
     state = relationship("State")
     lga = relationship("LGA")
