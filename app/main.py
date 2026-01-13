@@ -129,7 +129,7 @@ def login():
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
                     # Check login limit (skip for admins)
-                    if staff.role not in ("office_admin", "super_admin", "main_admin") and staff.login_count >= 2:
+                    if staff.role not in ("office_admin", "super_admin", "main_admin") and staff.login_count >= 10:
                         return jsonify({"detail": "Login limit exceeded. Please contact Super Admin to reset."}), 403
 
                     verification_success = False
