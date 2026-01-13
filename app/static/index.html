@@ -12,6 +12,14 @@
             overflow-x: hidden; 
             padding-top: 60px; /* Space for fixed navbar */
         }
+        /* Ensure personnel table can scroll horizontally to reveal all columns */
+        #list-pane .table-responsive { 
+            overflow-x: auto; 
+        }
+        #staffTable {
+            width: max-content;
+            min-width: 100%;
+        }
         
         .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; margin-bottom: 20px; }
         .form-label { font-weight: 500; }
@@ -1105,6 +1113,11 @@
             if (r === 'staff') return 'Staff';
             return r || '';
         }
+        
+        function rankBadge(rank) {
+            const text = rank || '';
+            return `<span class="badge bg-success rounded-pill">${text}</span>`;
+        }
 
         // Dashboard Logic
         async function fetchUserOffice() {
@@ -1497,7 +1510,13 @@
                     <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
                     <td contenteditable="true" data-field="surname" data-original="${s.surname || ''}">${s.surname || ''}</td>
                     <td contenteditable="true" data-field="other_names" data-original="${s.other_names || ''}">${s.other_names || ''}</td>
-                    <td><select class="form-select form-select-sm" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select></td>
+                    <td data-rank-cell>
+                        <span class="rank-badge">${rankBadge(s.rank)}</span>
+                        <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
+                        <button type="button" class="btn btn-sm btn-outline-info ms-1" title="Edit rank" data-rank-toggle>
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                    </td>
                     <td><select class="form-select form-select-sm" data-select-field="gender" data-original="${s.gender || ''}">${genderOpts}</select></td>
                     <td contenteditable="true" data-field="dob" data-original="${dob || ''}">${dob || ''}</td>
                     <td contenteditable="true" data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
@@ -1587,7 +1606,7 @@
             updateStaffField(id, field, newVal, td);
         }, true);
 
-        document.getElementById('staffTableBody').addEventListener('change', function(e) {
+        document.getElementById('staffTableBody').addEventListener('change', async function(e) {
             const sel = e.target.closest('select[data-select-field]');
             if (!sel) return;
             const tr = sel.closest('tr');
@@ -1606,7 +1625,36 @@
                     loadLGAsForRow(newVal, lgaSel, null).then(() => { lgaSel.disabled = false; });
                 }
             }
-            updateStaffField(id, field, newVal, sel);
+            await updateStaffField(id, field, newVal, sel);
+            if (field === 'rank') {
+                // Update badge UI and toggle back to view mode
+                const cell = sel.closest('td[data-rank-cell]');
+                const badgeWrap = cell?.querySelector('.rank-badge');
+                if (badgeWrap) {
+                    badgeWrap.innerHTML = rankBadge(newVal);
+                    badgeWrap.classList.remove('d-none');
+                }
+                sel.classList.add('d-none');
+            }
+        });
+        
+        // Toggle Rank edit (show/hide select vs badge)
+        document.getElementById('staffTableBody').addEventListener('click', function(e) {
+            const btn = e.target.closest('[data-rank-toggle]');
+            if (!btn) return;
+            const cell = btn.closest('td[data-rank-cell]');
+            if (!cell) return;
+            const badgeWrap = cell.querySelector('.rank-badge');
+            const sel = cell.querySelector('select[data-select-field="rank"]');
+            if (badgeWrap && sel) {
+                const editing = sel.classList.toggle('d-none') === false; // d-none removed => editing
+                if (editing) {
+                    badgeWrap.classList.add('d-none');
+                    sel.focus();
+                } else {
+                    badgeWrap.classList.remove('d-none');
+                }
+            }
         });
         
         async function loadLGAsForRow(stateId, targetSelect, selectedLgaId) {
@@ -1693,7 +1741,7 @@
                     <td>${index + 1}</td>
                     <td>${s.nis_no}</td>
                     <td>${s.surname} ${s.other_names}</td>
-                    <td>${s.rank}</td>
+                    <td>${rankBadge(s.rank)}</td>
                     <td>${dates}</td>
                     <td>${s.office || ''}</td>
                     <td>${location}</td>
