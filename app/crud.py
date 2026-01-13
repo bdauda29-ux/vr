@@ -30,6 +30,7 @@ def list_staff(
     office: Optional[str] = None,
     completeness: Optional[str] = None,
     status: Optional[str] = "active",
+    dopp_order: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> List[models.Staff]:
@@ -46,11 +47,17 @@ def list_staff(
         else_=999
     )
     
-    stmt = select(models.Staff).order_by(
-        rank_sort, 
-        models.Staff.dopa.asc(), # Oldest DOPA first (Seniority)
-        models.Staff.nis_no
-    ).offset(offset).limit(limit)
+    if dopp_order in ("asc", "desc"):
+        stmt = select(models.Staff).order_by(
+            models.Staff.dopp.asc() if dopp_order == "asc" else models.Staff.dopp.desc(),
+            models.Staff.nis_no
+        ).offset(offset).limit(limit)
+    else:
+        stmt = select(models.Staff).order_by(
+            rank_sort, 
+            models.Staff.dopa.asc(),
+            models.Staff.nis_no
+        ).offset(offset).limit(limit)
     
     if status == "active":
         stmt = stmt.where(models.Staff.exit_date.is_(None))

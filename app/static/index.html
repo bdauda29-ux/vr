@@ -156,6 +156,13 @@
                                                 <option value="">All Offices</option>
                                             </select>
                                         </div>
+                                        <div class="col-6 col-md-2">
+                                            <select id="sortDopp" class="form-select" onchange="loadStaff()">
+                                                <option value="">Sort by DOPP</option>
+                                                <option value="asc">DOPP Ascending</option>
+                                                <option value="desc">DOPP Descending</option>
+                                            </select>
+                                        </div>
                                         <div class="col-12 col-md-1">
                                             <button class="btn btn-primary w-100" onclick="loadStaff()"><i class="bi bi-search"></i></button>
                                         </div>
@@ -787,7 +794,7 @@
                         </li>
                     </ul>
                     <div class="form-check mt-3">
-                        <input class="form-check-input" type="checkbox" id="merge_name">
+                        <input class="form-check-input" type="checkbox" id="merge_name" checked>
                         <label class="form-check-label" for="merge_name">Merge Name (Surname + initials)</label>
                     </div>
                 </div>
@@ -1353,6 +1360,8 @@
             if (q) url += `&q=${encodeURIComponent(q)}`;
             if (r) url += `&rank=${encodeURIComponent(r)}`;
             if (o) url += `&office=${encodeURIComponent(o)}`;
+            const doppOrder = document.getElementById('sortDopp').value;
+            if (doppOrder) url += `&dopp_order=${encodeURIComponent(doppOrder)}`;
             if (currentStatusFilter) url += `&completeness=${currentStatusFilter}`;
             if (currentStatus) url += `&status=${currentStatus}`;
 
@@ -1716,6 +1725,8 @@
             if (q) params.append('q', q);
             if (r) params.append('rank', r);
             if (o) params.append('office', o);
+            const doppOrder = document.getElementById('sortDopp').value;
+            if (doppOrder) params.append('dopp_order', doppOrder);
             // if (c) params.append('completeness', c);
             if (columns && columns.length) params.append('columns', columns.join(','));
             if (mergeName) params.append('merge_name', '1');

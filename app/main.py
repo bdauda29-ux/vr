@@ -560,6 +560,7 @@ def list_staff_endpoint():
         office = request.args.get("office")
         completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
+        dopp_order = request.args.get("dopp_order")
         limit = request.args.get("limit", 100, type=int)
         offset = request.args.get("offset", 0, type=int)
         
@@ -568,7 +569,7 @@ def list_staff_endpoint():
                 staff_user = crud.get_staff(db, user["id"])
                 if not staff_user or not staff_user.office: return jsonify([]), 200
                 office = staff_user.office
-            items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, status=status, limit=limit, offset=offset)
+            items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, status=status, dopp_order=dopp_order, limit=limit, offset=offset)
             return jsonify([schemas.to_dict_staff(item) for item in items])
     except Exception as e:
         import traceback
@@ -787,6 +788,7 @@ def export_excel():
         office = request.args.get("office")
         completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
+        dopp_order = request.args.get("dopp_order")
         columns_raw = request.args.get("columns")
         merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
 
@@ -801,6 +803,7 @@ def export_excel():
             office=office,
             completeness=completeness,
             status=status,
+            dopp_order=dopp_order,
             limit=10000,
             offset=0,
         )
@@ -1077,6 +1080,7 @@ def export_pdf():
         office = request.args.get("office")
         completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
+        dopp_order = request.args.get("dopp_order")
         columns_raw = request.args.get("columns")
         merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
 
@@ -1098,6 +1102,7 @@ def export_pdf():
             office=office,
             completeness=completeness,
             status=status,
+            dopp_order=dopp_order,
             limit=10000,
             offset=0,
         )
