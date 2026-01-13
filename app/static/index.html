@@ -1100,12 +1100,30 @@
                 
                 const doppInput = document.getElementById('dopp');
                 if (doppInput) {
-                    doppInput.disabled = true;
-                    // Removed 'Locked' placeholder to keep it visible for sighting if empty
+                    // Make DOPP read-only instead of disabled for better visibility
+                    doppInput.disabled = false;
+                    doppInput.readOnly = true;
+                    doppInput.classList.add('bg-light');
+                    // Remove date-picker class to prevent calendar popup if needed, 
+                    // but flatpickr might already be initialized. 
+                    // Better to just disable interaction if possible, or leave as readOnly.
+                    // For now, let's keep it readOnly which prevents typing. 
+                    // To prevent picking, we might need to destroy flatpickr instance or disable it.
+                    // But 'disabled' was what hid it/made it gray. 
+                    // Let's try readOnly with a background color.
                 }
-                const rankInput = document.getElementById('rank');
-                if (rankInput) {
-                    rankInput.disabled = true;
+                const rankSelect = document.getElementById('rank');
+                if (rankSelect) {
+                    // Replace Select with Read-Only Input for visibility
+                    const parent = rankSelect.parentElement;
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'form-control';
+                    input.id = 'rank';
+                    input.readOnly = true;
+                    // Copy any necessary classes or styles
+                    input.style.backgroundColor = '#e9ecef'; // Light gray to indicate read-only
+                    parent.replaceChild(input, rankSelect);
                 }
                 
                 // Hide Personnel and Leave from Navbar
@@ -1919,7 +1937,8 @@
                 
                 // Disable restricted fields for staff
                 if (role === 'staff') {
-                     ['rank', 'office', 'dopp'].forEach(id => {
+                     // Only disable office (select). Rank and DOPP are handled as read-only inputs.
+                     ['office'].forEach(id => {
                          const el = document.getElementById(id);
                          if(el) el.disabled = true;
                      });
