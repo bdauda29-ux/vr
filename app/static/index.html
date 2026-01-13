@@ -49,7 +49,7 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#" onclick="showView('dashboard')"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a>
                     </li>
-                    <li class="nav-item dropdown">
+                    <li class="nav-item dropdown" id="nav-personnel">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-people-fill me-1"></i> Personnel
                         </a>
@@ -64,7 +64,7 @@
                     <li class="nav-item admin-only">
                         <a class="nav-link" href="#" onclick="showView('offices')"><i class="bi bi-building me-1"></i> Offices</a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item" id="nav-leave">
                         <a class="nav-link" href="#" onclick="showView('leave')"><i class="bi bi-calendar-check me-1"></i> Leave</a>
                     </li>
                     <li class="nav-item admin-only">
@@ -1101,16 +1101,27 @@
                 const doppInput = document.getElementById('dopp');
                 if (doppInput) {
                     doppInput.disabled = true;
-                    doppInput.placeholder = 'Locked';
+                    // Removed 'Locked' placeholder to keep it visible for sighting if empty
                 }
                 const rankInput = document.getElementById('rank');
                 if (rankInput) {
                     rankInput.disabled = true;
                 }
                 
+                // Hide Personnel and Leave from Navbar
+                const navPersonnel = document.getElementById('nav-personnel');
+                if (navPersonnel) navPersonnel.classList.add('d-none');
+                
+                const navLeave = document.getElementById('nav-leave');
+                if (navLeave) navLeave.classList.add('d-none');
+                
                 // Load own data if userId exists
                 if(userId) {
+                     console.log("Found userId:", userId, "- triggering editStaff");
                      await editStaff(userId);
+                } else {
+                    console.error("No userId found in localStorage for staff user");
+                    alert("Error: User ID missing. Please logout and login again.");
                 }
                 
                 return;
@@ -1851,10 +1862,17 @@
 
         async function editStaff(id) {
             try {
+                console.log("Loading staff data for ID:", id);
                 const res = await fetch(`${API_URL}/staff/${id}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                
+                if (!res.ok) {
+                    throw new Error(`Failed to fetch staff data: ${res.status} ${res.statusText}`);
+                }
+
                 const s = await res.json();
+                console.log("Staff data loaded:", s);
                 
                 document.getElementById('staffId').value = s.id;
                 document.getElementById('nis_no').value = s.nis_no;
@@ -1906,7 +1924,14 @@
                          if(el) el.disabled = true;
                      });
                 }
-            } catch (err) { console.error(err); }
+            } catch (err) { 
+                console.error("Error in editStaff:", err);
+                if (role === 'staff') {
+                    alert("Failed to load your personal information. Please try logging in again.");
+                } else {
+                    alert("Failed to load staff details.");
+                }
+            }
         }
 
         function showList() {
