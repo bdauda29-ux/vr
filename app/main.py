@@ -1281,6 +1281,7 @@ def export_pdf():
             "rank": 35,
             "gender": 40,
             "nis_no": 45,
+            "office": 45,
             "qualification": 40,
             "dob": 55, "dofa": 55, "dopa": 55, "dopp": 55,
             "phone_no": 65,
@@ -1290,7 +1291,7 @@ def export_pdf():
         }
         
         # Flexible columns that should absorb extra space
-        flex_cols = ["surname", "other_names", "__name__", "office", "remark", "home_town", "next_of_kin"]
+        flex_cols = ["surname", "other_names", "__name__", "remark", "home_town", "next_of_kin"]
         
         # Assign initial widths
         final_widths = []
@@ -1318,16 +1319,16 @@ def export_pdf():
             scale_factor = avail_width / current_total
             final_widths = [w * scale_factor for w in final_widths]
 
-        # Dynamic Font Size logic
-        font_size = 8
-        if len(headers_keys) > 12: font_size = 7
+        # Dynamic Font Size logic (reduce to avoid overlap)
+        font_size = 7
+        if len(headers_keys) > 12: font_size = 6
 
         # Prepare styles for wrapping text
         cell_style = ParagraphStyle(
             'CellStyle',
             parent=styles['Normal'],
             fontSize=font_size,
-            leading=font_size + 2, # Line spacing
+            leading=font_size + 1, # Tighter line spacing
             alignment=0 # Left align
         )
         
