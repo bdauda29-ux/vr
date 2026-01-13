@@ -560,8 +560,14 @@ def list_staff_endpoint():
         q = request.args.get("q")
         state_id = request.args.get("state_id", type=int)
         lga_id = request.args.get("lga_id", type=int)
-        rank = request.args.get("rank")
-        office = request.args.get("office")
+        
+        # Handle multi-select for rank and office
+        rank = [r for r in request.args.getlist("rank") if r.strip()]
+        if not rank: rank = None
+        
+        office = [o for o in request.args.getlist("office") if o.strip()]
+        if not office: office = None
+
         completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
         dopp_order = request.args.get("dopp_order")
@@ -572,7 +578,7 @@ def list_staff_endpoint():
             if user["role"] == "office_admin":
                 staff_user = crud.get_staff(db, user["id"])
                 if not staff_user or not staff_user.office: return jsonify([]), 200
-                office = staff_user.office
+                office = [staff_user.office]
             items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, status=status, dopp_order=dopp_order, limit=limit, offset=offset)
             return jsonify([schemas.to_dict_staff(item) for item in items])
     except Exception as e:
@@ -788,8 +794,14 @@ def export_excel():
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     with next(get_db()) as db:
         q = request.args.get("q")
-        rank = request.args.get("rank")
-        office = request.args.get("office")
+        
+        # Handle multi-select for rank and office
+        rank = [r for r in request.args.getlist("rank") if r.strip()]
+        if not rank: rank = None
+        
+        office = [o for o in request.args.getlist("office") if o.strip()]
+        if not office: office = None
+
         completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
         dopp_order = request.args.get("dopp_order")

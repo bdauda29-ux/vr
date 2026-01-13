@@ -69,9 +69,15 @@ def list_staff(
     if lga_id is not None:
         stmt = stmt.where(models.Staff.lga_id == lga_id)
     if rank:
-        stmt = stmt.where(models.Staff.rank == rank)
+        if isinstance(rank, list):
+             stmt = stmt.where(models.Staff.rank.in_(rank))
+        else:
+             stmt = stmt.where(models.Staff.rank == rank)
     if office:
-        stmt = stmt.where(models.Staff.office == office)
+        if isinstance(office, list):
+             stmt = stmt.where(models.Staff.office.in_(office))
+        else:
+             stmt = stmt.where(models.Staff.office == office)
     
     if completeness == "completed":
         # Criteria: Must have State, LGA, and Office

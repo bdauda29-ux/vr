@@ -155,14 +155,32 @@
                                             <input type="text" id="searchInput" class="form-control" placeholder="Search surname, NIS...">
                                         </div>
                                         <div class="col-6 col-md-2">
-                                            <select id="filterRank" class="form-select" onchange="loadStaff()">
-                                                <option value="">All Ranks</option>
-                                            </select>
+                                            <div class="dropdown" id="filterRankDropdown">
+                                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterRankBtn">
+                                                    All Ranks
+                                                </button>
+                                                <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
+                                                    <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <div id="filterRankContainer">
+                                                        <!-- Checkboxes go here -->
+                                                    </div>
+                                                </ul>
+                                            </div>
                                         </div>
                                         <div class="col-6 col-md-2">
-                                            <select id="filterOffice" class="form-select" onchange="loadStaff()">
-                                                <option value="">All Offices</option>
-                                            </select>
+                                            <div class="dropdown" id="filterOfficeDropdown">
+                                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterOfficeBtn">
+                                                    All Offices
+                                                </button>
+                                                <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
+                                                     <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
+                                                     <li><hr class="dropdown-divider"></li>
+                                                     <div id="filterOfficeContainer">
+                                                        <!-- Checkboxes go here -->
+                                                     </div>
+                                                </ul>
+                                            </div>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <select id="sortDopp" class="form-select" onchange="loadStaff()">
@@ -1020,6 +1038,19 @@
                 staffForm.addEventListener('submit', handleFormSubmit);
             }
 
+            // Auto-uppercase Surname and Other Names
+            ['surname', 'other_names'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) {
+                    el.addEventListener('input', function() {
+                        this.value = this.value.toUpperCase();
+                    });
+                    el.addEventListener('blur', function() {
+                        this.value = this.value.toUpperCase();
+                    });
+                }
+            });
+
             // Init Common Data
             populateRanks();
             await fetchStates();
@@ -1101,16 +1132,11 @@
                 const doppInput = document.getElementById('dopp');
                 if (doppInput) {
                     // Make DOPP read-only instead of disabled for better visibility
+                    // Also prevent pointer events so calendar doesn't open
                     doppInput.disabled = false;
                     doppInput.readOnly = true;
                     doppInput.classList.add('bg-light');
-                    // Remove date-picker class to prevent calendar popup if needed, 
-                    // but flatpickr might already be initialized. 
-                    // Better to just disable interaction if possible, or leave as readOnly.
-                    // For now, let's keep it readOnly which prevents typing. 
-                    // To prevent picking, we might need to destroy flatpickr instance or disable it.
-                    // But 'disabled' was what hid it/made it gray. 
-                    // Let's try readOnly with a background color.
+                    doppInput.style.pointerEvents = 'none'; 
                 }
                 const rankSelect = document.getElementById('rank');
                 if (rankSelect) {
@@ -1173,7 +1199,21 @@
         
         function rankBadge(rank) {
             const text = rank || '';
-            return `<span class="badge bg-success rounded-pill">${text}</span>`;
+            if (!text) return '';
+            
+            // Define groups
+            const red = ['DCG'];
+            const green = ['ACG', 'CIS', 'DCI', 'ACI'];
+            const blue = ['CSI', 'SI', 'DSI', 'ASI1', 'ASI 1', 'ASI2', 'ASI 2'];
+            const yellow = ['II', 'AII', 'IA1', 'IA 1', 'IA2', 'IA 2', 'IA3', 'IA 3'];
+            
+            let color = 'bg-secondary'; // Default
+            if (red.includes(text)) color = 'bg-danger';
+            else if (green.includes(text)) color = 'bg-success';
+            else if (blue.includes(text)) color = 'bg-primary';
+            else if (yellow.includes(text)) color = 'bg-warning text-dark';
+            
+            return `<span class="badge ${color} rounded-pill">${text}</span>`;
         }
 
         // Dashboard Logic
@@ -1375,15 +1415,56 @@
             } catch(e) { console.error(e); }
         }
 
-        function populateRanks() {
-            const sel = document.getElementById('rank');
-            const filter = document.getElementById('filterRank');
-            sel.innerHTML = '<option value="">Select...</option>';
-            filter.innerHTML = '<option value="">All Ranks</option>';
-            RANKS.forEach(r => {
-                sel.add(new Option(r, r));
-                filter.add(new Option(r, r));
+        function filterDropdown(input) {
+            const filter = input.value.toLowerCase();
+            const container = input.closest('ul').querySelector('div[id$="Container"]');
+            const items = container.querySelectorAll('.form-check');
+            items.forEach(item => {
+                const text = item.textContent || item.innerText;
+                if (text.toLowerCase().indexOf(filter) > -1) {
+                    item.style.display = "";
+                } else {
+                    item.style.display = "none";
+                }
             });
+        }
+
+        function updateFilterLabel(type) {
+            const checkboxes = document.querySelectorAll(`.filter-${type.toLowerCase()}-cb:checked`);
+            const btn = document.getElementById(`filter${type}Btn`);
+            if(checkboxes.length === 0) {
+                btn.textContent = `All ${type}s`;
+            } else if(checkboxes.length === 1) {
+                btn.textContent = checkboxes[0].value;
+            } else {
+                btn.textContent = `${checkboxes.length} selected`;
+            }
+        }
+
+        function populateRanks() {
+            // Populate Form Select (Single)
+            const sel = document.getElementById('rank');
+            if(sel) {
+                sel.innerHTML = '<option value="">Select...</option>';
+                RANKS.forEach(r => {
+                    sel.add(new Option(r, r));
+                });
+            }
+            
+            // Populate Filter Dropdown (Multi)
+            const container = document.getElementById('filterRankContainer');
+            if(container) {
+                container.innerHTML = '';
+                RANKS.forEach(r => {
+                    const div = document.createElement('div');
+                    div.className = 'form-check';
+                    div.innerHTML = `
+                        <input class="form-check-input filter-rank-cb" type="checkbox" value="${r}" id="fr_${r.replace(/\s/g, '')}" onchange="updateFilterLabel('Rank'); loadStaff();">
+                        <label class="form-check-label" for="fr_${r.replace(/\s/g, '')}">${r}</label>
+                    `;
+                    container.appendChild(div);
+                });
+            }
         }
 
         async function loadOffices() {
@@ -1396,15 +1477,24 @@
                 if(res.ok) {
                     const offices = await res.json();
                     const formSel = document.getElementById('office');
-                    const filterSel = document.getElementById('filterOffice');
+                    const filterContainer = document.getElementById('filterOfficeContainer');
                     
-                    formSel.innerHTML = '<option value="">Select...</option>';
-                    filterSel.innerHTML = '<option value="">All Offices</option>';
+                    if(formSel) formSel.innerHTML = '<option value="">Select...</option>';
+                    if(filterContainer) filterContainer.innerHTML = '';
                     
                     officesList = offices.map(o => o.name);
-                    officesList.forEach(name => {
-                         formSel.add(new Option(name, name));
-                         filterSel.add(new Option(name, name));
+                    officesList.forEach((name, idx) => {
+                         if(formSel) formSel.add(new Option(name, name));
+                         
+                         if(filterContainer) {
+                             const div = document.createElement('div');
+                             div.className = 'form-check';
+                             div.innerHTML = `
+                                <input class="form-check-input filter-office-cb" type="checkbox" value="${name}" id="fo_${idx}" onchange="updateFilterLabel('Office'); loadStaff();">
+                                <label class="form-check-label" for="fo_${idx}">${name}</label>
+                             `;
+                             filterContainer.appendChild(div);
+                         }
                     });
                 }
             } catch(e) { console.error(e); }
@@ -1445,20 +1535,23 @@
 
         async function loadStaff() {
             const q = document.getElementById('searchInput').value;
-            const r = document.getElementById('filterRank').value;
-            const o = document.getElementById('filterOffice').value;
-            
-            let url = `${API_URL}/staff?limit=100`;
-            if (q) url += `&q=${encodeURIComponent(q)}`;
-            if (r) url += `&rank=${encodeURIComponent(r)}`;
-            if (o) url += `&office=${encodeURIComponent(o)}`;
             const doppOrder = document.getElementById('sortDopp').value;
-            if (doppOrder) url += `&dopp_order=${encodeURIComponent(doppOrder)}`;
-            if (currentStatusFilter) url += `&completeness=${currentStatusFilter}`;
-            if (currentStatus) url += `&status=${currentStatus}`;
-
+            
+            const params = new URLSearchParams();
+            params.append('limit', '100');
+            if (q) params.append('q', q);
+            if (doppOrder) params.append('dopp_order', doppOrder);
+            if (currentStatusFilter) params.append('completeness', currentStatusFilter);
+            if (currentStatus) params.append('status', currentStatus);
+            
+            // Multi-select Ranks
+            document.querySelectorAll('.filter-rank-cb:checked').forEach(cb => params.append('rank', cb.value));
+            
+            // Multi-select Offices
+            document.querySelectorAll('.filter-office-cb:checked').forEach(cb => params.append('office', cb.value));
+            
             try {
-                const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }});
+                const res = await fetch(`${API_URL}/staff?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` }});
                 if (!res.ok) {
                      const errText = await res.text();
                      throw new Error(`Failed to load staff: ${res.status} ${errText}`);
@@ -1493,8 +1586,13 @@
         
         function clearFilters() {
             document.getElementById('searchInput').value = '';
-            document.getElementById('filterRank').value = '';
-            document.getElementById('filterOffice').value = '';
+            
+            // Reset Dropdowns
+            document.querySelectorAll('.filter-rank-cb').forEach(cb => cb.checked = false);
+            updateFilterLabel('Rank');
+            document.querySelectorAll('.filter-office-cb').forEach(cb => cb.checked = false);
+            updateFilterLabel('Office');
+            
             document.getElementById('sortDopp').value = '';
             
             currentStatus = 'active';
