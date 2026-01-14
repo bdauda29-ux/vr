@@ -1068,6 +1068,16 @@
                 staffForm.removeEventListener('submit', handleFormSubmit);
                 staffForm.addEventListener('submit', handleFormSubmit);
             }
+            
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        loadStaff();
+                    }
+                });
+            }
 
             // Auto-uppercase Surname and Other Names
             ['surname', 'other_names'].forEach(id => {
@@ -1541,20 +1551,21 @@
              });
         }
 
-        async function loadStaff() {
-            const q = document.getElementById('searchInput').value;
-            const doppOrder = document.getElementById('sortDopp').value;
-            
-            const params = new URLSearchParams();
-            params.append('limit', '100');
-            if (q) params.append('q', q);
-            if (doppOrder) params.append('dopp_order', doppOrder);
-            if (currentStatusFilter) params.append('completeness', currentStatusFilter);
-            if (currentStatus) params.append('status', currentStatus);
-            
-            // Multi-select Ranks
-            document.querySelectorAll('.filter-rank-cb:checked').forEach(cb => params.append('rank', cb.value));
-            
+         async function loadStaff() {
+             const q = document.getElementById('searchInput').value;
+             const doppOrder = document.getElementById('sortDopp').value;
+             
+             const params = new URLSearchParams();
+             params.append('limit', '100');
+             if (q) params.append('q', q);
+             if (doppOrder) params.append('dopp_order', doppOrder);
+             // If searching, include both Completed and Incomplete by omitting completeness filter
+             if (!q && currentStatusFilter) params.append('completeness', currentStatusFilter);
+             if (currentStatus) params.append('status', currentStatus);
+             
+             // Multi-select Ranks
+             document.querySelectorAll('.filter-rank-cb:checked').forEach(cb => params.append('rank', cb.value));
+             
             // Multi-select Offices
             document.querySelectorAll('.filter-office-cb:checked').forEach(cb => params.append('office', cb.value));
             
