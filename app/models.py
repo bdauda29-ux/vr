@@ -88,3 +88,15 @@ class Leave(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     staff = relationship("Staff", back_populates="leaves")
+
+class StaffEditRequest(Base):
+    __tablename__ = "staff_edit_requests"
+    id = Column(Integer, primary_key=True, index=True)
+    staff_id = Column(Integer, ForeignKey("staff.id", ondelete="CASCADE"), nullable=False, index=True)
+    data = Column(String(4096), nullable=False) # JSON string of changes
+    status = Column(String(32), nullable=False, default="pending", index=True) # pending, approved, rejected
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    reviewed_by = Column(String(64), nullable=True) # Username of reviewer
+    
+    staff = relationship("Staff")

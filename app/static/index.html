@@ -146,6 +146,9 @@
                         <li class="nav-item admin-only d-none" role="presentation">
                             <button class="nav-link" id="password-reset-tab" data-bs-toggle="tab" data-bs-target="#password-reset-pane" type="button">Password Reset</button>
                         </li>
+                        <li class="nav-item admin-only d-none" role="presentation">
+                            <button class="nav-link" id="edit-requests-tab" data-bs-toggle="tab" data-bs-target="#edit-requests-pane" type="button">Edit Approvals</button>
+                        </li>
                     </ul>
 
                     <div class="tab-content" id="personnelTabContent">
@@ -507,6 +510,32 @@
                                                 </tr>
                                             </thead>
                                             <tbody id="resetTableBody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="edit-requests-pane" role="tabpanel">
+                            <div class="card">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">Pending Edit Requests</h6>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="loadEditRequests()">Refresh</button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>S/N</th>
+                                                    <th>NIS/No</th>
+                                                    <th>Name</th>
+                                                    <th>Changes</th>
+                                                    <th>Requested At</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="editRequestsBody"></tbody>
                                         </table>
                                     </div>
                                 </div>
@@ -2025,8 +2054,7 @@
                 });
                 if (res.ok) {
                     if (currentRole === 'staff') {
-                         console.log("Showing success view for staff");
-                         showView('success');
+                        showView('success');
                     } else {
                         alert('Saved Successfully');
                         document.getElementById('staffForm').reset();
@@ -2035,8 +2063,13 @@
                         loadStaff();
                     }
                 } else {
-                    const err = await res.json();
-                    alert('Error: ' + (err.detail || JSON.stringify(err)));
+                    let err;
+                    try {
+                        err = await res.json();
+                    } catch (_) {
+                        err = null;
+                    }
+                    alert('Error: ' + (err && err.detail ? err.detail : 'Request failed'));
                 }
             } catch (err) {
                 console.error(err);
@@ -2275,14 +2308,18 @@
 
         async function exportData(type, columns, mergeName) {
             const q = document.getElementById('searchInput').value;
-            const r = document.getElementById('filterRank').value;
-            const o = document.getElementById('filterOffice').value;
-            // const c = currentStatusFilter; // User requested export to include all (complete & incomplete)
+            
+            const ranks = [];
+            document.querySelectorAll('.filter-rank-cb:checked').forEach(cb => ranks.push(cb.value));
+            
+            const offices = [];
+            document.querySelectorAll('.filter-office-cb:checked').forEach(cb => offices.push(cb.value));
             
             const params = new URLSearchParams();
             if (q) params.append('q', q);
-            if (r) params.append('rank', r);
-            if (o) params.append('office', o);
+            ranks.forEach(r => params.append('rank', r));
+            offices.forEach(o => params.append('office', o));
+            
             const doppOrder = document.getElementById('sortDopp').value;
             if (doppOrder) params.append('dopp_order', doppOrder);
             // if (c) params.append('completeness', c);
@@ -2348,6 +2385,82 @@
                     });
                 }
             } catch(e) { console.error(e); }
+        }
+
+        async function loadEditRequests() {
+            try {
+                const res = await fetch(`${API_URL}/admin/edit-requests`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const tbody = document.getElementById('editRequestsBody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                data.forEach((r, idx) => {
+                    const tr = document.createElement('tr');
+                    const changes = Object.entries(r.data || {})
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join(', ');
+                    tr.innerHTML = `
+                        <td>${idx + 1}</td>
+                        <td>${r.staff_nis}</td>
+                        <td>${r.staff_name}</td>
+                        <td class="text-truncate" style="max-width: 320px;" title="${changes}">${changes}</td>
+                        <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-success me-1" onclick="approveEditRequest(${r.id})">Approve</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="rejectEditRequest(${r.id})">Reject</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function approveEditRequest(id) {
+            if (!confirm('Approve this edit request?')) return;
+            try {
+                const res = await fetch(`${API_URL}/admin/edit-requests/${id}/approve`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    alert('Request approved');
+                    loadEditRequests();
+                    loadStaff();
+                } else {
+                    let err;
+                    try { err = await res.json(); } catch (_) { err = null; }
+                    alert(err && err.detail ? err.detail : 'Approve failed');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Approve failed');
+            }
+        }
+
+        async function rejectEditRequest(id) {
+            if (!confirm('Reject this edit request?')) return;
+            try {
+                const res = await fetch(`${API_URL}/admin/edit-requests/${id}/reject`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    alert('Request rejected');
+                    loadEditRequests();
+                } else {
+                    let err;
+                    try { err = await res.json(); } catch (_) { err = null; }
+                    alert(err && err.detail ? err.detail : 'Reject failed');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Reject failed');
+            }
         }
 
         function openOutModal(id) {

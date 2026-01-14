@@ -42,6 +42,15 @@ def run_migrations():
             print("Column 'allow_edit_dopp' added successfully.")
         else:
             print("Column 'allow_edit_dopp' already exists.")
+
+        # Check for staff_edit_requests table
+        if 'staff_edit_requests' not in inspector.get_table_names():
+            print("Table 'staff_edit_requests' missing. Creating it...")
+            from app.models import StaffEditRequest
+            StaffEditRequest.__table__.create(engine)
+            print("Table 'staff_edit_requests' created successfully.")
+        else:
+            print("Table 'staff_edit_requests' already exists.")
             
     except Exception as e:
         print(f"Migration Error: {e}")

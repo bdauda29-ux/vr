@@ -27,6 +27,7 @@ try:
     from datetime import date, datetime
     import io
     import csv
+    import json
     import tempfile
     
     # Third Party
@@ -646,6 +647,23 @@ def update_staff(staff_id: int):
                 return jsonify({"detail": "Permission denied: Cannot change rank"}), 403
             if "dopp" in data and data["dopp"] != existing.dopp and not getattr(existing, "allow_edit_dopp", 0):
                 return jsonify({"detail": "Permission denied: Cannot change dopp"}), 403
+            
+            # Create Edit Request instead of direct update
+            json_data = {}
+            for k, v in data.items():
+                if isinstance(v, (date, datetime)):
+                    json_data[k] = v.isoformat()
+                else:
+                    json_data[k] = v
+            
+            req = models.StaffEditRequest(
+                staff_id=existing.id,
+                data=json.dumps(json_data),
+                status="pending"
+            )
+            db.add(req)
+            db.commit()
+            return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
         
         if user["role"] == "office_admin":
              staff_user = crud.get_staff(db, user["id"])
@@ -1135,8 +1153,14 @@ def export_pdf():
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     with next(get_db()) as db:
         q = request.args.get("q")
-        rank = request.args.get("rank")
-        office = request.args.get("office")
+        
+        # Handle multi-select for rank and office
+        rank = [r for r in request.args.getlist("rank") if r.strip()]
+        if not rank: rank = None
+        
+        office = [o for o in request.args.getlist("office") if o.strip()]
+        if not office: office = None
+
         completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
         dopp_order = request.args.get("dopp_order")
@@ -1149,7 +1173,6 @@ def export_pdf():
         if not columns:
             columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
 
-        # Ensure S/N is first
         if "sn" in columns:
             columns.remove("sn")
         columns.insert(0, "sn")
@@ -1308,7 +1331,6 @@ def export_pdf():
         styles = getSampleStyleSheet()
         elements = []
         
-        # Headings
         main_title = "Visa/Residency Directorate"
         subtitle_text = ""
         
@@ -1331,12 +1353,12 @@ def export_pdf():
 
         elements.append(Spacer(1, 0.2 * inch))
         
-        # Calculate column widths
-        avail_width = 760 # Slightly wider than before (landscape letter is ~792, margins 30+30=60, usable 732. Let's use 750-760)
-        
-        # Determine column widths based on maximum character lengths (header + data)
-        # Estimate width per character using current font size
-        # This heuristic reduces overlap by allocating width proportionally to content length
+        avail_width = 760
+
+        font_size = 7
+        if len(headers_keys) > 12:
+            font_size = 6
+
         char_width = font_size * 0.6
         min_width_map = {
             "sn": 25,
@@ -1543,3 +1565,79 @@ def undo_exit(staff_id: int):
         db.commit()
         crud.create_audit_log(db, "UNDO_EXIT", f"Staff: {staff.nis_no}", "Undid exit/posting out")
         return jsonify(schemas.to_dict_staff(staff))
+
+@app.get("/admin/edit-requests")
+def list_edit_requests():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "main_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        stmt = select(models.StaffEditRequest).where(models.StaffEditRequest.status == "pending").order_by(models.StaffEditRequest.created_at.desc())
+        reqs = db.scalars(stmt).all()
+        
+        res = []
+        for r in reqs:
+            res.append({
+                "id": r.id,
+                "staff_id": r.staff_id,
+                "staff_name": f"{r.staff.surname} {r.staff.other_names}",
+                "staff_nis": r.staff.nis_no,
+                "data": json.loads(r.data),
+                "created_at": r.created_at.isoformat(),
+            })
+        return jsonify(res)
+
+@app.post("/admin/edit-requests/<int:req_id>/approve")
+def approve_edit_request(req_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "main_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        req = db.get(models.StaffEditRequest, req_id)
+        if not req: return jsonify({"detail": "Not found"}), 404
+        if req.status != "pending": return jsonify({"detail": "Request not pending"}), 400
+        
+        staff = db.get(models.Staff, req.staff_id)
+        if not staff: return jsonify({"detail": "Staff not found"}), 404
+        
+        data = json.loads(req.data)
+        for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
+            if k in data and data[k]:
+                try:
+                    data[k] = date.fromisoformat(data[k])
+                except:
+                    pass
+        
+        try:
+            crud.update_staff(db, staff, data)
+            
+            req.status = "approved"
+            req.reviewed_by = user["username"]
+            req.reviewed_at = func.now()
+            
+            crud.create_audit_log(db, "APPROVE_EDIT", f"Staff: {staff.nis_no}", f"Approved edit request {req_id}")
+            db.commit()
+            return jsonify({"detail": "Request approved and applied"})
+        except ValueError as e:
+            return jsonify({"detail": str(e)}), 400
+
+@app.post("/admin/edit-requests/<int:req_id>/reject")
+def reject_edit_request(req_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "main_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        req = db.get(models.StaffEditRequest, req_id)
+        if not req: return jsonify({"detail": "Not found"}), 404
+        if req.status != "pending": return jsonify({"detail": "Request not pending"}), 400
+        
+        req.status = "rejected"
+        req.reviewed_by = user["username"]
+        req.reviewed_at = func.now()
+        
+        crud.create_audit_log(db, "REJECT_EDIT", f"Request {req_id}", "Rejected edit request")
+        db.commit()
+        return jsonify({"detail": "Request rejected"})
