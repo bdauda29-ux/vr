@@ -10,15 +10,26 @@
     <style>
         body { 
             overflow-x: hidden; 
-            padding-top: 60px; /* Space for fixed navbar */
+            padding-top: 60px;
         }
-        /* Ensure personnel table can scroll horizontally to reveal all columns */
         #list-pane .table-responsive { 
-            overflow-x: auto; 
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        #list-pane .table-responsive::-webkit-scrollbar {
+            height: 8px;
+        }
+        #list-pane .table-responsive::-webkit-scrollbar-thumb {
+            background-color: rgba(0,0,0,0.35);
+            border-radius: 4px;
         }
         #staffTable {
             width: max-content;
             min-width: 100%;
+        }
+        #staffTable th,
+        #staffTable td {
+            white-space: nowrap;
         }
         
         .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; margin-bottom: 20px; }
