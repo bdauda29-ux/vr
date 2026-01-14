@@ -1791,6 +1791,15 @@
                     }
                     return;
                 }
+                if (res.status === 202) {
+                    alert('Update submitted for approval and will apply after review.');
+                    if (el && el.tagName === 'SELECT') {
+                        el.value = el.dataset.original || '';
+                    } else if (el) {
+                        el.textContent = el.dataset.original || '';
+                    }
+                    return;
+                }
                 if (el && el.tagName === 'SELECT') {
                     el.dataset.original = el.value;
                 } else if (el) {

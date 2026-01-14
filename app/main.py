@@ -666,19 +666,32 @@ def update_staff(staff_id: int):
             return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
         
         if user["role"] == "office_admin":
-             staff_user = crud.get_staff(db, user["id"])
-             if not staff_user or staff_user.office != existing.office: return jsonify({"detail": "Permission denied"}), 403
-             # Enforce office consistency: cannot change office
-             if "office" in data and data["office"] != existing.office:
-                 return jsonify({"detail": "Permission denied: Cannot change office"}), 403
-             # Ensure office is not cleared
-             data["office"] = existing.office
-             
-             # Block direct exit for office admin
-             if "exit_date" in data or "exit_mode" in data:
-                 return jsonify({"detail": "Permission denied: Use exit request instead"}), 403
-             data.pop("allow_edit_rank", None)
-             data.pop("allow_edit_dopp", None)
+            staff_user = crud.get_staff(db, user["id"])
+            if not staff_user or staff_user.office != existing.office:
+                return jsonify({"detail": "Permission denied"}), 403
+            if "office" in data and data["office"] != existing.office:
+                return jsonify({"detail": "Permission denied: Cannot change office"}), 403
+            data["office"] = existing.office
+            if "exit_date" in data or "exit_mode" in data:
+                return jsonify({"detail": "Permission denied: Use exit request instead"}), 403
+            data.pop("allow_edit_rank", None)
+            data.pop("allow_edit_dopp", None)
+
+            json_data = {}
+            for k, v in data.items():
+                if isinstance(v, (date, datetime)):
+                    json_data[k] = v.isoformat()
+                else:
+                    json_data[k] = v
+
+            req = models.StaffEditRequest(
+                staff_id=existing.id,
+                data=json.dumps(json_data),
+                status="pending"
+            )
+            db.add(req)
+            db.commit()
+            return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
 
         try:
             obj = crud.update_staff(db, existing, data)
@@ -686,7 +699,8 @@ def update_staff(staff_id: int):
                 crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details")
                 return jsonify(schemas.to_dict_staff(obj))
             return jsonify({"detail": "Not found"}), 404
-        except ValueError as e: return jsonify({"detail": str(e)}), 400
+        except ValueError as e:
+            return jsonify({"detail": str(e)}), 400
 
 @app.delete("/staff/<int:staff_id>")
 def delete_staff(staff_id: int):
