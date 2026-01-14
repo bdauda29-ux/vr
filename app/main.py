@@ -853,7 +853,8 @@ def export_excel():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
-    with next(get_db()) as db:
+    try:
+        with next(get_db()) as db:
         q = request.args.get("q")
         
         # Handle multi-select for rank and office
@@ -873,17 +874,17 @@ def export_excel():
         if columns_raw:
             columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
 
-        staff_list = crud.list_staff(
-            db,
-            q=q,
-            rank=rank,
-            office=office,
-            completeness=completeness,
-            status=status,
-            dopp_order=dopp_order,
-            limit=10000,
-            offset=0,
-        )
+            staff_list = crud.list_staff(
+                db,
+                q=q,
+                rank=rank,
+                office=office,
+                completeness=completeness,
+                status=status,
+                dopp_order=dopp_order,
+                limit=10000,
+                offset=0,
+            )
 
         def tokenize_alpha_words(text: str) -> list[str]:
             if not text:
@@ -1078,17 +1079,33 @@ def export_excel():
         # Uppercase headers
         label_map["sn"] = "S/N"
         
-        # Headings logic
         main_title = "Visa/Residency Directorate"
         subtitle_text = ""
-        
+        office_title = None
+        rank_title = None
         if office:
-             main_title = office
-             subtitle_text = "Visa/Residency Directorate"
-        elif rank:
-             main_title = rank
-             subtitle_text = "Visa/Residency Directorate"
-        
+            if isinstance(office, list):
+                if len(office) == 1:
+                    office_title = office[0]
+                else:
+                    office_title = ", ".join(office)
+            else:
+                office_title = office
+        if rank:
+            if isinstance(rank, list):
+                if len(rank) == 1:
+                    rank_title = rank[0]
+                else:
+                    rank_title = ", ".join(rank)
+            else:
+                rank_title = rank
+        if office_title:
+            main_title = office_title
+            subtitle_text = "Visa/Residency Directorate"
+        elif rank_title:
+            main_title = rank_title
+            subtitle_text = "Visa/Residency Directorate"
+        main_title = str(main_title)
         safe_filename = "".join([c for c in main_title if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
 
         wb = openpyxl.Workbook()
@@ -1102,7 +1119,6 @@ def export_excel():
         center_align = Alignment(horizontal='center', vertical='center')
         
         current_row = 1
-        # Main Title
         ws.cell(row=current_row, column=1, value=main_title)
         ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=len(columns))
         cell = ws.cell(row=current_row, column=1)
@@ -1110,7 +1126,6 @@ def export_excel():
         cell.alignment = center_align
         current_row += 1
         
-        # Subtitle
         if subtitle_text:
             ws.cell(row=current_row, column=1, value=subtitle_text)
             ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=len(columns))
@@ -1122,7 +1137,8 @@ def export_excel():
         headers = [label_map.get(c, c).upper() for c in columns]
         ws.append(headers)
         header_row_idx = current_row
-        for cell in ws[header_row_idx]: cell.font = header_font
+        for cell in ws[header_row_idx]:
+            cell.font = header_font
         for idx, staff in enumerate(staff_list, start=1):
             row = []
             for col_key in columns:
@@ -1133,11 +1149,13 @@ def export_excel():
                 else:
                     row.append(get_value(staff, col_key))
             ws.append(row)
-            row_idx = idx + header_row_idx # 1-based index + header row
+            row_idx = idx + header_row_idx
             if row_idx % 2 == 0:
                 fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
-                for cell in ws[row_idx]: cell.fill = fill
-            for cell in ws[row_idx]: cell.font = font_style
+                for cell in ws[row_idx]:
+                    cell.fill = fill
+            for cell in ws[row_idx]:
+                cell.font = font_style
         ws.append([])
         footer_cell = ws.cell(row=ws.max_row + 1, column=1, value=f"Generated on {datetime.now().strftime('%d/%m/%Y')}")
         footer_cell.font = Font(name='Liberation Sans', size=8, italic=True)
@@ -1145,13 +1163,17 @@ def export_excel():
         wb.save(out)
         out.seek(0)
         return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"{safe_filename}_{datetime.now().strftime('%Y%m%d')}.xlsx")
+    except Exception as e:
+        print("Export Excel error:", e)
+        return jsonify({"detail": f"Export Excel failed: {str(e)}"}), 500
 
 @app.get("/export/pdf")
 def export_pdf():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
-    with next(get_db()) as db:
+    try:
+        with next(get_db()) as db:
         q = request.args.get("q")
         
         # Handle multi-select for rank and office
@@ -1333,14 +1355,31 @@ def export_pdf():
         
         main_title = "Visa/Residency Directorate"
         subtitle_text = ""
-        
+        office_title = None
+        rank_title = None
         if office:
-             main_title = office
-             subtitle_text = "Visa/Residency Directorate"
-        elif rank:
-             main_title = rank
-             subtitle_text = "Visa/Residency Directorate"
-        
+            if isinstance(office, list):
+                if len(office) == 1:
+                    office_title = office[0]
+                else:
+                    office_title = ", ".join(office)
+            else:
+                office_title = office
+        if rank:
+            if isinstance(rank, list):
+                if len(rank) == 1:
+                    rank_title = rank[0]
+                else:
+                    rank_title = ", ".join(rank)
+            else:
+                rank_title = rank
+        if office_title:
+            main_title = office_title
+            subtitle_text = "Visa/Residency Directorate"
+        elif rank_title:
+            main_title = rank_title
+            subtitle_text = "Visa/Residency Directorate"
+        main_title = str(main_title)
         title_style = styles["Title"]
         title_style.fontSize = 14
         elements.append(Paragraph(main_title, title_style))
@@ -1449,7 +1488,6 @@ def export_pdf():
             ("FONTSIZE", (0, 1), (-1, -1), font_size),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            # Remove padding to save space?
             ("LEFTPADDING", (0, 0), (-1, -1), 2),
             ("RIGHTPADDING", (0, 0), (-1, -1), 2),
         ])
@@ -1470,6 +1508,9 @@ def export_pdf():
         doc.build(elements, onFirstPage=footer, onLaterPages=footer)
         out.seek(0)
         return send_file(out, mimetype="application/pdf", as_attachment=True, download_name=f"{safe_filename}_{datetime.now().strftime('%Y%m%d')}.pdf")
+    except Exception as e:
+        print("Export PDF error:", e)
+        return jsonify({"detail": f"Export PDF failed: {str(e)}"}), 500
 
 @app.post("/staff/<int:staff_id>/exit-request")
 def request_exit(staff_id: int):
