@@ -855,24 +855,25 @@ def export_excel():
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     try:
         with next(get_db()) as db:
-        q = request.args.get("q")
-        
-        # Handle multi-select for rank and office
-        rank = [r for r in request.args.getlist("rank") if r.strip()]
-        if not rank: rank = None
-        
-        office = [o for o in request.args.getlist("office") if o.strip()]
-        if not office: office = None
+            q = request.args.get("q")
+            
+            rank = [r for r in request.args.getlist("rank") if r.strip()]
+            if not rank:
+                rank = None
+            
+            office = [o for o in request.args.getlist("office") if o.strip()]
+            if not office:
+                office = None
 
-        completeness = request.args.get("completeness")
-        status = request.args.get("status", "active")
-        dopp_order = request.args.get("dopp_order")
-        columns_raw = request.args.get("columns")
-        merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
+            completeness = request.args.get("completeness")
+            status = request.args.get("status", "active")
+            dopp_order = request.args.get("dopp_order")
+            columns_raw = request.args.get("columns")
+            merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
 
-        columns = []
-        if columns_raw:
-            columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
+            columns = []
+            if columns_raw:
+                columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
 
             staff_list = crud.list_staff(
                 db,
@@ -1174,42 +1175,43 @@ def export_pdf():
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     try:
         with next(get_db()) as db:
-        q = request.args.get("q")
-        
-        # Handle multi-select for rank and office
-        rank = [r for r in request.args.getlist("rank") if r.strip()]
-        if not rank: rank = None
-        
-        office = [o for o in request.args.getlist("office") if o.strip()]
-        if not office: office = None
+            q = request.args.get("q")
+            
+            rank = [r for r in request.args.getlist("rank") if r.strip()]
+            if not rank:
+                rank = None
+            
+            office = [o for o in request.args.getlist("office") if o.strip()]
+            if not office:
+                office = None
 
-        completeness = request.args.get("completeness")
-        status = request.args.get("status", "active")
-        dopp_order = request.args.get("dopp_order")
-        columns_raw = request.args.get("columns")
-        merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
+            completeness = request.args.get("completeness")
+            status = request.args.get("status", "active")
+            dopp_order = request.args.get("dopp_order")
+            columns_raw = request.args.get("columns")
+            merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
 
-        columns = []
-        if columns_raw:
-            columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
-        if not columns:
-            columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
+            columns = []
+            if columns_raw:
+                columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
+            if not columns:
+                columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
 
-        if "sn" in columns:
-            columns.remove("sn")
-        columns.insert(0, "sn")
+            if "sn" in columns:
+                columns.remove("sn")
+            columns.insert(0, "sn")
 
-        staff_list = crud.list_staff(
-            db,
-            q=q,
-            rank=rank,
-            office=office,
-            completeness=completeness,
-            status=status,
-            dopp_order=dopp_order,
-            limit=10000,
-            offset=0,
-        )
+            staff_list = crud.list_staff(
+                db,
+                q=q,
+                rank=rank,
+                office=office,
+                completeness=completeness,
+                status=status,
+                dopp_order=dopp_order,
+                limit=10000,
+                offset=0,
+            )
 
         def tokenize_alpha_words(text: str) -> list[str]:
             if not text:
