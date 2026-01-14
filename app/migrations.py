@@ -24,6 +24,24 @@ def run_migrations():
             print("Column 'email' added successfully.")
         else:
             print("Column 'email' already exists.")
+        
+        if 'allow_edit_rank' not in columns:
+            print("Column 'allow_edit_rank' missing. Adding it...")
+            with engine.connect() as conn:
+                with conn.begin():
+                    conn.execute(text("ALTER TABLE staff ADD COLUMN allow_edit_rank INTEGER DEFAULT 0 NOT NULL"))
+            print("Column 'allow_edit_rank' added successfully.")
+        else:
+            print("Column 'allow_edit_rank' already exists.")
+
+        if 'allow_edit_dopp' not in columns:
+            print("Column 'allow_edit_dopp' missing. Adding it...")
+            with engine.connect() as conn:
+                with conn.begin():
+                    conn.execute(text("ALTER TABLE staff ADD COLUMN allow_edit_dopp INTEGER DEFAULT 0 NOT NULL"))
+            print("Column 'allow_edit_dopp' added successfully.")
+        else:
+            print("Column 'allow_edit_dopp' already exists.")
             
     except Exception as e:
         print(f"Migration Error: {e}")

@@ -42,6 +42,8 @@ def to_dict_staff(obj) -> Dict[str, Any]:
         "out_request_date": obj.out_request_date.isoformat() if obj.out_request_date else None,
         "out_request_reason": obj.out_request_reason,
         "role": obj.role,
+        "allow_edit_rank": bool(getattr(obj, "allow_edit_rank", 0)),
+        "allow_edit_dopp": bool(getattr(obj, "allow_edit_dopp", 0)),
     }
 
 def to_dict_leave(obj) -> Dict[str, Any]:

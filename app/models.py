@@ -70,6 +70,8 @@ class Staff(Base):
     password_hash = Column(String(128), nullable=True) # For custom passwords
     role = Column(String(32), nullable=False, default="staff") # staff, office_admin, super_admin, main_admin
     login_count = Column(Integer, default=0, nullable=False)
+    allow_edit_rank = Column(Integer, default=0, nullable=False)
+    allow_edit_dopp = Column(Integer, default=0, nullable=False)
     state = relationship("State")
     lga = relationship("LGA")
     leaves = relationship("Leave", back_populates="staff", cascade="all, delete-orphan")

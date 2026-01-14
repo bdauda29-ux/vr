@@ -427,6 +427,26 @@
 
                          <!-- Privileges Pane (Moved from Modal to here, or keep as separate tab) -->
                         <div class="tab-pane fade" id="privileges-pane" role="tabpanel">
+                            <div class="card mb-3">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0">Staff Self-Edit Controls</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="globalAllowEditRank" onchange="updateStaffEditSettings()">
+                                                <label class="form-check-label" for="globalAllowEditRank">Allow all staff users to edit Rank</label>
+                                            </div>
+                                            <div class="form-check form-switch mt-2">
+                                                <input class="form-check-input" type="checkbox" id="globalAllowEditDopp" onchange="updateStaffEditSettings()">
+                                                <label class="form-check-label" for="globalAllowEditDopp">Allow all staff users to edit DOPP</label>
+                                            </div>
+                                            <small class="text-muted" id="staffEditSettingsStatus"></small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="card">
                                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                                     <h5 class="card-title mb-0">Manage User Privileges</h5>
@@ -1128,29 +1148,6 @@
                 if(listTabBtn) listTabBtn.parentElement.classList.add('d-none');
                 const cancelBtn = document.querySelector('#staffForm button[onclick="showList()"]');
                 if(cancelBtn) cancelBtn.classList.add('d-none');
-                
-                const doppInput = document.getElementById('dopp');
-                if (doppInput) {
-                    // Make DOPP read-only instead of disabled for better visibility
-                    // Also prevent pointer events so calendar doesn't open
-                    doppInput.disabled = false;
-                    doppInput.readOnly = true;
-                    doppInput.classList.add('bg-light');
-                    doppInput.style.pointerEvents = 'none'; 
-                }
-                const rankSelect = document.getElementById('rank');
-                if (rankSelect) {
-                    // Replace Select with Read-Only Input for visibility
-                    const parent = rankSelect.parentElement;
-                    const input = document.createElement('input');
-                    input.type = 'text';
-                    input.className = 'form-control';
-                    input.id = 'rank';
-                    input.readOnly = true;
-                    // Copy any necessary classes or styles
-                    input.style.backgroundColor = '#e9ecef'; // Light gray to indicate read-only
-                    parent.replaceChild(input, rankSelect);
-                }
                 
                 // Hide Personnel and Leave from Navbar
                 const navPersonnel = document.getElementById('nav-personnel');
@@ -1907,6 +1904,54 @@
             });
         }
 
+        let staffCanEditRank = false;
+        let staffCanEditDopp = false;
+
+        async function loadStaffEditSettings() {
+            if (role !== 'super_admin') return;
+            try {
+                const res = await fetch(`${API_URL}/settings/staff-edit`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const rankCb = document.getElementById('globalAllowEditRank');
+                const doppCb = document.getElementById('globalAllowEditDopp');
+                if (rankCb) rankCb.checked = !!data.allow_edit_rank;
+                if (doppCb) doppCb.checked = !!data.allow_edit_dopp;
+            } catch (e) { console.error(e); }
+        }
+
+        async function updateStaffEditSettings() {
+            if (role !== 'super_admin') return;
+            const rankCb = document.getElementById('globalAllowEditRank');
+            const doppCb = document.getElementById('globalAllowEditDopp');
+            const statusEl = document.getElementById('staffEditSettingsStatus');
+            const payload = {
+                allow_edit_rank: rankCb && rankCb.checked,
+                allow_edit_dopp: doppCb && doppCb.checked
+            };
+            try {
+                if (statusEl) statusEl.textContent = "Saving...";
+                const res = await fetch(`${API_URL}/settings/staff-edit`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    if (statusEl) statusEl.textContent = "Saved.";
+                } else {
+                    if (statusEl) statusEl.textContent = "Failed to save settings.";
+                }
+            } catch (e) {
+                console.error(e);
+                if (statusEl) statusEl.textContent = "Error saving settings.";
+            }
+        }
+
         async function handleFormSubmit(e) {
             e.preventDefault();
             console.log("Submitting form..."); // Debug
@@ -1943,9 +1988,10 @@
             try {
                 const currentRole = localStorage.getItem('role');
                 if (currentRole === 'staff') {
-                    // Remove restricted fields for staff
-                    const restricted = ["office", "rank", "role", "exit_date", "exit_mode", "out_request_status", "dopp"];
+                    const restricted = ["office", "role", "exit_date", "exit_mode", "out_request_status"];
                     restricted.forEach(f => delete payload[f]);
+                    if (!staffCanEditRank) delete payload["rank"];
+                    if (!staffCanEditDopp) delete payload["dopp"];
                 }
                 const res = await fetch(url, {
                     method: method,
@@ -2030,17 +2076,46 @@
                 document.getElementById('nok_phone').value = s.nok_phone || "";
                 document.getElementById('remark').value = s.remark || "";
                 
+                const rankSelect = document.getElementById('rank');
+                const doppInput = document.getElementById('dopp');
+
+                if (role === 'staff') {
+                    staffCanEditRank = !!s.allow_edit_rank;
+                    staffCanEditDopp = !!s.allow_edit_dopp;
+                    const officeEl = document.getElementById('office');
+                    if (officeEl) officeEl.disabled = true;
+                    if (rankSelect) {
+                        rankSelect.disabled = !staffCanEditRank;
+                        if (!staffCanEditRank) rankSelect.classList.add('bg-light');
+                        else rankSelect.classList.remove('bg-light');
+                    }
+                    if (doppInput) {
+                        if (staffCanEditDopp) {
+                            doppInput.readOnly = false;
+                            doppInput.classList.remove('bg-light');
+                            doppInput.style.pointerEvents = '';
+                        } else {
+                            doppInput.readOnly = true;
+                            doppInput.classList.add('bg-light');
+                            doppInput.style.pointerEvents = 'none';
+                        }
+                    }
+                } else {
+                    staffCanEditRank = false;
+                    staffCanEditDopp = false;
+                    if (rankSelect) {
+                        rankSelect.disabled = false;
+                        rankSelect.classList.remove('bg-light');
+                    }
+                    if (doppInput) {
+                        doppInput.readOnly = false;
+                        doppInput.classList.remove('bg-light');
+                        doppInput.style.pointerEvents = '';
+                    }
+                }
+
                 showAddForm(true);
                 document.getElementById('formTitle').textContent = "Edit Personnel";
-                
-                // Disable restricted fields for staff
-                if (role === 'staff') {
-                     // Only disable office (select). Rank and DOPP are handled as read-only inputs.
-                     ['office'].forEach(id => {
-                         const el = document.getElementById(id);
-                         if(el) el.disabled = true;
-                     });
-                }
             } catch (err) { 
                 console.error("Error in editStaff:", err);
                 if (role === 'staff') {
@@ -2348,6 +2423,8 @@
         
         async function loadPrivileges() {
              try {
+                await loadStaffEditSettings();
+
                 const res = await fetch(`${API_URL}/staff?limit=1000`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });

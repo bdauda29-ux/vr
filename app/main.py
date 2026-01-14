@@ -607,6 +607,8 @@ def create_staff():
              if not staff_user or not staff_user.office:
                  return jsonify({"detail": "Admin has no assigned office"}), 403
              data["office"] = staff_user.office
+             data["allow_edit_rank"] = 0
+             data["allow_edit_dopp"] = 0
 
         try:
             obj = crud.create_staff(db, data)
@@ -634,14 +636,16 @@ def update_staff(staff_id: int):
         existing = crud.get_staff(db, staff_id)
         if not existing: return jsonify({"detail": "Not found"}), 404
         
-        # Staff Self-Edit Logic
         if user["role"] == "staff":
             if user["id"] != staff_id:
                 return jsonify({"detail": "Permission denied"}), 403
-            # Prevent sensitive field changes
-            for restricted in ["office", "rank", "role", "exit_date", "exit_mode", "out_request_status", "dopp"]:
+            for restricted in ["office", "role", "exit_date", "exit_mode", "out_request_status"]:
                 if restricted in data and data[restricted] != getattr(existing, restricted):
                     return jsonify({"detail": f"Permission denied: Cannot change {restricted}"}), 403
+            if "rank" in data and data["rank"] != existing.rank and not getattr(existing, "allow_edit_rank", 0):
+                return jsonify({"detail": "Permission denied: Cannot change rank"}), 403
+            if "dopp" in data and data["dopp"] != existing.dopp and not getattr(existing, "allow_edit_dopp", 0):
+                return jsonify({"detail": "Permission denied: Cannot change dopp"}), 403
         
         if user["role"] == "office_admin":
              staff_user = crud.get_staff(db, user["id"])
@@ -655,6 +659,8 @@ def update_staff(staff_id: int):
              # Block direct exit for office admin
              if "exit_date" in data or "exit_mode" in data:
                  return jsonify({"detail": "Permission denied: Use exit request instead"}), 403
+             data.pop("allow_edit_rank", None)
+             data.pop("allow_edit_dopp", None)
 
         try:
             obj = crud.update_staff(db, existing, data)
@@ -727,6 +733,43 @@ def update_staff_role(staff_id: int):
         db.refresh(obj)
         crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}")
         return jsonify(schemas.to_dict_staff(obj))
+
+@app.get("/settings/staff-edit")
+def get_staff_edit_settings():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    with next(get_db()) as db:
+        max_rank = db.scalar(select(func.max(models.Staff.allow_edit_rank))) or 0
+        max_dopp = db.scalar(select(func.max(models.Staff.allow_edit_dopp))) or 0
+        return jsonify({
+            "allow_edit_rank": bool(max_rank),
+            "allow_edit_dopp": bool(max_dopp),
+        })
+
+@app.put("/settings/staff-edit")
+def update_staff_edit_settings():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin"])
+    if err: return err, code
+    data = request.get_json(force=True)
+    allow_rank = bool(data.get("allow_edit_rank"))
+    allow_dopp = bool(data.get("allow_edit_dopp"))
+    with next(get_db()) as db:
+        db.execute(
+            models.Staff.__table__.update().values(
+                allow_edit_rank=1 if allow_rank else 0,
+                allow_edit_dopp=1 if allow_dopp else 0,
+            )
+        )
+        db.commit()
+        crud.create_audit_log(
+            db,
+            "SETTINGS_UPDATE",
+            "staff-edit",
+            f"allow_edit_rank={allow_rank}, allow_edit_dopp={allow_dopp}",
+        )
+    return jsonify({"allow_edit_rank": allow_rank, "allow_edit_dopp": allow_dopp})
 
 @app.post("/change-password")
 def change_password():
