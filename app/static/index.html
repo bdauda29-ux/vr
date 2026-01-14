@@ -1708,6 +1708,18 @@
                 const genderOpts = ['Male','Female'].map(g => `<option value="${g}" ${s.gender===g?'selected':''}>${g}</option>`).join('');
                 const officeOpts = officesList.map(o => `<option value="${o}" ${s.office===o?'selected':''}>${o}</option>`).join('');
                 const stateOpts = allStates.map(st => `<option value="${st.id}" ${s.state && s.state.id===st.id?'selected':''}>${st.name}</option>`).join('');
+                let actionBtns = ``;
+                if (currentStatus === 'exited') {
+                    actionBtns += `<button class="btn btn-sm btn-info mb-1" onclick="undoExit(${s.id})">Undo Exit</button>`;
+                } else {
+                    actionBtns += `<button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>`;
+                    actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
+                    if (s.out_request_status === 'Pending') {
+                        actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review Exit</button>`;
+                    } else {
+                        actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openOutModal(${s.id})">Out</button>`;
+                    }
+                }
                 tr.innerHTML = `
                     <td>${index + 1}</td>
                     <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
@@ -1744,10 +1756,7 @@
                     <td contenteditable="true" data-field="next_of_kin" data-original="${s.next_of_kin || ''}">${s.next_of_kin || ''}</td>
                     <td contenteditable="true" data-field="nok_phone" data-original="${s.nok_phone || ''}">${s.nok_phone || ''}</td>
                     <td contenteditable="true" data-field="remark" data-original="${s.remark || ''}">${s.remark || ''}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>
-                        <button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>
-                    </td>
+                    <td>${actionBtns}</td>
                 `;
                 tbody.appendChild(tr);
                 
