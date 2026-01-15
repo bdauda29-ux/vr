@@ -158,8 +158,6 @@ def get_dashboard_stats(db: Session):
     total_staff = db.scalar(
         select(func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None))
     )
-    # Count distinct offices, ignoring None or empty strings
-    # Note: SQLite might behave differently with NULLs in count(distinct), but let's filter explicitly
     total_offices = db.scalar(
         select(func.count(distinct(models.Staff.office)))
         .where(
@@ -168,9 +166,19 @@ def get_dashboard_stats(db: Session):
             models.Staff.office != ""
         )
     )
+    rank_rows = db.execute(
+        select(models.Staff.rank, func.count(models.Staff.id))
+        .where(models.Staff.exit_date.is_(None))
+        .group_by(models.Staff.rank)
+    ).all()
+    rank_counts = {}
+    for rank, count in rank_rows:
+        key = rank or ""
+        rank_counts[key] = rank_counts.get(key, 0) + count
     return {
         "total_staff": total_staff,
-        "total_offices": total_offices
+        "total_offices": total_offices,
+        "rank_counts": rank_counts,
     }
 
 def list_offices(db: Session) -> List[str]:

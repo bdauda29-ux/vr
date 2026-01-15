@@ -128,6 +128,12 @@
                     <li class="nav-item admin-only">
                         <a class="nav-link" href="#" onclick="showView('audit')"><i class="bi bi-journal-text me-1"></i> Audit Log</a>
                     </li>
+                    <li class="nav-item admin-only">
+                        <a class="nav-link" href="#" onclick="showView('approvals')">
+                            <i class="bi bi-check2-square me-1"></i> Authorizations
+                            <span class="badge bg-danger ms-1 d-none" id="approvalsCounter">0</span>
+                        </a>
+                    </li>
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item dropdown">
@@ -154,7 +160,7 @@
                 <!-- Dashboard View -->
                 <div id="view-dashboard" class="view-section">
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="card text-white bg-primary mb-3 cursor-pointer" onclick="showView('personnel')" style="cursor: pointer;">
                                 <div class="card-header" id="dash-card1-title">Total Personnel</div>
                                 <div class="card-body">
@@ -163,12 +169,20 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="card text-white bg-success mb-3 cursor-pointer" onclick="showView('offices')" style="cursor: pointer;">
                                 <div class="card-header" id="dash-card2-title">Total Offices</div>
                                 <div class="card-body">
                                     <h1 class="card-title display-4 fw-bold" id="dash-total-offices">0</h1>
                                     <p class="card-text" id="dash-card2-text">Click to view offices</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card mb-3">
+                                <div class="card-header">Rank Summary</div>
+                                <div class="card-body">
+                                    <canvas id="rankSummaryChart" height="200"></canvas>
                                 </div>
                             </div>
                         </div>
@@ -657,10 +671,72 @@
                                             <th>Action</th>
                                             <th>Target</th>
                                             <th>Details</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="auditTableBody"></tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="view-approvals" class="view-section d-none">
+                    <div class="row">
+                        <div class="col-lg-6 mb-3">
+                            <div class="card">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0">
+                                        Edit Requests
+                                        <span class="badge bg-primary ms-1 d-none" id="editRequestsCounter">0</span>
+                                    </h5>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="loadEditRequests()">Refresh</button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>S/N</th>
+                                                    <th>NIS/No</th>
+                                                    <th>Name</th>
+                                                    <th>Changes</th>
+                                                    <th>Requested At</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="editRequestsBody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6 mb-3">
+                            <div class="card">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0">
+                                        Exit Requests
+                                        <span class="badge bg-danger ms-1 d-none" id="exitRequestsCounter">0</span>
+                                    </h5>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="loadExitRequests()">Refresh</button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>S/N</th>
+                                                    <th>NIS/No</th>
+                                                    <th>Name</th>
+                                                    <th>Office</th>
+                                                    <th>Requested Exit</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="exitRequestsBody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1032,7 +1108,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Posting History</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" onclick="historyModalInstance.hide()"></button>
                 </div>
                 <div class="modal-body">
                     <div class="table-responsive">
@@ -1051,7 +1127,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" onclick="historyModalInstance.hide()">Close</button>
                 </div>
             </div>
         </div>
@@ -1063,13 +1139,13 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Personnel Details</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" onclick="viewModalInstance.hide()"></button>
                 </div>
                 <div class="modal-body" id="viewStaffBody">
                     <!-- Content will be populated via JS -->
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" onclick="viewModalInstance.hide()">Close</button>
                 </div>
             </div>
         </div>
@@ -1121,6 +1197,7 @@
         })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script>
         // Global Fetch Interceptor for 401 handling
@@ -1158,6 +1235,7 @@
         let currentStatus = 'active'; // 'active' or 'exited'
         let userId = localStorage.getItem('userId');
         let currentOfficeName = '';
+        let rankSummaryChart;
         const RANKS = [
             "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI",
             "ASI 1", "ASI 2", "II", "AII", "IA 1", "IA 2", "IA 3"
@@ -1211,6 +1289,7 @@
                 'offices': 'Offices Directory',
                 'leave': 'Leave Management',
                 'audit': 'Audit Logs',
+                'approvals': 'Change Authorizations',
                 'success': 'Action Successful'
             };
             document.getElementById('pageTitle').textContent = titles[viewId] || 'V/R';
@@ -1219,6 +1298,7 @@
             if(viewId === 'dashboard') loadDashboardStats();
             if(viewId === 'offices') loadOfficesView();
             if(viewId === 'audit') loadAuditLogs();
+            if(viewId === 'approvals') loadApprovalsView();
             if(viewId === 'leave') loadLeaveRequests();
             if(viewId === 'personnel') {
                 // If coming to personnel, maybe refresh list?
@@ -1292,15 +1372,8 @@
                 const cpEl = document.getElementById('changePasswordModal');
                 if (cpEl) changePasswordModal = new bootstrap.Modal(cpEl);
                 
-                const viewStaffEl = document.getElementById('viewStaffModal');
-                if (viewStaffEl) viewStaffModal = new bootstrap.Modal(viewStaffEl);
+                // historyModal, moveModal, viewStaffModal are initialized in global DOMContentLoaded below
                 
-                const moveEl = document.getElementById('moveModal');
-                if (moveEl) moveModal = new bootstrap.Modal(moveEl);
-                
-                const histEl = document.getElementById('historyModal');
-                if (histEl) historyModal = new bootstrap.Modal(histEl);
-
                 // Init DatePickers
                 flatpickr(".date-picker", {
                     dateFormat: "d/m/Y",
@@ -1382,14 +1455,15 @@
                     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
                     await fetchUserOffice();
                 } else if (role === 'main_admin') {
-                    // Hide Bulk Import, Privileges, and Audit Log tabs for main_admin
                     const importTab = document.getElementById('import-tab')?.parentElement;
                     const privilegesTabBtn = document.getElementById('privileges-tab')?.parentElement;
-                    const auditLogNav = document.querySelector('a[onclick="showView(\'audit\')"]')?.parentElement;
                     
                     if (importTab) importTab.classList.add('d-none');
                     if (privilegesTabBtn) privilegesTabBtn.classList.add('d-none');
-                    if (auditLogNav) auditLogNav.classList.add('d-none');
+                }
+
+                if (role === 'super_admin' || role === 'main_admin') {
+                    await fetchApprovalCounts();
                 }
 
                 loadStaff();
@@ -1475,6 +1549,74 @@
                         document.getElementById('dash-total-staff').textContent = data.total_staff ?? 0;
                         document.getElementById('dash-total-offices').textContent = data.total_offices ?? 0;
                     }
+
+                    const rankCounts = data.rank_counts || {};
+                    const groupCounts = {
+                        "Comptroller Cadre": 0,
+                        "Superintendent Cadre": 0,
+                        "Inspectorate Cadre": 0,
+                        "Assistant Cadre": 0
+                    };
+                    Object.entries(rankCounts).forEach(([rank, count]) => {
+                        const r = String(rank || "").toUpperCase();
+                        const normalized = r.replace(/\s+/g, "");
+                        let group = null;
+                        if (["DCG","ACG","CIS","DCI","ACI"].includes(normalized)) {
+                            group = "Comptroller Cadre";
+                        } else if (["CSI","SI","DSI","ASI1","ASI2"].includes(normalized)) {
+                            group = "Superintendent Cadre";
+                        } else if (["II","AII"].includes(normalized)) {
+                            group = "Inspectorate Cadre";
+                        } else if (["IA1","IA2","IA3"].includes(normalized)) {
+                            group = "Assistant Cadre";
+                        }
+                        if (group) {
+                            groupCounts[group] += count || 0;
+                        }
+                    });
+
+                    const ctx = document.getElementById('rankSummaryChart');
+                    if (ctx) {
+                        const labels = Object.keys(groupCounts);
+                        const values = labels.map(l => groupCounts[l]);
+                        const colors = [
+                            'rgba(220,53,69,0.85)',
+                            'rgba(25,135,84,0.85)',
+                            'rgba(13,110,253,0.85)',
+                            'rgba(255,193,7,0.85)'
+                        ];
+                        const borderColors = [
+                            'rgba(220,53,69,1)',
+                            'rgba(25,135,84,1)',
+                            'rgba(13,110,253,1)',
+                            'rgba(255,193,7,1)'
+                        ];
+                        if (rankSummaryChart) {
+                            rankSummaryChart.data.labels = labels;
+                            rankSummaryChart.data.datasets[0].data = values;
+                            rankSummaryChart.update();
+                        } else {
+                            rankSummaryChart = new Chart(ctx, {
+                                type: 'doughnut',
+                                data: {
+                                    labels: labels,
+                                    datasets: [{
+                                        data: values,
+                                        backgroundColor: colors,
+                                        borderColor: borderColors,
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    plugins: {
+                                        legend: {
+                                            position: 'bottom'
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
                 }
             } catch(e) { console.error(e); }
         }
@@ -1499,10 +1641,11 @@
                     tbody.innerHTML = '';
                     offices.forEach(off => {
                         const tr = document.createElement('tr');
+                        const safeName = String(off.name || '').replace(/'/g, "\\'");
                         tr.innerHTML = `
                             <td>${off.name}</td>
                             <td>
-                                <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, ${JSON.stringify(off.name)})">Rename</button>
+                                <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, '${safeName}')">Rename</button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteOffice(${off.id})">Remove</button>
                             </td>
                         `;
@@ -1785,7 +1928,7 @@
                 }
                 const data = await res.json();
                 if (!Array.isArray(data)) throw new Error("Invalid data format received");
-                if (role === 'super_admin') {
+                if (role === 'super_admin' || role === 'main_admin') {
                     buildSuperAdminTableHeader();
                     renderTableSuperAdmin(data);
                 } else {
@@ -2268,12 +2411,14 @@
                     let actionBtns = ``;
                     actionBtns += `<button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>`;
 
-                    if (role === 'super_admin') {
+                    if (role === 'super_admin' || role === 'main_admin') {
                         actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
+                        actionBtns += `<button class="btn btn-sm btn-dark mb-1" onclick="openMoveModal(${s.id})">Move</button>`;
+                        actionBtns += `<button class="btn btn-sm btn-secondary mb-1" onclick="openHistoryModal(${s.id})">History</button>`;
                     }
                     
                     if (s.out_request_status === 'Pending') {
-                        if (role === 'super_admin') {
+                        if (role === 'super_admin' || role === 'main_admin') {
                             actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review Exit</button>`;
                         } else {
                             actionBtns += `<span class="badge bg-warning text-dark">Exit Pending</span>`;
@@ -2535,13 +2680,22 @@
 
         document.addEventListener('DOMContentLoaded', () => {
              const moveEl = document.getElementById('moveModal');
-             if (moveEl) moveModalInstance = new bootstrap.Modal(moveEl);
+             if (moveEl) {
+                 moveModalInstance = new bootstrap.Modal(moveEl);
+                 window.moveModalInstance = moveModalInstance;
+             }
 
              const histEl = document.getElementById('historyModal');
-             if (histEl) historyModalInstance = new bootstrap.Modal(histEl);
+             if (histEl) {
+                 historyModalInstance = new bootstrap.Modal(histEl);
+                 window.historyModalInstance = historyModalInstance;
+             }
 
              const viewEl = document.getElementById('viewStaffModal');
-             if (viewEl) viewModalInstance = new bootstrap.Modal(viewEl);
+             if (viewEl) {
+                 viewModalInstance = new bootstrap.Modal(viewEl);
+                 window.viewModalInstance = viewModalInstance;
+             }
              
              initSortable();
         });
@@ -2814,6 +2968,17 @@
         
         function openExportModal(type) {
             document.getElementById('exportType').value = type;
+
+            const nameColumns = new Set(['nis_no', 'surname', 'other_names']);
+            const checkboxes = document.querySelectorAll('#exportColumnList input[type="checkbox"]');
+            if (currentStatus === 'exited') {
+                checkboxes.forEach(cb => {
+                    cb.checked = nameColumns.has(cb.value);
+                });
+            } else {
+                checkboxes.forEach(cb => cb.checked = true);
+            }
+
             exportModal.show();
         }
 
@@ -2866,7 +3031,16 @@
             
             const doppOrder = document.getElementById('sortDopp').value;
             if (doppOrder) params.append('dopp_order', doppOrder);
-            // if (c) params.append('completeness', c);
+            if (currentStatus === 'exited') {
+                const exitFrom = document.getElementById('exitFrom');
+                const exitTo = document.getElementById('exitTo');
+                const fromVal = exitFrom ? exitFrom.value : '';
+                const toVal = exitTo ? exitTo.value : '';
+                if (fromVal) params.append('exit_from', userDateToIsoOrNull(fromVal));
+                if (toVal) params.append('exit_to', userDateToIsoOrNull(toVal));
+            }
+            if (!q && currentStatusFilter) params.append('completeness', currentStatusFilter);
+            if (currentStatus) params.append('status', currentStatus);
             if (columns && columns.length) params.append('columns', columns.join(','));
             if (mergeName) params.append('merge_name', '1');
 
@@ -2924,16 +3098,125 @@
                     tbody.innerHTML = '';
                     logs.forEach(l => {
                         const tr = document.createElement('tr');
+                        let actionsHtml = '';
+                        let reqId = null;
+                        if (l.details) {
+                            const m = String(l.details).match(/EDIT_REQUEST_ID=(\d+)/);
+                            if (m) {
+                                reqId = parseInt(m[1], 10);
+                            }
+                        }
+                        if (l.action === 'UPDATE_REQUEST' && reqId) {
+                            actionsHtml = `
+                                <button class="btn btn-sm btn-success me-1" onclick="approveEditRequest(${reqId})">Approve</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="rejectEditRequest(${reqId})">Reject</button>
+                            `;
+                        }
                         tr.innerHTML = `
                             <td>${new Date(l.timestamp).toLocaleString()}</td>
                             <td>${l.action}</td>
                             <td>${l.target}</td>
                             <td>${l.details || ''}</td>
+                            <td>${actionsHtml}</td>
                         `;
                         tbody.appendChild(tr);
                     });
                 }
             } catch(e) { console.error(e); }
+        }
+
+        async function fetchApprovalCounts() {
+            try {
+                const [editRes, exitRes] = await Promise.all([
+                    fetch(`${API_URL}/admin/edit-requests`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    fetch(`${API_URL}/admin/exit-requests`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                ]);
+                let editCount = 0;
+                let exitCount = 0;
+                if (editRes.ok) {
+                    const editData = await editRes.json();
+                    if (Array.isArray(editData)) editCount = editData.length;
+                }
+                if (exitRes.ok) {
+                    const exitData = await exitRes.json();
+                    if (Array.isArray(exitData)) exitCount = exitData.length;
+                }
+                updateApprovalCounters(editCount, exitCount);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function updateApprovalCounters(editCount, exitCount) {
+            const approvalsCounter = document.getElementById('approvalsCounter');
+            const editCounter = document.getElementById('editRequestsCounter');
+            const exitCounter = document.getElementById('exitRequestsCounter');
+
+            let currentEdit = editCounter ? parseInt(editCounter.textContent || '0', 10) || 0 : 0;
+            let currentExit = exitCounter ? parseInt(exitCounter.textContent || '0', 10) || 0 : 0;
+
+            if (typeof editCount === 'number') {
+                currentEdit = editCount;
+                if (editCounter) {
+                    editCounter.textContent = editCount;
+                    editCounter.classList.toggle('d-none', editCount === 0);
+                }
+            } else if (editCounter) {
+                editCounter.classList.toggle('d-none', currentEdit === 0);
+            }
+
+            if (typeof exitCount === 'number') {
+                currentExit = exitCount;
+                if (exitCounter) {
+                    exitCounter.textContent = exitCount;
+                    exitCounter.classList.toggle('d-none', exitCount === 0);
+                }
+            } else if (exitCounter) {
+                exitCounter.classList.toggle('d-none', currentExit === 0);
+            }
+
+            if (approvalsCounter) {
+                const total = currentEdit + currentExit;
+                approvalsCounter.textContent = total;
+                approvalsCounter.classList.toggle('d-none', total === 0);
+            }
+        }
+        
+        async function loadExitRequests() {
+            try {
+                const res = await fetch(`${API_URL}/admin/exit-requests`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const tbody = document.getElementById('exitRequestsBody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                data.forEach((s, idx) => {
+                    const tr = document.createElement('tr');
+                    const exitDate = isoToDmy(s.out_request_date);
+                    const exitMode = s.out_request_reason || '';
+                    const requestedText = exitDate || exitMode ? `${exitMode || ''} ${exitDate || ''}`.trim() : '';
+                    tr.innerHTML = `
+                        <td>${idx + 1}</td>
+                        <td>${s.nis_no}</td>
+                        <td>${s.surname} ${s.other_names}</td>
+                        <td>${s.office || ''}</td>
+                        <td>${requestedText}</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-warning" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                updateApprovalCounters(undefined, Array.isArray(data) ? data.length : 0);
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         async function loadEditRequests() {
@@ -2964,6 +3247,7 @@
                     `;
                     tbody.appendChild(tr);
                 });
+                updateApprovalCounters(Array.isArray(data) ? data.length : 0, undefined);
             } catch (e) {
                 console.error(e);
             }
@@ -3085,7 +3369,7 @@
             if(!confirm(`Are you sure you want to ${action} this request?`)) return;
             
             const endpoint = action === 'approve' ? 'exit-approve' : 'exit-reject';
-            
+                
             try {
                 const res = await fetch(`${API_URL}/staff/${id}/${endpoint}`, {
                     method: 'POST',
@@ -3098,6 +3382,7 @@
                     alert(`Request ${action}d successfully`);
                     reviewExitModal.hide();
                     loadStaff();
+                    await loadExitRequests();
                 } else {
                     const err = await res.json();
                     alert("Error: " + (err.detail || "Failed"));

@@ -213,6 +213,16 @@ def dashboard_stats():
         stats["office_name"] = None
         return jsonify(stats)
 
+@app.get("/admin/exit-requests")
+def list_exit_requests():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "main_admin"])
+    if err: return err, code
+    with next(get_db()) as db:
+        stmt = select(models.Staff).where(models.Staff.out_request_status == "Pending").order_by(models.Staff.out_request_date.asc())
+        items = db.scalars(stmt).all()
+        return jsonify([schemas.to_dict_staff(item) for item in items])
+
 # --- END AUTH ---
 
 def parse_date_value(value):
@@ -690,6 +700,12 @@ def update_staff(staff_id: int):
             )
             db.add(req)
             db.commit()
+            crud.create_audit_log(
+                db,
+                "UPDATE_REQUEST",
+                f"Staff: {existing.nis_no}",
+                f"EDIT_REQUEST_ID={req.id}"
+            )
             return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
         
 
@@ -921,7 +937,7 @@ def change_password():
 @app.get("/audit-logs")
 def get_audit_logs():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
     limit = request.args.get("limit", 100, type=int)
@@ -1618,7 +1634,7 @@ def request_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/exit-approve")
 def approve_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
@@ -1653,7 +1669,7 @@ def approve_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/exit-reject")
 def reject_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
