@@ -75,6 +75,7 @@ class Staff(Base):
     state = relationship("State")
     lga = relationship("LGA")
     leaves = relationship("Leave", back_populates="staff", cascade="all, delete-orphan")
+    posting_history = relationship("PostingHistory", back_populates="staff", cascade="all, delete-orphan")
 
 class Leave(Base):
     __tablename__ = "leaves"
@@ -88,6 +89,21 @@ class Leave(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     staff = relationship("Staff", back_populates="leaves")
+
+
+class PostingHistory(Base):
+    __tablename__ = "posting_history"
+    id = Column(Integer, primary_key=True, index=True)
+    staff_id = Column(Integer, ForeignKey("staff.id", ondelete="CASCADE"), nullable=False, index=True)
+    action_type = Column(String(32), nullable=False)  # MOVE, EXIT, RETURN, POSTED_OUT
+    from_office = Column(String(128), nullable=True)
+    to_office = Column(String(128), nullable=True)
+    action_date = Column(Date, nullable=False)
+    remarks = Column(String(256), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    staff = relationship("Staff", back_populates="posting_history")
+
 
 class StaffEditRequest(Base):
     __tablename__ = "staff_edit_requests"

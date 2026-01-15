@@ -655,16 +655,25 @@ def update_staff(staff_id: int):
         existing = crud.get_staff(db, staff_id)
         if not existing: return jsonify({"detail": "Not found"}), 404
         
-        if user["role"] == "staff":
-            if user["id"] != staff_id:
+        if user["role"] in ["staff", "office_admin"]:
+            # Check ownership for staff, or office match for office_admin
+            if user["role"] == "staff" and user["id"] != staff_id:
                 return jsonify({"detail": "Permission denied"}), 403
+            if user["role"] == "office_admin":
+                 admin_staff = crud.get_staff(db, user["id"])
+                 if not admin_staff or admin_staff.office != existing.office:
+                     return jsonify({"detail": "Permission denied"}), 403
+
             for restricted in ["office", "role", "exit_date", "exit_mode", "out_request_status"]:
                 if restricted in data and data[restricted] != getattr(existing, restricted):
                     return jsonify({"detail": f"Permission denied: Cannot change {restricted}"}), 403
-            if "rank" in data and data["rank"] != existing.rank and not getattr(existing, "allow_edit_rank", 0):
-                return jsonify({"detail": "Permission denied: Cannot change rank"}), 403
-            if "dopp" in data and data["dopp"] != existing.dopp and not getattr(existing, "allow_edit_dopp", 0):
-                return jsonify({"detail": "Permission denied: Cannot change dopp"}), 403
+            
+            # Staff specific restrictions
+            if user["role"] == "staff":
+                if "rank" in data and data["rank"] != existing.rank and not getattr(existing, "allow_edit_rank", 0):
+                    return jsonify({"detail": "Permission denied: Cannot change rank"}), 403
+                if "dopp" in data and data["dopp"] != existing.dopp and not getattr(existing, "allow_edit_dopp", 0):
+                    return jsonify({"detail": "Permission denied: Cannot change dopp"}), 403
             
             # Create Edit Request instead of direct update
             json_data = {}
@@ -683,33 +692,6 @@ def update_staff(staff_id: int):
             db.commit()
             return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
         
-        if user["role"] == "office_admin":
-            staff_user = crud.get_staff(db, user["id"])
-            if not staff_user or staff_user.office != existing.office:
-                return jsonify({"detail": "Permission denied"}), 403
-            if "office" in data and data["office"] != existing.office:
-                return jsonify({"detail": "Permission denied: Cannot change office"}), 403
-            data["office"] = existing.office
-            if "exit_date" in data or "exit_mode" in data:
-                return jsonify({"detail": "Permission denied: Use exit request instead"}), 403
-            data.pop("allow_edit_rank", None)
-            data.pop("allow_edit_dopp", None)
-
-            json_data = {}
-            for k, v in data.items():
-                if isinstance(v, (date, datetime)):
-                    json_data[k] = v.isoformat()
-                else:
-                    json_data[k] = v
-
-            req = models.StaffEditRequest(
-                staff_id=existing.id,
-                data=json.dumps(json_data),
-                status="pending"
-            )
-            db.add(req)
-            db.commit()
-            return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
 
         try:
             obj = crud.update_staff(db, existing, data)
@@ -783,6 +765,75 @@ def update_staff_role(staff_id: int):
         db.refresh(obj)
         crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}")
         return jsonify(schemas.to_dict_staff(obj))
+
+@app.post("/staff/<int:staff_id>/move")
+def move_staff(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "main_admin"])
+    if err: return err, code
+    
+    data = request.get_json(force=True)
+    new_office = data.get("office")
+    effective_date_str = data.get("date") # Optional effective date, default today?
+    remarks = data.get("remarks", "")
+
+    if not new_office:
+        return jsonify({"detail": "New office is required"}), 400
+    
+    effective_date = date.today()
+    if effective_date_str:
+        effective_date = parse_date_value(effective_date_str) or date.today()
+
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        old_office = staff.office
+        if old_office == new_office:
+             return jsonify({"detail": "Staff is already in this office"}), 400
+
+        # Create History Record
+        history = models.PostingHistory(
+            staff_id=staff.id,
+            action_type="MOVE",
+            from_office=old_office,
+            to_office=new_office,
+            action_date=effective_date,
+            remarks=remarks
+        )
+        db.add(history)
+        
+        # Update Staff
+        staff.office = new_office
+        # Usually a move implies updating DOPP (Date of Present Posting)
+        staff.dopp = effective_date
+        
+        db.commit()
+        crud.create_audit_log(db, "MOVE", f"Staff: {staff.nis_no}", f"Moved from {old_office} to {new_office}")
+        return jsonify(schemas.to_dict_staff(staff))
+
+@app.get("/staff/<int:staff_id>/history")
+def get_staff_history(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "main_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        stmt = select(models.PostingHistory).where(models.PostingHistory.staff_id == staff_id).order_by(models.PostingHistory.action_date.desc(), models.PostingHistory.created_at.desc())
+        history = db.scalars(stmt).all()
+        
+        res = []
+        for h in history:
+            res.append({
+                "id": h.id,
+                "action_type": h.action_type,
+                "from_office": h.from_office,
+                "to_office": h.to_office,
+                "action_date": h.action_date.isoformat() if h.action_date else None,
+                "remarks": h.remarks,
+                "created_at": h.created_at.isoformat() if h.created_at else None
+            })
+        return jsonify(res)
 
 @app.get("/settings/staff-edit")
 def get_staff_edit_settings():
@@ -1580,6 +1631,18 @@ def approve_exit(staff_id: int):
         staff.exit_date = staff.out_request_date
         staff.exit_mode = staff.out_request_reason
         staff.out_request_status = None
+        
+        # Log History
+        history = models.PostingHistory(
+            staff_id=staff.id,
+            action_type="EXIT",
+            from_office=staff.office,
+            to_office=None,
+            action_date=staff.exit_date,
+            remarks=staff.exit_mode
+        )
+        db.add(history)
+
         staff.out_request_date = None
         staff.out_request_reason = None
         
@@ -1618,6 +1681,17 @@ def undo_exit(staff_id: int):
         if not staff.exit_date:
             return jsonify({"detail": "Staff is not exited"}), 400
             
+        # Log History
+        history = models.PostingHistory(
+            staff_id=staff.id,
+            action_type="UNDO_EXIT",
+            from_office=None,
+            to_office=staff.office,
+            action_date=date.today(),
+            remarks="Undo Exit"
+        )
+        db.add(history)
+
         staff.exit_date = None
         staff.exit_mode = None
         # Also clear request fields if they linger
