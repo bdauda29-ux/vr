@@ -1523,8 +1523,17 @@
 
                 loadStaff();
 
-                // Default View
-                showView('dashboard');
+                const params = new URLSearchParams(window.location.search);
+                const officeChart = params.get('officeChart');
+                const officeName = params.get('office');
+
+                if (officeChart === '1' && officeName) {
+                    showView('offices');
+                    await loadOfficesView();
+                    await showOfficeSummary(officeName);
+                } else {
+                    showView('dashboard');
+                }
 
             } catch (err) {
                 console.error("Initialization Error:", err);
@@ -1732,8 +1741,9 @@
                     offices.forEach(off => {
                         const tr = document.createElement('tr');
                         const safeName = String(off.name || '').replace(/'/g, "\\'");
+                        const urlName = encodeURIComponent(off.name || '');
                         tr.innerHTML = `
-                            <td class="text-primary" style="cursor:pointer;" onclick="showOfficeSummary('${safeName}')">${off.name}</td>
+                            <td class="text-primary" style="cursor:pointer;" onclick="openOfficeChartPage('${urlName}')">${off.name}</td>
                             <td>
                                 <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, '${safeName}')">Rename</button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteOffice(${off.id})">Remove</button>
@@ -1752,6 +1762,13 @@
                     tbody.innerHTML = `<tr><td colspan="2" class="text-danger text-center">${data.detail || 'Failed to load offices'}</td></tr>`;
                 }
             } catch(e) { console.error(e); }
+        }
+
+        function openOfficeChartPage(encodedName) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('officeChart', '1');
+            url.searchParams.set('office', decodeURIComponent(encodedName));
+            window.location.href = url.toString();
         }
 
         function openOfficeModal() {
