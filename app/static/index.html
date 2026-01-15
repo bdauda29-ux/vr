@@ -1130,6 +1130,7 @@
                             <thead>
                                 <tr>
                                     <th>Field</th>
+                                    <th>Old Value</th>
                                     <th>New Value</th>
                                 </tr>
                             </thead>
@@ -1603,7 +1604,7 @@
                     };
                     Object.entries(rankCounts).forEach(([rank, count]) => {
                         const r = String(rank || "").toUpperCase();
-                        const normalized = r.replace(/\s+/g, "");
+                        const normalized = r.replace(/[\s\-]/g, "");
                         let group = null;
                         if (["DCG","ACG","CIS","DCI","ACI"].includes(normalized)) {
                             group = "Comptroller Cadre";
@@ -3381,7 +3382,7 @@
             }
         }
 
-        function openEditRequestModal(id) {
+        async function openEditRequestModal(id) {
             const r = editRequestsCache[id];
             if (!r || !editRequestModalInstance) return;
             const idInput = document.getElementById('editRequestModalId');
@@ -3394,16 +3395,74 @@
             if (nameEl) nameEl.textContent = r.staff_name || '';
             if (createdEl) createdEl.textContent = r.created_at ? new Date(r.created_at).toLocaleString() : '';
             if (body) {
+                body.innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+                let staff = null;
+                try {
+                    if (r.staff_id) {
+                        const res = await fetch(`${API_URL}/staff/${r.staff_id}`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (res.ok) {
+                            staff = await res.json();
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+
                 body.innerHTML = '';
                 const entries = Object.entries(r.data || {});
-                if (entries.length === 0) {
+
+                function normalizeValue(key, value) {
+                    if (value === null || value === undefined) return '';
+                    if (typeof value === 'boolean') return value ? '1' : '0';
+                    if (typeof value === 'number') return String(value);
+                    let s = String(value).trim();
+                    if (key === 'allow_edit_rank' || key === 'allow_edit_dopp') {
+                        const lower = s.toLowerCase();
+                        if (lower === 'true' || lower === '1' || lower === 'yes' || lower === 'on') return '1';
+                        if (lower === 'false' || lower === '0' || lower === 'no' || lower === 'off') return '0';
+                    }
+                    if (key === 'dofa' || key === 'dopa' || key === 'dopp' || key === 'dob' || key === 'exit_date' || key === 'out_request_date') {
+                        const d = new Date(s);
+                        if (!isNaN(d.getTime())) {
+                            return d.toISOString().slice(0, 10);
+                        }
+                    }
+                    return s;
+                }
+
+                const changedEntries = [];
+                entries.forEach(([k, v]) => {
+                    if (!staff) {
+                        changedEntries.push([k, null, v]);
+                        return;
+                    }
+                    let currentVal = staff[k];
+                    if (currentVal && typeof currentVal === 'object') {
+                        if ('id' in currentVal) {
+                            currentVal = currentVal.id;
+                        } else if ('name' in currentVal) {
+                            currentVal = currentVal.name;
+                        }
+                    }
+                    const newNorm = normalizeValue(k, v);
+                    const currentNorm = normalizeValue(k, currentVal);
+                    if (newNorm !== currentNorm) {
+                        changedEntries.push([k, currentVal, v]);
+                    }
+                });
+
+                if (changedEntries.length === 0) {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = '<td colspan="2">No field changes found</td>';
+                    tr.innerHTML = '<td colspan="3">No field changes found</td>';
                     body.appendChild(tr);
                 } else {
-                    entries.forEach(([k, v]) => {
+                    changedEntries.forEach(([k, oldVal, newVal]) => {
                         const tr = document.createElement('tr');
-                        tr.innerHTML = `<td>${k}</td><td>${v}</td>`;
+                        const oldDisplay = normalizeValue(k, oldVal);
+                        const newDisplay = normalizeValue(k, newVal);
+                        tr.innerHTML = `<td>${k}</td><td>${oldDisplay}</td><td>${newDisplay}</td>`;
                         body.appendChild(tr);
                     });
                 }
