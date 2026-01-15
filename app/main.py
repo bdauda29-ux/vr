@@ -572,6 +572,10 @@ def list_staff_endpoint():
         completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
         dopp_order = request.args.get("dopp_order")
+        exit_from_raw = request.args.get("exit_from")
+        exit_to_raw = request.args.get("exit_to")
+        exit_from = parse_date_value(exit_from_raw) if exit_from_raw else None
+        exit_to = parse_date_value(exit_to_raw) if exit_to_raw else None
         limit = request.args.get("limit", 100, type=int)
         offset = request.args.get("offset", 0, type=int)
         
@@ -580,7 +584,21 @@ def list_staff_endpoint():
                 staff_user = crud.get_staff(db, user["id"])
                 if not staff_user or not staff_user.office: return jsonify([]), 200
                 office = [staff_user.office]
-            items = crud.list_staff(db, q=q, state_id=state_id, lga_id=lga_id, rank=rank, office=office, completeness=completeness, status=status, dopp_order=dopp_order, limit=limit, offset=offset)
+            items = crud.list_staff(
+                db,
+                q=q,
+                state_id=state_id,
+                lga_id=lga_id,
+                rank=rank,
+                office=office,
+                completeness=completeness,
+                status=status,
+                dopp_order=dopp_order,
+                limit=limit,
+                offset=offset,
+                exit_from=exit_from,
+                exit_to=exit_to,
+            )
             return jsonify([schemas.to_dict_staff(item) for item in items])
     except Exception as e:
         import traceback

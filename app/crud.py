@@ -33,6 +33,8 @@ def list_staff(
     dopp_order: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
+    exit_from=None,
+    exit_to=None,
 ) -> List[models.Staff]:
     # Build Rank Sorting Logic
     # We want to sort by Rank (Custom Order), then DOPA (Date of Present Appointment), then NIS No
@@ -47,7 +49,12 @@ def list_staff(
         else_=999
     )
     
-    if dopp_order in ("asc", "desc"):
+    if status == "exited" and dopp_order in ("asc", "desc"):
+        stmt = select(models.Staff).order_by(
+            models.Staff.exit_date.asc() if dopp_order == "asc" else models.Staff.exit_date.desc(),
+            models.Staff.nis_no
+        ).offset(offset).limit(limit)
+    elif dopp_order in ("asc", "desc"):
         stmt = select(models.Staff).order_by(
             models.Staff.dopp.asc() if dopp_order == "asc" else models.Staff.dopp.desc(),
             models.Staff.nis_no
@@ -63,6 +70,10 @@ def list_staff(
         stmt = stmt.where(models.Staff.exit_date.is_(None))
     elif status == "exited":
         stmt = stmt.where(models.Staff.exit_date.is_not(None))
+        if exit_from is not None:
+            stmt = stmt.where(models.Staff.exit_date >= exit_from)
+        if exit_to is not None:
+            stmt = stmt.where(models.Staff.exit_date <= exit_to)
 
     if state_id is not None:
         stmt = stmt.where(models.Staff.state_id == state_id)
