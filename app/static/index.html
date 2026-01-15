@@ -623,10 +623,10 @@
                                  </table>
                              </div>
                              <hr>
-                             <div class="mt-3">
-                                 <h6 id="officeSummaryTitle" class="mb-2 d-none"></h6>
-                                 <canvas id="officeSummaryChart" height="180"></canvas>
-                             </div>
+                            <div class="mt-3">
+                                <h6 id="officeSummaryTitle" class="mb-2 d-none"></h6>
+                                <canvas id="officeSummaryChart"></canvas>
+                            </div>
                          </div>
                     </div>
                 </div>
@@ -2619,6 +2619,7 @@
                             }]
                         },
                         options: {
+                            aspectRatio: 3,
                             plugins: {
                                 legend: {
                                     display: false
