@@ -622,6 +622,11 @@
                                      </tbody>
                                  </table>
                              </div>
+                             <hr>
+                             <div class="mt-3">
+                                 <h6 id="officeSummaryTitle" class="mb-2 d-none"></h6>
+                                 <canvas id="officeSummaryChart" height="180"></canvas>
+                             </div>
                          </div>
                     </div>
                 </div>
@@ -1281,6 +1286,7 @@
         let userId = localStorage.getItem('userId');
         let currentOfficeName = '';
         let rankSummaryChart;
+        let officeSummaryChart;
         const RANKS = [
             "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI",
             "ASI 1", "ASI 2", "II", "AII", "IA 1", "IA 2", "IA 3"
@@ -1437,32 +1443,36 @@
                 }
 
                 // Role Based UI
-                if (role === 'staff') {
-                    document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
-                    
-                    // Customize Dashboard for Staff
-                    const dashView = document.getElementById('view-dashboard');
-                    if (dashView) {
-                        dashView.innerHTML = `
-                            <div class="row justify-content-center mt-5">
-                                <div class="col-md-6 text-center">
-                                    <div class="card shadow">
-                                        <div class="card-body p-5">
-                                            <h3 class="card-title mb-4">Welcome, ${localStorage.getItem('username') || 'Staff'}</h3>
-                                            <div class="d-grid gap-3">
-                                                <button class="btn btn-primary btn-lg" onclick="openChangePasswordModal()">
-                                                    <i class="bi bi-key me-2"></i>Change Password
-                                                </button>
-                                                <button class="btn btn-danger btn-lg" onclick="logout()">
-                                                    <i class="bi bi-box-arrow-right me-2"></i>Logout
-                                                </button>
+                    if (role === 'staff') {
+                        document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+                        
+                        // Customize Dashboard for Staff
+                        const dashView = document.getElementById('view-dashboard');
+                        if (dashView) {
+                            dashView.innerHTML = `
+                                <div class="row justify-content-center mt-5">
+                                    <div class="col-md-6 text-center">
+                                        <div class="card shadow">
+                                            <div class="card-body p-5">
+                                                <h3 class="card-title mb-4">Welcome, ${localStorage.getItem('username') || 'Staff'}</h3>
+                                                <p class="mb-1"><strong>Current Office:</strong> <span id="staffDashboardOffice">Loading...</span></p>
+                                                <p class="mb-3"><strong>DOPP:</strong> <span id="staffDashboardDopp">Loading...</span></p>
+                                                <div id="staffMoveNotification" class="alert alert-info d-none mb-4"></div>
+                                                <div class="d-grid gap-3">
+                                                    <button class="btn btn-primary btn-lg" onclick="openChangePasswordModal()">
+                                                        <i class="bi bi-key me-2"></i>Change Password
+                                                    </button>
+                                                    <button class="btn btn-danger btn-lg" onclick="logout()">
+                                                        <i class="bi bi-box-arrow-right me-2"></i>Logout
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        `;
-                    }
+                            `;
+                            await loadStaffDashboardInfo();
+                        }
 
                     // Show form view directly
                     showView('personnel');
@@ -1533,7 +1543,42 @@
             if (r === 'staff') return 'Staff';
             return r || '';
         }
-        
+
+        async function loadStaffDashboardInfo() {
+            if (!userId) return;
+            try {
+                const res = await fetch(`${API_URL}/staff/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const s = await res.json();
+                const office = s.office || 'Not assigned';
+                const doppStr = isoToDmy(s.dopp);
+                const officeEl = document.getElementById('staffDashboardOffice');
+                const doppEl = document.getElementById('staffDashboardDopp');
+                if (officeEl) officeEl.textContent = office;
+                if (doppEl) doppEl.textContent = doppStr || '-';
+
+                const lastOfficeKey = `staff_${userId}_last_office`;
+                const lastDoppKey = `staff_${userId}_last_dopp`;
+                const prevOffice = localStorage.getItem(lastOfficeKey);
+                const prevDopp = localStorage.getItem(lastDoppKey);
+
+                if (prevOffice && prevOffice !== office) {
+                    const notifEl = document.getElementById('staffMoveNotification');
+                    if (notifEl) {
+                        notifEl.classList.remove('d-none');
+                        notifEl.textContent = `You have been moved from ${prevOffice} to ${office}. Effective date: ${doppStr || 'N/A'}.`;
+                    }
+                }
+
+                localStorage.setItem(lastOfficeKey, office);
+                localStorage.setItem(lastDoppKey, s.dopp || '');
+            } catch (e) {
+                console.error('Failed to load staff dashboard info', e);
+            }
+        }
+
         function rankBadge(rank) {
             const text = rank || '';
             if (!text) return '';
@@ -1688,7 +1733,7 @@
                         const tr = document.createElement('tr');
                         const safeName = String(off.name || '').replace(/'/g, "\\'");
                         tr.innerHTML = `
-                            <td>${off.name}</td>
+                            <td class="text-primary" style="cursor:pointer;" onclick="showOfficeSummary('${safeName}')">${off.name}</td>
                             <td>
                                 <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, '${safeName}')">Rename</button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteOffice(${off.id})">Remove</button>
@@ -2488,6 +2533,111 @@
                 tr.innerHTML = rowHtml;
                 tbody.appendChild(tr);
             });
+        }
+
+        async function showOfficeSummary(officeName) {
+            if (!officeName) return;
+            const titleEl = document.getElementById('officeSummaryTitle');
+            const canvas = document.getElementById('officeSummaryChart');
+            if (titleEl) {
+                titleEl.classList.remove('d-none');
+                titleEl.textContent = `Personnel Summary - ${officeName}`;
+            }
+            if (!canvas) return;
+
+            const params = new URLSearchParams();
+            params.append('status', 'active');
+            params.append('office', officeName);
+
+            try {
+                const res = await fetch(`${API_URL}/staff?${params.toString()}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) {
+                    console.error('Failed to load staff for office', officeName, res.status);
+                    return;
+                }
+                const data = await res.json();
+                if (!Array.isArray(data) || data.length === 0) {
+                    if (officeSummaryChart) {
+                        officeSummaryChart.data.labels = [];
+                        officeSummaryChart.data.datasets[0].data = [];
+                        officeSummaryChart.update();
+                    }
+                    return;
+                }
+
+                const rankCounts = {};
+                data.forEach(s => {
+                    const rank = s.rank || '';
+                    rankCounts[rank] = (rankCounts[rank] || 0) + 1;
+                });
+
+                const labels = [];
+                const values = [];
+                RANKS.forEach(r => {
+                    const count = rankCounts[r] || 0;
+                    if (count > 0) {
+                        labels.push(r);
+                        values.push(count);
+                    }
+                });
+                Object.entries(rankCounts).forEach(([rank, count]) => {
+                    if (count <= 0) return;
+                    if (!labels.includes(rank)) {
+                        labels.push(rank);
+                        values.push(count);
+                    }
+                });
+
+                const ctx = canvas.getContext('2d');
+                const colors = labels.map(label => {
+                    const text = label || '';
+                    const red = ['DCG'];
+                    const green = ['ACG', 'CIS', 'DCI', 'ACI'];
+                    const blue = ['CSI', 'SI', 'DSI', 'ASI1', 'ASI 1', 'ASI2', 'ASI 2'];
+                    const yellow = ['II', 'AII', 'IA1', 'IA 1', 'IA2', 'IA 2', 'IA3', 'IA 3'];
+                    if (red.includes(text)) return 'rgba(220,53,69,0.85)';
+                    if (green.includes(text)) return 'rgba(25,135,84,0.85)';
+                    if (blue.includes(text)) return 'rgba(13,110,253,0.85)';
+                    if (yellow.includes(text)) return 'rgba(255,193,7,0.85)';
+                    return 'rgba(108,117,125,0.85)';
+                });
+
+                if (officeSummaryChart) {
+                    officeSummaryChart.data.labels = labels;
+                    officeSummaryChart.data.datasets[0].data = values;
+                    officeSummaryChart.update();
+                } else {
+                    officeSummaryChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: values,
+                                backgroundColor: colors
+                            }]
+                        },
+                        options: {
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error('Error loading office summary', e);
+            }
         }
 
         let staffCanEditRank = false;

@@ -200,14 +200,33 @@ def dashboard_stats():
             staff_user = crud.get_staff(db, user.get("id"))
             office_name = staff_user.office if staff_user else None
             if not office_name:
-                return jsonify({"total_staff": 0, "office_name": None})
+                return jsonify({"total_staff": 0, "office_name": None, "rank_counts": {}})
+
             total_staff = db.scalar(
                 select(func.count(models.Staff.id)).where(
                     models.Staff.exit_date.is_(None),
                     models.Staff.office == office_name,
                 )
             )
-            return jsonify({"total_staff": total_staff, "office_name": office_name})
+
+            rank_rows = db.execute(
+                select(models.Staff.rank, func.count(models.Staff.id))
+                .where(
+                    models.Staff.exit_date.is_(None),
+                    models.Staff.office == office_name,
+                )
+                .group_by(models.Staff.rank)
+            ).all()
+            rank_counts = {}
+            for rank, count in rank_rows:
+                key = rank or ""
+                rank_counts[key] = rank_counts.get(key, 0) + count
+
+            return jsonify({
+                "total_staff": total_staff,
+                "office_name": office_name,
+                "rank_counts": rank_counts,
+            })
 
         stats = crud.get_dashboard_stats(db)
         stats["office_name"] = None
