@@ -591,7 +591,7 @@
                                                     <th>Actions</th>
                                                 </tr>
                                             </thead>
-                                            <tbody id="editRequestsBody"></tbody>
+                                            <tbody id="editRequestsBodyInline"></tbody>
                                         </table>
                                     </div>
                                 </div>
@@ -2787,7 +2787,31 @@
                 if (res.ok) {
                     const history = await res.json();
                     tbody.innerHTML = '';
-                    if (history.length === 0) {
+                    if (Array.isArray(history) && history.length === 0) {
+                        try {
+                            const staffRes = await fetch(`${API_URL}/staff/${id}`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (staffRes.ok) {
+                                const s = await staffRes.json();
+                                const dateStr = isoToDmy(s.dopp);
+                                const office = s.office || '-';
+                                if (dateStr || office !== '-') {
+                                    const tr = document.createElement('tr');
+                                    tr.innerHTML = `
+                                        <td>${dateStr || '-'}</td>
+                                        <td>Current Posting</td>
+                                        <td>-</td>
+                                        <td>${office}</td>
+                                        <td>-</td>
+                                    `;
+                                    tbody.appendChild(tr);
+                                    return;
+                                }
+                            }
+                        } catch (e) {
+                            console.error(e);
+                        }
                         tbody.innerHTML = '<tr><td colspan="5" class="text-center">No history found</td></tr>';
                         return;
                     }
@@ -3226,26 +3250,32 @@
                 });
                 if (!res.ok) return;
                 const data = await res.json();
-                const tbody = document.getElementById('editRequestsBody');
-                if (!tbody) return;
-                tbody.innerHTML = '';
+                const mainBody = document.getElementById('editRequestsBody');
+                const inlineBody = document.getElementById('editRequestsBodyInline');
+                if (!mainBody && !inlineBody) return;
+
+                const bodies = [mainBody, inlineBody].filter(Boolean);
+                bodies.forEach(tb => tb.innerHTML = '');
+
                 data.forEach((r, idx) => {
-                    const tr = document.createElement('tr');
                     const changes = Object.entries(r.data || {})
                         .map(([k, v]) => `${k}: ${v}`)
                         .join(', ');
-                    tr.innerHTML = `
-                        <td>${idx + 1}</td>
-                        <td>${r.staff_nis}</td>
-                        <td>${r.staff_name}</td>
-                        <td class="text-truncate" style="max-width: 320px;" title="${changes}">${changes}</td>
-                        <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
-                        <td>
-                            <button type="button" class="btn btn-sm btn-success me-1" onclick="approveEditRequest(${r.id})">Approve</button>
-                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="rejectEditRequest(${r.id})">Reject</button>
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
+                    bodies.forEach(tb => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${idx + 1}</td>
+                            <td>${r.staff_nis}</td>
+                            <td>${r.staff_name}</td>
+                            <td class="text-truncate" style="max-width: 320px;" title="${changes}">${changes}</td>
+                            <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-success me-1" onclick="approveEditRequest(${r.id})">Approve</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="rejectEditRequest(${r.id})">Reject</button>
+                            </td>
+                        `;
+                        tb.appendChild(tr);
+                    });
                 });
                 updateApprovalCounters(Array.isArray(data) ? data.length : 0, undefined);
             } catch (e) {
