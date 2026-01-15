@@ -1102,6 +1102,50 @@
         </div>
     </div>
 
+    <!-- Edit Request Modal -->
+    <div class="modal fade" id="editRequestModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Request Details</h5>
+                    <button type="button" class="btn-close" onclick="editRequestModalInstance.hide()"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editRequestModalId">
+                    <div class="mb-3">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <strong>NIS/No:</strong> <span id="editReqStaffNis"></span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Name:</strong> <span id="editReqStaffName"></span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Requested At:</strong> <span id="editReqCreatedAt"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Field</th>
+                                    <th>New Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="editReqChangesBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="editRequestModalInstance.hide()">Close</button>
+                    <button type="button" class="btn btn-danger" onclick="rejectEditRequestFromModal()">Reject</button>
+                    <button type="button" class="btn btn-success" onclick="approveEditRequestFromModal()">Approve</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- History Modal -->
     <div class="modal fade" id="historyModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -2677,6 +2721,8 @@
         let moveModalInstance;
         let historyModalInstance;
         let viewModalInstance;
+        let editRequestModalInstance;
+        let editRequestsCache = {};
 
         document.addEventListener('DOMContentLoaded', () => {
              const moveEl = document.getElementById('moveModal');
@@ -2689,6 +2735,12 @@
              if (histEl) {
                  historyModalInstance = new bootstrap.Modal(histEl);
                  window.historyModalInstance = historyModalInstance;
+             }
+
+             const editReqEl = document.getElementById('editRequestModal');
+             if (editReqEl) {
+                 editRequestModalInstance = new bootstrap.Modal(editReqEl);
+                 window.editRequestModalInstance = editRequestModalInstance;
              }
 
              const viewEl = document.getElementById('viewStaffModal');
@@ -3250,6 +3302,7 @@
                 });
                 if (!res.ok) return;
                 const data = await res.json();
+                editRequestsCache = {};
                 const mainBody = document.getElementById('editRequestsBody');
                 const inlineBody = document.getElementById('editRequestsBodyInline');
                 if (!mainBody && !inlineBody) return;
@@ -3258,6 +3311,7 @@
                 bodies.forEach(tb => tb.innerHTML = '');
 
                 data.forEach((r, idx) => {
+                    editRequestsCache[r.id] = r;
                     const changes = Object.entries(r.data || {})
                         .map(([k, v]) => `${k}: ${v}`)
                         .join(', ');
@@ -3270,8 +3324,7 @@
                             <td class="text-truncate" style="max-width: 320px;" title="${changes}">${changes}</td>
                             <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-success me-1" onclick="approveEditRequest(${r.id})">Approve</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="rejectEditRequest(${r.id})">Reject</button>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="openEditRequestModal(${r.id})">View</button>
                             </td>
                         `;
                         tb.appendChild(tr);
@@ -3292,6 +3345,7 @@
                 });
                 if (res.ok) {
                     alert('Request approved');
+                    if (editRequestModalInstance) editRequestModalInstance.hide();
                     loadEditRequests();
                     loadStaff();
                 } else {
@@ -3314,6 +3368,7 @@
                 });
                 if (res.ok) {
                     alert('Request rejected');
+                    if (editRequestModalInstance) editRequestModalInstance.hide();
                     loadEditRequests();
                 } else {
                     let err;
@@ -3324,6 +3379,48 @@
                 console.error(e);
                 alert('Reject failed');
             }
+        }
+
+        function openEditRequestModal(id) {
+            const r = editRequestsCache[id];
+            if (!r || !editRequestModalInstance) return;
+            const idInput = document.getElementById('editRequestModalId');
+            const nisEl = document.getElementById('editReqStaffNis');
+            const nameEl = document.getElementById('editReqStaffName');
+            const createdEl = document.getElementById('editReqCreatedAt');
+            const body = document.getElementById('editReqChangesBody');
+            if (idInput) idInput.value = id;
+            if (nisEl) nisEl.textContent = r.staff_nis || '';
+            if (nameEl) nameEl.textContent = r.staff_name || '';
+            if (createdEl) createdEl.textContent = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+            if (body) {
+                body.innerHTML = '';
+                const entries = Object.entries(r.data || {});
+                if (entries.length === 0) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td colspan="2">No field changes found</td>';
+                    body.appendChild(tr);
+                } else {
+                    entries.forEach(([k, v]) => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td>${k}</td><td>${v}</td>`;
+                        body.appendChild(tr);
+                    });
+                }
+            }
+            editRequestModalInstance.show();
+        }
+
+        function approveEditRequestFromModal() {
+            const idInput = document.getElementById('editRequestModalId');
+            if (!idInput || !idInput.value) return;
+            approveEditRequest(parseInt(idInput.value, 10));
+        }
+
+        function rejectEditRequestFromModal() {
+            const idInput = document.getElementById('editRequestModalId');
+            if (!idInput || !idInput.value) return;
+            rejectEditRequest(parseInt(idInput.value, 10));
         }
 
         function openOutModal(id) {
