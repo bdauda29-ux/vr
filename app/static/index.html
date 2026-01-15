@@ -238,17 +238,6 @@
                                     <div class="table-responsive">
                                         <table id="staffTable" class="table table-hover align-middle" style="width:max-content;min-width:100%">
                                             <thead class="table-light" id="staffTableHead">
-                                                <tr>
-                                                    <th>S/N</th>
-                                                    <th>NIS/No</th>
-                                                    <th>Name</th>
-                                                    <th>Rank</th>
-                                                    <th>DOFA / DOPA</th>
-                                                    <th>Office</th>
-                                                    <th>State/LGA</th>
-                                                    <th>Phone</th>
-                                                    <th>Actions</th>
-                                                </tr>
                                             </thead>
                                             <tbody id="staffTableBody"></tbody>
                                         </table>
@@ -1624,6 +1613,7 @@
                     buildSuperAdminTableHeader();
                     renderTableSuperAdmin(data);
                 } else {
+                    buildStandardTableHeader();
                     renderTable(data);
                 }
             } catch (err) { 
@@ -1726,6 +1716,8 @@
                         <th>Next of Kin</th>
                         <th>NOK Phone</th>
                         <th>Remark</th>
+                        <th>Reason for Exit</th>
+                        <th>Effective Date</th>
                         <th>Actions</th>
                     </tr>
                 `;
@@ -1752,6 +1744,42 @@
                         <th>Next of Kin</th>
                         <th>NOK Phone</th>
                         <th>Remark</th>
+                        <th>Actions</th>
+                    </tr>
+                `;
+            }
+            thead.innerHTML = html;
+        }
+
+        function buildStandardTableHeader() {
+            const thead = document.getElementById('staffTableHead');
+            if (!thead) return;
+            let html;
+            if (currentStatus === 'exited') {
+                html = `
+                    <tr>
+                        <th>S/N</th>
+                        <th>NIS/No</th>
+                        <th>Name</th>
+                        <th>Rank</th>
+                        <th>Office</th>
+                        <th>Reason for Exit</th>
+                        <th>Effective Date</th>
+                        <th>Phone</th>
+                        <th>Status</th>
+                    </tr>
+                `;
+            } else {
+                html = `
+                    <tr>
+                        <th>S/N</th>
+                        <th>NIS/No</th>
+                        <th>Name</th>
+                        <th>Rank</th>
+                        <th>DOFA / DOPA</th>
+                        <th>Office</th>
+                        <th>State/LGA</th>
+                        <th>Phone</th>
                         <th>Actions</th>
                     </tr>
                 `;
@@ -1812,6 +1840,8 @@
                         <td contenteditable="true" data-field="next_of_kin" data-original="${s.next_of_kin || ''}">${s.next_of_kin || ''}</td>
                         <td contenteditable="true" data-field="nok_phone" data-original="${s.nok_phone || ''}">${s.nok_phone || ''}</td>
                         <td contenteditable="true" data-field="remark" data-original="${s.remark || ''}">${s.remark || ''}</td>
+                        <td>${s.exit_mode || ''}</td>
+                        <td>${isoToDmy(s.exit_date) || ''}</td>
                         <td>${actionBtns}</td>
                     `;
                 } else {
@@ -2027,44 +2057,61 @@
                 const dopaStr = dopa ? dopa : '';
                 const separator = (dofa && dopa) ? ' / ' : '';
                 const dates = `${dofaStr}${separator}${dopaStr}`;
+                const exitDate = isoToDmy(s.exit_date);
+                const exitReason = s.exit_mode || '';
 
-                let actionBtns = ``;
+                let rowHtml = '';
 
                 if (currentStatus === 'exited') {
-                     if (role === 'super_admin') {
-                         actionBtns += `<button class="btn btn-sm btn-info mb-1" onclick="undoExit(${s.id})">Undo Exit</button>`;
-                     } else {
-                        actionBtns += `<span class="badge bg-secondary">Posted Out</span>`;
-                     }
+                    let statusHtml = '';
+                    if (role === 'super_admin' || role === 'main_admin') {
+                        statusHtml = `<button class="btn btn-sm btn-info mb-1" onclick="undoExit(${s.id})">Undo Exit</button>`;
+                    } else {
+                        statusHtml = `<span class="badge bg-secondary">Posted Out</span>`;
+                    }
+                    rowHtml = `
+                        <td>${index + 1}</td>
+                        <td>${s.nis_no}</td>
+                        <td>${s.surname} ${s.other_names}</td>
+                        <td>${rankBadge(s.rank)}</td>
+                        <td>${s.office || ''}</td>
+                        <td>${exitReason}</td>
+                        <td>${exitDate || ''}</td>
+                        <td>${s.phone_no || ''}</td>
+                        <td>${statusHtml}</td>
+                    `;
                 } else {
+                    let actionBtns = ``;
                     actionBtns += `<button class="btn btn-sm btn-primary mb-1" onclick="editStaff(${s.id})">Edit</button>`;
 
                     if (role === 'super_admin') {
-                         actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
+                        actionBtns += `<button class="btn btn-sm btn-danger mb-1" onclick="deleteStaff(${s.id})">Del</button>`;
                     }
                     
                     if (s.out_request_status === 'Pending') {
                         if (role === 'super_admin') {
-                             actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review Exit</button>`;
+                            actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}')">Review Exit</button>`;
                         } else {
-                             actionBtns += `<span class="badge bg-warning text-dark">Exit Pending</span>`;
+                            actionBtns += `<span class="badge bg-warning text-dark">Exit Pending</span>`;
                         }
                     } else {
                         actionBtns += `<button class="btn btn-sm btn-warning mb-1" onclick="openOutModal(${s.id})">Out</button>`;
                     }
+
+                    rowHtml = `
+                        <td>${index + 1}</td>
+                        <td>${s.nis_no}</td>
+                        <td>${s.surname} ${s.other_names}</td>
+                        <td>${rankBadge(s.rank)}</td>
+                        <td>${dates}</td>
+                        <td>${s.office || ''}</td>
+                        <td>${location}</td>
+                        <td>${s.phone_no || ''}</td>
+                        <td>${actionBtns}</td>
+                    `;
                 }
 
-                tr.innerHTML = `
-                    <td>${index + 1}</td>
-                    <td>${s.nis_no}</td>
-                    <td>${s.surname} ${s.other_names}</td>
-                    <td>${rankBadge(s.rank)}</td>
-                    <td>${dates}</td>
-                    <td>${s.office || ''}</td>
-                    <td>${location}</td>
-                    <td>${s.phone_no || ''}</td>
-                    <td>${actionBtns}</td>
-                `;
+                tr.innerHTML = rowHtml;
                 tbody.appendChild(tr);
             });
         }

@@ -1608,7 +1608,7 @@ def reject_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/undo-exit")
 def undo_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
