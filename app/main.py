@@ -1789,7 +1789,7 @@ def approve_edit_request(req_id):
             crud.update_staff(db, staff, data)
             
             req.status = "approved"
-            req.reviewed_by = user["username"]
+            req.reviewed_by = user.get("sub")
             req.reviewed_at = func.now()
             
             crud.create_audit_log(db, "APPROVE_EDIT", f"Staff: {staff.nis_no}", f"Approved edit request {req_id}")
@@ -1814,7 +1814,7 @@ def reject_edit_request(req_id):
         if req.status != "pending": return jsonify({"detail": "Request not pending"}), 400
         
         req.status = "rejected"
-        req.reviewed_by = user["username"]
+        req.reviewed_by = user.get("sub")
         req.reviewed_at = func.now()
         
         crud.create_audit_log(db, "REJECT_EDIT", f"Request {req_id}", "Rejected edit request")
