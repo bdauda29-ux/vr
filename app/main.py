@@ -1273,7 +1273,7 @@ def export_excel():
                 for cell in ws[row_idx]:
                     cell.font = font_style
             ws.append([])
-            footer_cell = ws.cell(row=ws.max_row + 1, column=1, value=f"Generated on {datetime.now().strftime('%d/%m/%Y')}")
+            footer_cell = ws.cell(row=ws.max_row + 1, column=1, value=f"Generated on {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
             footer_cell.font = Font(name='Liberation Sans', size=8, italic=True)
             out = io.BytesIO()
             wb.save(out)
@@ -1609,7 +1609,7 @@ def export_pdf():
                 canvas.saveState()
                 canvas.setFont('Helvetica-Oblique', 8)
                 page_num = canvas.getPageNumber()
-                text = f"Page {page_num} | Generated on {datetime.now().strftime('%d/%m/%Y')}"
+                text = f"Page {page_num} | Generated on {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
                 canvas.drawRightString(landscape(letter)[0] - 30, 20, text)
                 canvas.restoreState()
 
