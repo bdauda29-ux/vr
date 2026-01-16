@@ -1767,22 +1767,25 @@ def approve_edit_request(req_id):
     if err: return err, code
     
     with next(get_db()) as db:
-        req = db.get(models.StaffEditRequest, req_id)
-        if not req: return jsonify({"detail": "Not found"}), 404
-        if req.status != "pending": return jsonify({"detail": "Request not pending"}), 400
-        
-        staff = db.get(models.Staff, req.staff_id)
-        if not staff: return jsonify({"detail": "Staff not found"}), 404
-        
-        data = json.loads(req.data)
-        for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
-            if k in data and data[k]:
-                try:
-                    data[k] = date.fromisoformat(data[k])
-                except:
-                    pass
-        
         try:
+            req = db.get(models.StaffEditRequest, req_id)
+            if not req:
+                return jsonify({"detail": "Not found"}), 404
+            if req.status != "pending":
+                return jsonify({"detail": "Request not pending"}), 400
+            
+            staff = db.get(models.Staff, req.staff_id)
+            if not staff:
+                return jsonify({"detail": "Staff not found"}), 404
+            
+            data = json.loads(req.data)
+            for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
+                if k in data and data[k]:
+                    parsed = parse_date_value(data[k])
+                    if parsed is None and data[k] not in (None, "", 0):
+                        return jsonify({"detail": f"Invalid date for {k}"}), 400
+                    data[k] = parsed
+            
             crud.update_staff(db, staff, data)
             
             req.status = "approved"
@@ -1792,8 +1795,12 @@ def approve_edit_request(req_id):
             crud.create_audit_log(db, "APPROVE_EDIT", f"Staff: {staff.nis_no}", f"Approved edit request {req_id}")
             db.commit()
             return jsonify({"detail": "Request approved and applied"})
-        except ValueError as e:
-            return jsonify({"detail": str(e)}), 400
+        except Exception as e:
+            import traceback
+            db.rollback()
+            print("Approve edit request error:", e)
+            print(traceback.format_exc())
+            return jsonify({"detail": f"Approve edit failed: {str(e)}"}), 500
 
 @app.post("/admin/edit-requests/<int:req_id>/reject")
 def reject_edit_request(req_id):
