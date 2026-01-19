@@ -34,7 +34,7 @@ try:
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.lib.pagesizes import letter, landscape, A3
     from reportlab.lib.units import inch
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -1466,7 +1466,8 @@ def export_pdf():
                 data_table.append(row)
 
             out = io.BytesIO()
-            doc = SimpleDocTemplate(out, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+            # Use A3 Landscape for more width
+            doc = SimpleDocTemplate(out, pagesize=landscape(A3), topMargin=30, bottomMargin=30, leftMargin=30, rightMargin=30)
             styles = getSampleStyleSheet()
             elements = []
             
@@ -1509,7 +1510,8 @@ def export_pdf():
 
             elements.append(Spacer(1, 0.2 * inch))
             
-            avail_width = 760
+            # A3 Landscape width is approx 1190 points. With 30 margins, we have ~1130 available.
+            avail_width = 1130
 
             font_size = 7
             if len(headers_keys) > 12:
