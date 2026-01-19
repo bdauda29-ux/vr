@@ -46,6 +46,15 @@
             .btn-group-sm > .btn, .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
             .card-body { padding: 1rem; }
         }
+
+        /* Custom Width for Personnel View on Large Screens */
+        @media (min-width: 992px) {
+            .view-narrow {
+                max-width: 66% !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1333,17 +1342,18 @@
                 return;
             }
 
-            // Adjust container width: 'container' for personnel (narrow), 'container-fluid' for others (wide)
+            // Adjust container width
             const mainContainer = document.getElementById('mainContainer');
             if (mainContainer) {
+                // Always use container-fluid base
+                mainContainer.classList.remove('container');
+                mainContainer.classList.add('container-fluid');
+                mainContainer.style.maxWidth = ''; // Remove any inline style
+                
                 if (viewId === 'personnel') {
-                    mainContainer.classList.remove('container-fluid');
-                    mainContainer.classList.add('container');
-                    mainContainer.style.maxWidth = '66%';
+                    mainContainer.classList.add('view-narrow');
                 } else {
-                    mainContainer.classList.remove('container');
-                    mainContainer.classList.add('container-fluid');
-                    mainContainer.style.maxWidth = '';
+                    mainContainer.classList.remove('view-narrow');
                 }
             }
 
