@@ -97,7 +97,7 @@
     </script>
     <!-- Top Navigation Bar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container-fluid">
+        <div class="container">
             <a class="navbar-brand fw-bold" href="#">V/R</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
                 <span class="navbar-toggler-icon"></span>
@@ -152,7 +152,7 @@
     </nav>
 
     <!-- Page Content -->
-    <div class="container-fluid mt-3">
+    <div class="container mt-3">
         <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
              <h4 class="mb-0" id="pageTitle">Dashboard</h4>
         </div>
@@ -2739,7 +2739,7 @@
             try {
                 const currentRole = localStorage.getItem('role');
                 if (currentRole === 'staff') {
-                    const restricted = ["office", "role", "exit_date", "exit_mode", "out_request_status"];
+                    const restricted = ["office", "role", "exit_date", "exit_mode", "out_request_status", "remark"];
                     restricted.forEach(f => delete payload[f]);
                     if (!staffCanEditRank) delete payload["rank"];
                     if (!staffCanEditDopp) delete payload["dopp"];
@@ -2833,6 +2833,7 @@
                 
                 const rankSelect = document.getElementById('rank');
                 const doppInput = document.getElementById('dopp');
+                const remarkInput = document.getElementById('remark');
 
                 if (role === 'staff') {
                     staffCanEditRank = !!s.allow_edit_rank;
@@ -2855,6 +2856,10 @@
                             doppInput.style.pointerEvents = 'none';
                         }
                     }
+                    if (remarkInput) {
+                        remarkInput.readOnly = true;
+                        remarkInput.classList.add('bg-light');
+                    }
                 } else {
                     staffCanEditRank = false;
                     staffCanEditDopp = false;
@@ -2866,6 +2871,10 @@
                         doppInput.readOnly = false;
                         doppInput.classList.remove('bg-light');
                         doppInput.style.pointerEvents = '';
+                    }
+                    if (remarkInput) {
+                        remarkInput.readOnly = false;
+                        remarkInput.classList.remove('bg-light');
                     }
                 }
 
