@@ -34,6 +34,15 @@ def run_migrations():
         else:
             print("Column 'allow_edit_rank' already exists.")
 
+        if 'allow_login' not in columns:
+            print("Column 'allow_login' missing. Adding it...")
+            with engine.connect() as conn:
+                with conn.begin():
+                    conn.execute(text("ALTER TABLE staff ADD COLUMN allow_login INTEGER DEFAULT 1 NOT NULL"))
+            print("Column 'allow_login' added successfully.")
+        else:
+            print("Column 'allow_login' already exists.")
+
         if 'allow_edit_dopp' not in columns:
             print("Column 'allow_edit_dopp' missing. Adding it...")
             with engine.connect() as conn:

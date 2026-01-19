@@ -129,6 +129,10 @@ def login():
                 
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
+                    # Check global login permission for staff role
+                    if staff.role == "staff" and not getattr(staff, "allow_login", 1):
+                        return jsonify({"detail": "Login is currently disabled for staff users."}), 403
+
                     # Check login limit (skip for admins)
                     if staff.role not in ("office_admin", "super_admin", "main_admin") and staff.login_count >= 10:
                         return jsonify({"detail": "Login limit exceeded. Please contact Super Admin to reset."}), 403
@@ -878,9 +882,21 @@ def get_staff_edit_settings():
     with next(get_db()) as db:
         max_rank = db.scalar(select(func.max(models.Staff.allow_edit_rank))) or 0
         max_dopp = db.scalar(select(func.max(models.Staff.allow_edit_dopp))) or 0
+        min_login = db.scalar(select(func.min(models.Staff.allow_login))) 
+        # For login, we assume if ANYONE is 0, it's disabled globally (or checking min/max logic). 
+        # The existing pattern uses max to check if feature is enabled.
+        # But for login, if I want to "Allow all", I set all to 1.
+        # Let's check: if I set allow_login=1 for all, then min is 1. If I set to 0, min is 0.
+        # If I use min, then if even one person is 0, it returns 0? No, this endpoint is for the "Global Switch" state.
+        # If the switch controls ALL, then they should all be same.
+        # I'll use max for consistency, assuming they are uniform.
+        max_login = db.scalar(select(func.max(models.Staff.allow_login)))
+        if max_login is None: max_login = 1 # Default to allowed if table empty?
+        
         return jsonify({
             "allow_edit_rank": bool(max_rank),
             "allow_edit_dopp": bool(max_dopp),
+            "allow_login": bool(max_login),
         })
 
 @app.put("/settings/staff-edit")
@@ -891,11 +907,14 @@ def update_staff_edit_settings():
     data = request.get_json(force=True)
     allow_rank = bool(data.get("allow_edit_rank"))
     allow_dopp = bool(data.get("allow_edit_dopp"))
+    allow_login = bool(data.get("allow_login"))
+    
     with next(get_db()) as db:
         db.execute(
             models.Staff.__table__.update().values(
                 allow_edit_rank=1 if allow_rank else 0,
                 allow_edit_dopp=1 if allow_dopp else 0,
+                allow_login=1 if allow_login else 0,
             )
         )
         db.commit()
@@ -903,9 +922,9 @@ def update_staff_edit_settings():
             db,
             "SETTINGS_UPDATE",
             "staff-edit",
-            f"allow_edit_rank={allow_rank}, allow_edit_dopp={allow_dopp}",
+            f"allow_edit_rank={allow_rank}, allow_edit_dopp={allow_dopp}, allow_login={allow_login}",
         )
-    return jsonify({"allow_edit_rank": allow_rank, "allow_edit_dopp": allow_dopp})
+    return jsonify({"allow_edit_rank": allow_rank, "allow_edit_dopp": allow_dopp, "allow_login": allow_login})
 
 @app.post("/change-password")
 def change_password():

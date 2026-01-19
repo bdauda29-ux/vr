@@ -512,6 +512,10 @@
                                                 <input class="form-check-input" type="checkbox" id="globalAllowEditDopp" onchange="updateStaffEditSettings()">
                                                 <label class="form-check-label" for="globalAllowEditDopp">Allow all staff users to edit DOPP</label>
                                             </div>
+                                            <div class="form-check form-switch mt-2">
+                                                <input class="form-check-input" type="checkbox" id="globalAllowLogin" onchange="updateStaffEditSettings()">
+                                                <label class="form-check-label" for="globalAllowLogin">Allow all staff users to login to the system</label>
+                                            </div>
                                             <small class="text-muted" id="staffEditSettingsStatus"></small>
                                         </div>
                                     </div>
@@ -2683,8 +2687,10 @@
                 const data = await res.json();
                 const rankCb = document.getElementById('globalAllowEditRank');
                 const doppCb = document.getElementById('globalAllowEditDopp');
+                const loginCb = document.getElementById('globalAllowLogin');
                 if (rankCb) rankCb.checked = !!data.allow_edit_rank;
                 if (doppCb) doppCb.checked = !!data.allow_edit_dopp;
+                if (loginCb) loginCb.checked = !!data.allow_login;
             } catch (e) { console.error(e); }
         }
 
@@ -2692,10 +2698,12 @@
             if (role !== 'super_admin') return;
             const rankCb = document.getElementById('globalAllowEditRank');
             const doppCb = document.getElementById('globalAllowEditDopp');
+            const loginCb = document.getElementById('globalAllowLogin');
             const statusEl = document.getElementById('staffEditSettingsStatus');
             const payload = {
                 allow_edit_rank: rankCb && rankCb.checked,
-                allow_edit_dopp: doppCb && doppCb.checked
+                allow_edit_dopp: doppCb && doppCb.checked,
+                allow_login: loginCb && loginCb.checked
             };
             try {
                 if (statusEl) statusEl.textContent = "Saving...";
