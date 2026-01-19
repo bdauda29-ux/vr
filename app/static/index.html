@@ -689,7 +689,6 @@
                                             <th>Action</th>
                                             <th>Target</th>
                                             <th>Details</th>
-                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="auditTableBody"></tbody>
@@ -3383,26 +3382,11 @@
                     tbody.innerHTML = '';
                     logs.forEach(l => {
                         const tr = document.createElement('tr');
-                        let actionsHtml = '';
-                        let reqId = null;
-                        if (l.details) {
-                            const m = String(l.details).match(/EDIT_REQUEST_ID=(\d+)/);
-                            if (m) {
-                                reqId = parseInt(m[1], 10);
-                            }
-                        }
-                        if (l.action === 'UPDATE_REQUEST' && reqId) {
-                            actionsHtml = `
-                                <button class="btn btn-sm btn-success me-1" onclick="approveEditRequest(${reqId})">Approve</button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="rejectEditRequest(${reqId})">Reject</button>
-                            `;
-                        }
                         tr.innerHTML = `
                             <td>${new Date(l.timestamp).toLocaleString()}</td>
                             <td>${l.action}</td>
                             <td>${l.target}</td>
                             <td>${l.details || ''}</td>
-                            <td>${actionsHtml}</td>
                         `;
                         tbody.appendChild(tr);
                     });
