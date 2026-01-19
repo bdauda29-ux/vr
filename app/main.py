@@ -708,7 +708,7 @@ def update_staff(staff_id: int):
                 if "dopp" in data and data["dopp"] != existing.dopp and not getattr(existing, "allow_edit_dopp", 0):
                     return jsonify({"detail": "Permission denied: Cannot change dopp"}), 403
             
-            # Create Edit Request instead of direct update
+            # Create or Update Edit Request instead of direct update
             json_data = {}
             for k, v in data.items():
                 if isinstance(v, (date, datetime)):
@@ -716,20 +716,44 @@ def update_staff(staff_id: int):
                 else:
                     json_data[k] = v
             
-            req = models.StaffEditRequest(
-                staff_id=existing.id,
-                data=json.dumps(json_data),
-                status="pending"
+            # Check for existing pending request
+            stmt = select(models.StaffEditRequest).where(
+                models.StaffEditRequest.staff_id == existing.id,
+                models.StaffEditRequest.status == "pending"
             )
-            db.add(req)
-            db.commit()
-            crud.create_audit_log(
-                db,
-                "UPDATE_REQUEST",
-                f"Staff: {existing.nis_no}",
-                f"EDIT_REQUEST_ID={req.id}"
-            )
-            return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
+            existing_req = db.scalar(stmt)
+
+            if existing_req:
+                # Merge new changes into existing request
+                current_data = json.loads(existing_req.data)
+                current_data.update(json_data)
+                existing_req.data = json.dumps(current_data)
+                # Update timestamp to show latest activity
+                existing_req.created_at = func.now()
+                
+                db.commit()
+                crud.create_audit_log(
+                    db,
+                    "UPDATE_REQUEST_APPEND",
+                    f"Staff: {existing.nis_no}",
+                    f"Appended to EDIT_REQUEST_ID={existing_req.id}"
+                )
+                return jsonify({"detail": "Update appended to pending request", "status": "pending_approval"}), 202
+            else:
+                req = models.StaffEditRequest(
+                    staff_id=existing.id,
+                    data=json.dumps(json_data),
+                    status="pending"
+                )
+                db.add(req)
+                db.commit()
+                crud.create_audit_log(
+                    db,
+                    "UPDATE_REQUEST",
+                    f"Staff: {existing.nis_no}",
+                    f"EDIT_REQUEST_ID={req.id}"
+                )
+                return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
         
 
         try:
