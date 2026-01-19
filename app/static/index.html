@@ -3565,8 +3565,105 @@
                 body.innerHTML = '';
                 const entries = Object.entries(r.data || {});
 
+                const fieldLabels = {
+                    nis_no: "NIS No",
+                    surname: "Surname",
+                    other_names: "Other Names",
+                    rank: "Rank",
+                    gender: "Gender",
+                    dob: "Date of Birth",
+                    phone_no: "Phone Number",
+                    email: "Email",
+                    qualification: "Qualification",
+                    office: "Office",
+                    state_id: "State",
+                    lga_id: "LGA",
+                    home_town: "Home Town",
+                    next_of_kin: "Next of Kin",
+                    nok_phone: "NoK Phone",
+                    remark: "Remarks",
+                    dofa: "Date of First Appt",
+                    dopa: "Date of Present Appt",
+                    dopp: "Date of Present Posting",
+                    exit_date: "Exit Date",
+                    out_request_date: "Exit Request Date",
+                    exit_mode: "Exit Mode",
+                    allow_edit_rank: "Allow Edit Rank",
+                    allow_edit_dopp: "Allow Edit Dopp"
+                };
+
+                function getFieldLabel(key) {
+                    return fieldLabels[key] || key;
+                }
+
+                let statesList = (typeof allStates !== 'undefined') ? allStates : [];
+                if (!Array.isArray(statesList) || statesList.length === 0) {
+                    try {
+                        const res = await fetch(`${API_URL}/states`);
+                        if (res.ok) {
+                            statesList = await res.json();
+                            // Update global allStates if possible, but keep local safe
+                            if (typeof allStates !== 'undefined') allStates = statesList;
+                        }
+                    } catch (e) {
+                        console.error("Failed to fetch states", e);
+                        statesList = [];
+                    }
+                }
+
+                const stateNameMap = {};
+                if (Array.isArray(statesList)) {
+                    statesList.forEach(st => {
+                        if (st && typeof st.id !== 'undefined') {
+                            stateNameMap[st.id] = st.name;
+                        }
+                    });
+                }
+
+                const lgaNameMap = {};
+                const stateIdsForLgas = new Set();
+                if (staff && staff.state && staff.state.id) {
+                    stateIdsForLgas.add(staff.state.id);
+                }
+                entries.forEach(([k, v]) => {
+                    if (k === 'state_id' && v) {
+                        const idNum = typeof v === 'number' ? v : parseInt(String(v), 10);
+                        if (!isNaN(idNum)) {
+                            stateIdsForLgas.add(idNum);
+                        }
+                    }
+                });
+
+                for (const stateId of stateIdsForLgas) {
+                    try {
+                        const res = await fetch(`${API_URL}/states/${stateId}/lgas`);
+                        if (res.ok) {
+                            const lgas = await res.json();
+                            lgas.forEach(l => {
+                                if (l && typeof l.id !== 'undefined') {
+                                    lgaNameMap[l.id] = l.name;
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+
                 function normalizeValue(key, value) {
                     if (value === null || value === undefined) return '';
+                    if (key === 'state_id') {
+                        const idNum = typeof value === 'number' ? value : parseInt(String(value), 10);
+                        if (!isNaN(idNum) && stateNameMap[idNum]) {
+                            return stateNameMap[idNum];
+                        }
+                    }
+                    if (key === 'lga_id') {
+                        const idNum = typeof value === 'number' ? value : parseInt(String(value), 10);
+                        if (!isNaN(idNum) && lgaNameMap[idNum]) {
+                            return lgaNameMap[idNum];
+                        }
+                    }
                     if (typeof value === 'boolean') return value ? '1' : '0';
                     if (typeof value === 'number') return String(value);
                     let s = String(value).trim();
@@ -3591,6 +3688,11 @@
                         return;
                     }
                     let currentVal = staff[k];
+                    if (k === 'state_id' && staff.state && typeof staff.state.id !== 'undefined') {
+                        currentVal = staff.state.id;
+                    } else if (k === 'lga_id' && staff.lga && typeof staff.lga.id !== 'undefined') {
+                        currentVal = staff.lga.id;
+                    }
                     if (currentVal && typeof currentVal === 'object') {
                         if ('id' in currentVal) {
                             currentVal = currentVal.id;
@@ -3614,7 +3716,8 @@
                         const tr = document.createElement('tr');
                         const oldDisplay = normalizeValue(k, oldVal);
                         const newDisplay = normalizeValue(k, newVal);
-                        tr.innerHTML = `<td>${k}</td><td>${oldDisplay}</td><td>${newDisplay}</td>`;
+                        const label = getFieldLabel(k);
+                        tr.innerHTML = `<td>${label}</td><td>${oldDisplay}</td><td>${newDisplay}</td>`;
                         body.appendChild(tr);
                     });
                 }
