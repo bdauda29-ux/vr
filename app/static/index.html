@@ -1439,6 +1439,11 @@
                 await fetchStates();
                 await loadOffices(); // For dropdown
 
+                // Pre-fetch office info for admin
+                if (role === 'office_admin') {
+                    await fetchUserOffice();
+                }
+
                 // Init Modals
                 const outEl = document.getElementById('outModal');
                 if (outEl) outModal = new bootstrap.Modal(outEl);
@@ -1644,7 +1649,10 @@
                 });
                 if(res.ok) {
                     const data = await res.json();
-                    currentOfficeName = data.office_name;
+                    if (data.office_name) {
+                        currentOfficeName = data.office_name;
+                        console.log("Office Admin Office:", currentOfficeName);
+                    }
                 }
             } catch(e) { console.error("Failed to fetch office info", e); }
         }
@@ -1656,6 +1664,12 @@
                 });
                 if(res.ok) {
                     const data = await res.json();
+                    
+                    // Update global office name if office admin
+                    if (role === 'office_admin' && data.office_name) {
+                        currentOfficeName = data.office_name;
+                    }
+
                     const card1Title = document.getElementById('dash-card1-title');
                     const card2Title = document.getElementById('dash-card2-title');
                     const card2Text = document.getElementById('dash-card2-text');
