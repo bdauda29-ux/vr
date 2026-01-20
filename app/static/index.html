@@ -3179,6 +3179,9 @@
                 document.getElementById('staffForm').reset();
                 document.getElementById('staffId').value = '';
                 document.getElementById('formTitle').textContent = "Add New Personnel";
+
+                // Ensure office field is enabled by default for new entries
+                document.getElementById('office').disabled = false;
             }
 
             // If office admin, pre-select office
@@ -3505,16 +3508,19 @@
 
                 data.forEach((r, idx) => {
                     editRequestsCache[r.id] = r;
-                    const changes = Object.entries(r.data || {})
+                    const changesObj = r.data || {};
+                    const changeCount = Object.keys(changesObj).length;
+                    const changesDetails = Object.entries(changesObj)
                         .map(([k, v]) => `${k}: ${v}`)
                         .join(', ');
+
                     bodies.forEach(tb => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td>${idx + 1}</td>
                             <td>${r.staff_nis}</td>
                             <td>${r.staff_name}</td>
-                            <td class="text-truncate" style="max-width: 320px;" title="${changes}">${changes}</td>
+                            <td class="text-truncate" style="max-width: 320px;" title="${changesDetails}">${changeCount} change${changeCount !== 1 ? 's' : ''}</td>
                             <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-secondary" onclick="openEditRequestModal(${r.id})">View</button>
