@@ -122,7 +122,6 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="#" onclick="showPersonnelTab('list-tab')">Personnel List</a></li>
-                            <li><a class="dropdown-item" href="#" onclick="showPersonnelTab('form-tab')">Add New</a></li>
                             <li><a class="dropdown-item admin-only" href="#" onclick="showPersonnelTab('import-tab')">Bulk Import</a></li>
                             <li><a class="dropdown-item admin-only super-only" href="#" onclick="showPersonnelTab('privileges-tab')">Privileges</a></li>
                             <li><a class="dropdown-item admin-only" href="#" onclick="showPersonnelTab('password-reset-tab')">Password Reset</a></li>
@@ -1651,6 +1650,7 @@
                     const data = await res.json();
                     if (data.office_name) {
                         currentOfficeName = data.office_name;
+                        localStorage.setItem('adminOfficeName', currentOfficeName);
                         console.log("Office Admin Office:", currentOfficeName);
                     }
                 }
@@ -1668,6 +1668,7 @@
                     // Update global office name if office admin
                     if (role === 'office_admin' && data.office_name) {
                         currentOfficeName = data.office_name;
+                        localStorage.setItem('adminOfficeName', currentOfficeName);
                     }
 
                     const card1Title = document.getElementById('dash-card1-title');
@@ -3200,18 +3201,37 @@
 
             // If office admin, pre-select office
             if (role === 'office_admin') {
-                if (!currentOfficeName) await fetchUserOffice();
+                const officeSel = document.getElementById('office');
+                
+                // Try to get office from global or local storage
+                if (!currentOfficeName) {
+                    currentOfficeName = localStorage.getItem('adminOfficeName');
+                }
+                
+                if (!currentOfficeName) {
+                     await fetchUserOffice();
+                }
                 
                 if (currentOfficeName) {
-                    const officeSel = document.getElementById('office');
                     // Add option if not exists
-                    if(!Array.from(officeSel.options).some(o=>o.value===currentOfficeName)) {
-                        officeSel.add(new Option(currentOfficeName, currentOfficeName));
+                    let opt = Array.from(officeSel.options).find(o => o.value === currentOfficeName);
+                    if (!opt) {
+                        opt = new Option(currentOfficeName, currentOfficeName);
+                        officeSel.add(opt);
                     }
                     if (!isEdit) {
                         officeSel.value = currentOfficeName;
                     }
                     officeSel.disabled = true;
+                } else {
+                    console.warn("Could not determine office for Office Admin");
+                    // Optionally alert user or keep enabled?
+                    // user requested read only, but if empty, they can't submit.
+                    // keeping it enabled might be safer if logic fails.
+                    // But to respect "read only", we should probably disable it if we are sure they are admin.
+                    // But if it's empty, it's useless.
+                    // Let's alert.
+                    // alert("System could not retrieve your assigned office. Please contact support.");
                 }
             }
         }
