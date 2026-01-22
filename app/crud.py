@@ -35,8 +35,9 @@ def list_staff(
     offset: int = 0,
     exit_from=None,
     exit_to=None,
-    organization_id: Optional[int] = None
-) -> List[models.Staff]:
+    organization_id: Optional[int] = None,
+    include_count: bool = False
+) -> Union[List[models.Staff], Tuple[List[models.Staff], int]]:
     # Build Rank Sorting Logic
     # We want to sort by Rank (Custom Order), then DOPA (Date of Present Appointment), then NIS No
     
@@ -50,22 +51,7 @@ def list_staff(
         else_=999
     )
     
-    if status == "exited" and dopp_order in ("asc", "desc"):
-        stmt = select(models.Staff).order_by(
-            models.Staff.exit_date.asc() if dopp_order == "asc" else models.Staff.exit_date.desc(),
-            models.Staff.nis_no
-        ).offset(offset).limit(limit)
-    elif dopp_order in ("asc", "desc"):
-        stmt = select(models.Staff).order_by(
-            models.Staff.dopp.asc() if dopp_order == "asc" else models.Staff.dopp.desc(),
-            models.Staff.nis_no
-        ).offset(offset).limit(limit)
-    else:
-        stmt = select(models.Staff).order_by(
-            rank_sort, 
-            models.Staff.dopa.asc(),
-            models.Staff.nis_no
-        ).offset(offset).limit(limit)
+    stmt = select(models.Staff)
     
     if status == "active":
         stmt = stmt.where(models.Staff.exit_date.is_(None))
@@ -124,7 +110,38 @@ def list_staff(
                 models.Staff.office.ilike(like),
             )
         )
-    return list(db.scalars(stmt))
+
+    total_count = 0
+    if include_count:
+        # Clone query for count
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_count = db.scalar(count_stmt) or 0
+
+    # Apply sorting
+    if status == "exited" and dopp_order in ("asc", "desc"):
+        stmt = stmt.order_by(
+            models.Staff.exit_date.asc() if dopp_order == "asc" else models.Staff.exit_date.desc(),
+            models.Staff.nis_no
+        )
+    elif dopp_order in ("asc", "desc"):
+        stmt = stmt.order_by(
+            models.Staff.dopp.asc() if dopp_order == "asc" else models.Staff.dopp.desc(),
+            models.Staff.nis_no
+        )
+    else:
+        stmt = stmt.order_by(
+            rank_sort, 
+            models.Staff.dopa.asc(),
+            models.Staff.nis_no
+        )
+    
+    stmt = stmt.offset(offset).limit(limit)
+    
+    items = list(db.scalars(stmt))
+    
+    if include_count:
+        return items, total_count
+    return items
 
 def create_staff(db: Session, data: dict) -> models.Staff:
     exists = get_staff_by_nis(db, data["nis_no"])

@@ -768,7 +768,7 @@ def list_staff_endpoint():
         exit_to_raw = request.args.get("exit_to")
         exit_from = parse_date_value(exit_from_raw) if exit_from_raw else None
         exit_to = parse_date_value(exit_to_raw) if exit_to_raw else None
-        limit = request.args.get("limit", 100, type=int)
+        limit = request.args.get("limit", 50, type=int)
         offset = request.args.get("offset", 0, type=int)
         
         organization_id = user.get("organization_id")
@@ -782,9 +782,9 @@ def list_staff_endpoint():
         with next(get_db()) as db:
             if user["role"] == "office_admin":
                 staff_user = crud.get_staff(db, user["id"])
-                if not staff_user or not staff_user.office: return jsonify([]), 200
+                if not staff_user or not staff_user.office: return jsonify({"items": [], "total": 0}), 200
                 office = [staff_user.office]
-            items = crud.list_staff(
+            items, total_count = crud.list_staff(
                 db,
                 q=q,
                 state_id=state_id,
@@ -798,9 +798,15 @@ def list_staff_endpoint():
                 offset=offset,
                 exit_from=exit_from,
                 exit_to=exit_to,
-                organization_id=organization_id
+                organization_id=organization_id,
+                include_count=True
             )
-            return jsonify([schemas.to_dict_staff(item) for item in items])
+            return jsonify({
+                "items": [schemas.to_dict_staff(item) for item in items],
+                "total": total_count,
+                "limit": limit,
+                "offset": offset
+            })
     except Exception as e:
         import traceback
         traceback.print_exc()

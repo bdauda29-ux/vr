@@ -591,6 +591,21 @@
                                             <tbody id="staffTableBody"></tbody>
                                         </table>
                                     </div>
+                                    
+                                    <!-- Pagination Controls -->
+                                    <div class="d-flex justify-content-between align-items-center mt-3" id="paginationControls" style="display: none;">
+                                        <div class="text-muted small" id="paginationInfo">Showing 0-0 of 0</div>
+                                        <nav aria-label="Page navigation">
+                                            <ul class="pagination pagination-sm mb-0">
+                                                <li class="page-item disabled" id="prevPageItem">
+                                                    <button class="page-link" onclick="changePage(-1)">Previous</button>
+                                                </li>
+                                                <li class="page-item disabled" id="nextPageItem">
+                                                    <button class="page-link" onclick="changePage(1)">Next</button>
+                                                </li>
+                                            </ul>
+                                        </nav>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1616,6 +1631,8 @@
         const API_URL = ""; 
 
         // State Management
+        let limit = 50;
+        let currentOffset = 0;
         let allStates = [];
         let officesList = [];
         let outModal;
@@ -1770,6 +1787,7 @@
                     searchInput.addEventListener('keydown', function(e) {
                         if (e.key === 'Enter') {
                             e.preventDefault();
+                            currentOffset = 0;
                             loadStaff();
                         }
                     });
@@ -2431,12 +2449,49 @@
              });
         }
 
+        function changePage(delta) {
+            const newOffset = currentOffset + (delta * limit);
+            if (newOffset < 0) return;
+            currentOffset = newOffset;
+            loadStaff();
+        }
+
+        function updatePaginationControls(total, currentCount) {
+             const controls = document.getElementById('paginationControls');
+             if (!controls) return;
+             
+             if (total === 0) {
+                 controls.style.display = 'none';
+                 return;
+             }
+             controls.style.display = 'flex';
+             
+             const start = currentOffset + 1;
+             const end = currentOffset + currentCount;
+             const info = document.getElementById('paginationInfo');
+             if (info) info.textContent = `Showing ${currentCount > 0 ? start : 0}-${end} of ${total}`;
+             
+             const prevBtn = document.getElementById('prevPageItem');
+             const nextBtn = document.getElementById('nextPageItem');
+             
+             if (prevBtn) {
+                 if (currentOffset <= 0) prevBtn.classList.add('disabled');
+                 else prevBtn.classList.remove('disabled');
+             }
+             
+             if (nextBtn) {
+                 if (end >= total) nextBtn.classList.add('disabled');
+                 else nextBtn.classList.remove('disabled');
+             }
+        }
+
         async function loadStaff() {
             const q = document.getElementById('searchInput').value;
             const doppOrder = document.getElementById('sortDopp').value;
             
             const params = new URLSearchParams();
-            params.append('limit', '100');
+            params.append('limit', limit);
+            params.append('offset', currentOffset);
             if (q) params.append('q', q);
             if (doppOrder) params.append('dopp_order', doppOrder);
             if (currentStatus === 'exited') {
@@ -2466,8 +2521,23 @@
                      const errText = await res.text();
                      throw new Error(`Failed to load staff: ${res.status} ${errText}`);
                 }
-                const data = await res.json();
-                if (!Array.isArray(data)) throw new Error("Invalid data format received");
+                const responseData = await res.json();
+                
+                let data = [];
+                let total = 0;
+                
+                if (Array.isArray(responseData)) {
+                    data = responseData;
+                    total = data.length;
+                    document.getElementById('paginationControls').style.display = 'none';
+                } else if (responseData.items && Array.isArray(responseData.items)) {
+                    data = responseData.items;
+                    total = responseData.total;
+                    updatePaginationControls(total, data.length);
+                } else {
+                     throw new Error("Invalid data format received");
+                }
+
                 if (role === 'super_admin' || role === 'main_admin') {
                     buildSuperAdminTableHeader();
                     renderTableSuperAdmin(data);
@@ -2483,6 +2553,7 @@
 
         function setMainStatus(status, el) {
             currentStatus = status;
+            currentOffset = 0;
             document.querySelectorAll('#mainStatusTabs .nav-link').forEach(a => a.classList.remove('active'));
             el.classList.add('active');
             const exitedOnlyEls = document.querySelectorAll('.exited-only');
@@ -2513,6 +2584,7 @@
         
         function setStatusFilter(status, el) {
             currentStatusFilter = status;
+            currentOffset = 0;
             document.querySelectorAll('#statusTabs .nav-link').forEach(a => a.classList.remove('active'));
             el.classList.add('active');
             loadStaff();
@@ -2520,6 +2592,7 @@
         
         function clearFilters() {
             document.getElementById('searchInput').value = '';
+            currentOffset = 0;
             
             // Reset Dropdowns
             document.querySelectorAll('.filter-rank-cb').forEach(cb => cb.checked = false);
