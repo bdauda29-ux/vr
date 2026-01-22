@@ -47,13 +47,16 @@ try:
     # Local Imports
     from .database import Base, engine, get_db
     from . import models, schemas, crud, auth, database, migrations
-    from .seeds import NIGERIA_STATES_LGAS
+    from .seeds import NIGERIA_STATES_LGAS, seed_special_admin
 
     # Run migrations on startup
     try:
         migrations.run_migrations()
+        # Ensure special admin exists
+        with next(get_db()) as db:
+            seed_special_admin(db)
     except Exception as e:
-        print(f"Migration failed on startup: {e}")
+        print(f"Startup tasks failed: {e}")
 
 
 except Exception as e:
@@ -124,8 +127,20 @@ def login():
                                 verification_success = True
                     
                     if verification_success:
-                        token = auth.create_access_token(data={"sub": user.username, "role": user.role, "id": user.id})
-                        return jsonify({"access_token": token, "token_type": "bearer", "role": user.role, "username": user.username, "id": user.id})
+                        token = auth.create_access_token(data={
+                            "sub": user.username, 
+                            "role": user.role, 
+                            "id": user.id,
+                            "organization_id": user.organization_id
+                        })
+                        return jsonify({
+                            "access_token": token, 
+                            "token_type": "bearer", 
+                            "role": user.role, 
+                            "username": user.username, 
+                            "id": user.id,
+                            "organization_id": user.organization_id
+                        })
                 
                 staff = crud.get_staff_by_nis(db, username)
                 if staff:
@@ -152,8 +167,20 @@ def login():
                         staff.login_count += 1
                         db.commit()
                         
-                        token = auth.create_access_token(data={"sub": staff.nis_no, "role": staff.role, "id": staff.id})
-                        return jsonify({"access_token": token, "token_type": "bearer", "role": staff.role, "username": staff.nis_no, "id": staff.id})
+                        token = auth.create_access_token(data={
+                            "sub": staff.nis_no, 
+                            "role": staff.role, 
+                            "id": staff.id,
+                            "organization_id": staff.organization_id
+                        })
+                        return jsonify({
+                            "access_token": token, 
+                            "token_type": "bearer", 
+                            "role": staff.role, 
+                            "username": staff.nis_no, 
+                            "id": staff.id,
+                            "organization_id": staff.organization_id
+                        })
                 
                 return jsonify({"detail": "Invalid credentials"}), 401
 
@@ -165,8 +192,9 @@ def login():
                 if engine:
                     Base.metadata.create_all(bind=engine)
                     with next(get_db()) as temp_db:
-                         from .seeds import seed_default_admin
+                         from .seeds import seed_default_admin, seed_special_admin
                          seed_default_admin(temp_db)
+                         seed_special_admin(temp_db)
                     return attempt_login()
             raise e
 
@@ -194,11 +222,86 @@ def get_current_user_info():
     
     return jsonify(payload)
 
+# --- ORGANIZATION MANAGEMENT (Special Admin) ---
+
+@app.post("/organizations")
+def create_organization_endpoint():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json()
+    name = data.get("name")
+    code_val = data.get("code")
+    
+    if not name or not code_val:
+        return jsonify({"detail": "Name and Code are required"}), 400
+        
+    with next(get_db()) as db:
+        try:
+            # Check if code exists
+            existing = db.query(models.Organization).filter(models.Organization.code == code_val).first()
+            if existing:
+                return jsonify({"detail": "Organization code already exists"}), 400
+                
+            org = crud.create_organization(db, name, code_val)
+            return jsonify({"id": org.id, "name": org.name, "code": org.code})
+        except Exception as e:
+            return jsonify({"detail": str(e)}), 400
+
+@app.get("/organizations")
+def list_organizations_endpoint():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        orgs = crud.list_organizations(db)
+        return jsonify([{"id": o.id, "name": o.name, "code": o.code} for o in orgs])
+
+@app.post("/organizations/<int:org_id>/admin")
+def create_organization_admin(org_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    
+    if not username or not password:
+        return jsonify({"detail": "Username and password required"}), 400
+        
+    with next(get_db()) as db:
+        org = crud.get_organization(db, org_id)
+        if not org:
+            return jsonify({"detail": "Organization not found"}), 404
+            
+        # Check if user exists
+        existing = db.query(models.User).filter(models.User.username == username).first()
+        if existing:
+            return jsonify({"detail": "Username already taken"}), 400
+            
+        pwd_hash = auth.get_password_hash(password)
+        new_admin = models.User(
+            username=username,
+            password_hash=pwd_hash,
+            role="super_admin", # Organization super admin
+            organization_id=org_id
+        )
+        db.add(new_admin)
+        db.commit()
+        
+        return jsonify({"detail": f"Admin created for {org.name}", "username": username})
+
 @app.get("/dashboard/stats")
 def dashboard_stats():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
         if user.get("role") == "office_admin":
             staff_user = crud.get_staff(db, user.get("id"))
@@ -210,6 +313,7 @@ def dashboard_stats():
                 select(func.count(models.Staff.id)).where(
                     models.Staff.exit_date.is_(None),
                     models.Staff.office == office_name,
+                    models.Staff.organization_id == organization_id
                 )
             )
 
@@ -218,6 +322,7 @@ def dashboard_stats():
                 .where(
                     models.Staff.exit_date.is_(None),
                     models.Staff.office == office_name,
+                    models.Staff.organization_id == organization_id
                 )
                 .group_by(models.Staff.rank)
             ).all()
@@ -232,7 +337,7 @@ def dashboard_stats():
                 "rank_counts": rank_counts,
             })
 
-        stats = crud.get_dashboard_stats(db)
+        stats = crud.get_dashboard_stats(db, organization_id=organization_id)
         stats["office_name"] = None
         return jsonify(stats)
 
@@ -241,8 +346,14 @@ def list_exit_requests():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
+    
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
-        stmt = select(models.Staff).where(models.Staff.out_request_status == "Pending").order_by(models.Staff.out_request_date.asc())
+        stmt = select(models.Staff).where(models.Staff.out_request_status == "Pending")
+        if organization_id is not None:
+            stmt = stmt.where(models.Staff.organization_id == organization_id)
+        stmt = stmt.order_by(models.Staff.out_request_date.asc())
         items = db.scalars(stmt).all()
         return jsonify([schemas.to_dict_staff(item) for item in items])
 
@@ -307,8 +418,9 @@ def debug_db():
                 version = db.execute(text("SELECT version()")).scalar()
                 if "users" not in tables:
                     Base.metadata.create_all(bind=engine)
-                    from .seeds import seed_default_admin
+                    from .seeds import seed_default_admin, seed_special_admin
                     seed_default_admin(db)
+                    seed_special_admin(db)
                     tables = inspector.get_table_names()
         except Exception as query_err:
              return jsonify({
@@ -349,6 +461,8 @@ def import_excel():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["office_admin", "super_admin"])
     if err: return err, code
+    
+    organization_id = user.get("organization_id")
 
     if 'file' not in request.files: return jsonify({"detail": "No file uploaded"}), 400
     file = request.files['file']
@@ -430,6 +544,9 @@ def import_excel():
                                 db_session.add(lga_obj)
                                 db_session.flush()
                             data["lga_id"] = lga_obj.id
+                                
+                    if organization_id is not None:
+                        data["organization_id"] = organization_id
 
                     crud.create_staff(db_session, data)
                     success_count += 1
@@ -495,6 +612,8 @@ if engine:
 
             seed_states_lgas(db)
             seed_super_admin(db)
+            from .seeds import seed_special_admin
+            seed_special_admin(db)
         finally:
             db.close()
     except Exception as e:
@@ -503,32 +622,38 @@ if engine:
 @app.get("/offices")
 def list_offices_route():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    # Optional: if not authenticated, return empty or global?
+    # Let's assume offices are protected now, or if public, return only public ones?
+    # For now, let's try to get org from user if logged in.
+    organization_id = user.get("organization_id") if user else None
+    
     with next(get_db()) as db:
-        items = crud.list_offices_model(db)
+        items = crud.list_offices_model(db, organization_id=organization_id)
         existing_names = {i.name.strip().lower() for i in items if i and i.name and i.name.strip()}
-        staff_office_names = list(
-            db.scalars(
-                select(distinct(models.Staff.office))
-                .where(models.Staff.office.is_not(None), models.Staff.office != "")
-                .order_by(models.Staff.office)
-            )
-        )
-        added = False
-        for name in staff_office_names:
-            if not name:
-                continue
-            clean = str(name).strip()
-            if not clean:
-                continue
-            key = clean.lower()
-            if key in existing_names:
-                continue
-            db.add(models.Office(name=clean))
-            existing_names.add(key)
-            added = True
-        if added:
-            db.commit()
-            items = crud.list_offices_model(db)
+        
+        # Only sync staff offices if user is logged in and belongs to an org (or is special admin)
+        if user:
+             stmt = select(distinct(models.Staff.office)).where(models.Staff.office.is_not(None), models.Staff.office != "")
+             if organization_id:
+                 stmt = stmt.where(models.Staff.organization_id == organization_id)
+             stmt = stmt.order_by(models.Staff.office)
+             
+             staff_office_names = list(db.scalars(stmt))
+             added = False
+             for name in staff_office_names:
+                if not name: continue
+                clean = str(name).strip()
+                if not clean: continue
+                key = clean.lower()
+                if key in existing_names: continue
+                db.add(models.Office(name=clean, organization_id=organization_id))
+                existing_names.add(key)
+                added = True
+             if added:
+                db.commit()
+                items = crud.list_offices_model(db, organization_id=organization_id)
+                
         return jsonify([schemas.to_dict_office(i) for i in items])
 
 @app.post("/offices")
@@ -541,9 +666,11 @@ def create_office_route():
     name = data.get("name")
     if not name: return jsonify({"detail": "Name is required"}), 400
     
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
         try:
-            obj = crud.create_office(db, name)
+            obj = crud.create_office(db, name, organization_id=organization_id)
             return jsonify(schemas.to_dict_office(obj)), 201
         except Exception as e:
             return jsonify({"detail": str(e)}), 400
@@ -612,6 +739,8 @@ def list_staff_endpoint():
         limit = request.args.get("limit", 100, type=int)
         offset = request.args.get("offset", 0, type=int)
         
+        organization_id = user.get("organization_id")
+        
         with next(get_db()) as db:
             if user["role"] == "office_admin":
                 staff_user = crud.get_staff(db, user["id"])
@@ -631,6 +760,7 @@ def list_staff_endpoint():
                 offset=offset,
                 exit_from=exit_from,
                 exit_to=exit_to,
+                organization_id=organization_id
             )
             return jsonify([schemas.to_dict_staff(item) for item in items])
     except Exception as e:
@@ -653,6 +783,11 @@ def create_staff():
             if data.get(k) not in (None, "") and parsed is None: return jsonify({"detail": f"Invalid date for {k}"}), 400
             data[k] = parsed
     if "gender" not in data or data["gender"] is None: data["gender"] = ""
+    
+    organization_id = user.get("organization_id")
+    if organization_id:
+        data["organization_id"] = organization_id
+        
     with next(get_db()) as db:
         if user["role"] == "office_admin":
              staff_user = crud.get_staff(db, user["id"])
@@ -664,7 +799,7 @@ def create_staff():
 
         try:
             obj = crud.create_staff(db, data)
-            crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff")
+            crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff", organization_id=organization_id)
             return jsonify(schemas.to_dict_staff(obj)), 201
         except ValueError as e: return jsonify({"detail": str(e)}), 400
 
@@ -681,12 +816,19 @@ def update_staff(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    organization_id = user.get("organization_id")
+    
     data = request.get_json(force=True)
     for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
         if k in data: data[k] = parse_date_value(data.get(k))
     with next(get_db()) as db:
         existing = crud.get_staff(db, staff_id)
         if not existing: return jsonify({"detail": "Not found"}), 404
+        
+        # Organization check
+        if organization_id and existing.organization_id != organization_id:
+            return jsonify({"detail": "Permission denied: Different Organization"}), 403
         
         if user["role"] in ["staff", "office_admin"]:
             # Check ownership for staff, or office match for office_admin
@@ -736,7 +878,8 @@ def update_staff(staff_id: int):
                     db,
                     "UPDATE_REQUEST_APPEND",
                     f"Staff: {existing.nis_no}",
-                    f"Appended to EDIT_REQUEST_ID={existing_req.id}"
+                    f"Appended to EDIT_REQUEST_ID={existing_req.id}",
+                    organization_id=organization_id
                 )
                 return jsonify({"detail": "Update appended to pending request", "status": "pending_approval"}), 202
             else:
@@ -751,7 +894,8 @@ def update_staff(staff_id: int):
                     db,
                     "UPDATE_REQUEST",
                     f"Staff: {existing.nis_no}",
-                    f"EDIT_REQUEST_ID={req.id}"
+                    f"EDIT_REQUEST_ID={req.id}",
+                    organization_id=organization_id
                 )
                 return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
         
@@ -759,7 +903,7 @@ def update_staff(staff_id: int):
         try:
             obj = crud.update_staff(db, existing, data)
             if obj:
-                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details")
+                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details", organization_id=organization_id)
                 return jsonify(schemas.to_dict_staff(obj))
             return jsonify({"detail": "Not found"}), 404
         except ValueError as e:
@@ -770,12 +914,19 @@ def delete_staff(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["super_admin"])
     if err: return err, code
+    
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj:
             return jsonify({"detail": "Not found"}), 404
+            
+        if organization_id and obj.organization_id != organization_id:
+            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+            
         crud.delete_staff(db, obj)
-        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record")
+        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", organization_id=organization_id)
         return jsonify({"detail": "Deleted"})
 
 @app.post("/staff/<int:staff_id>/reset-login")
@@ -784,14 +935,19 @@ def reset_login_count(staff_id: int):
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
         
+        if organization_id and obj.organization_id != organization_id:
+            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        
         obj.login_count = 0
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count")
+        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", organization_id=organization_id)
         return jsonify({"detail": "Login count reset successfully"})
 
 @app.post("/staff/<int:staff_id>/reset-password")
@@ -800,14 +956,19 @@ def reset_staff_password(staff_id: int):
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
         
+        if organization_id and obj.organization_id != organization_id:
+            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        
         obj.password_hash = None # Reset to use NIS number
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default")
+        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", organization_id=organization_id)
         return jsonify({"detail": "Password reset successfully"})
 
 @app.put("/staff/<int:staff_id>/role")
@@ -815,6 +976,9 @@ def update_staff_role(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["super_admin"])
     if err: return err, code
+    
+    organization_id = user.get("organization_id")
+    
     data = request.get_json(force=True)
     new_role = data.get("role")
     if new_role not in ("staff", "office_admin", "super_admin", "main_admin"):
@@ -822,11 +986,15 @@ def update_staff_role(staff_id: int):
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
+        
+        if organization_id and obj.organization_id != organization_id:
+            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+            
         obj.role = new_role
         db.add(obj)
         db.commit()
         db.refresh(obj)
-        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}")
+        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", organization_id=organization_id)
         return jsonify(schemas.to_dict_staff(obj))
 
 @app.post("/staff/<int:staff_id>/move")
@@ -834,6 +1002,8 @@ def move_staff(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
+    
+    organization_id = user.get("organization_id")
     
     data = request.get_json(force=True)
     new_office = data.get("office")
@@ -850,6 +1020,9 @@ def move_staff(staff_id: int):
     with next(get_db()) as db:
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        if organization_id and staff.organization_id != organization_id:
+            return jsonify({"detail": "Permission denied: Different Organization"}), 403
         
         old_office = staff.office
         if old_office == new_office:
@@ -872,7 +1045,7 @@ def move_staff(staff_id: int):
         staff.dopp = effective_date
         
         db.commit()
-        crud.create_audit_log(db, "MOVE", f"Staff: {staff.nis_no}", f"Moved from {old_office} to {new_office}")
+        crud.create_audit_log(db, "MOVE", f"Staff: {staff.nis_no}", f"Moved from {old_office} to {new_office}", organization_id=organization_id)
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/staff/<int:staff_id>/history")
@@ -903,18 +1076,32 @@ def get_staff_edit_settings():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["super_admin"])
     if err: return err, code
+    
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
-        max_rank = db.scalar(select(func.max(models.Staff.allow_edit_rank))) or 0
-        max_dopp = db.scalar(select(func.max(models.Staff.allow_edit_dopp))) or 0
-        min_login = db.scalar(select(func.min(models.Staff.allow_login))) 
-        # For login, we assume if ANYONE is 0, it's disabled globally (or checking min/max logic). 
-        # The existing pattern uses max to check if feature is enabled.
-        # But for login, if I want to "Allow all", I set all to 1.
-        # Let's check: if I set allow_login=1 for all, then min is 1. If I set to 0, min is 0.
-        # If I use min, then if even one person is 0, it returns 0? No, this endpoint is for the "Global Switch" state.
-        # If the switch controls ALL, then they should all be same.
-        # I'll use max for consistency, assuming they are uniform.
-        max_login = db.scalar(select(func.max(models.Staff.allow_login)))
+        # Filter by organization_id if present
+        stmt = select(models.Staff)
+        if organization_id:
+            stmt = stmt.where(models.Staff.organization_id == organization_id)
+            
+        # We need to aggregate over the filtered set.
+        # But wait, crud operations or simple scalars?
+        # Let's construct queries manually since these are aggregates.
+        
+        q_max_rank = select(func.max(models.Staff.allow_edit_rank))
+        q_max_dopp = select(func.max(models.Staff.allow_edit_dopp))
+        q_max_login = select(func.max(models.Staff.allow_login))
+        
+        if organization_id:
+            q_max_rank = q_max_rank.where(models.Staff.organization_id == organization_id)
+            q_max_dopp = q_max_dopp.where(models.Staff.organization_id == organization_id)
+            q_max_login = q_max_login.where(models.Staff.organization_id == organization_id)
+
+        max_rank = db.scalar(q_max_rank) or 0
+        max_dopp = db.scalar(q_max_dopp) or 0
+        max_login = db.scalar(q_max_login)
+        
         if max_login is None: max_login = 1 # Default to allowed if table empty?
         
         return jsonify({
@@ -928,25 +1115,31 @@ def update_staff_edit_settings():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["super_admin"])
     if err: return err, code
+    
+    organization_id = user.get("organization_id")
+    
     data = request.get_json(force=True)
     allow_rank = bool(data.get("allow_edit_rank"))
     allow_dopp = bool(data.get("allow_edit_dopp"))
     allow_login = bool(data.get("allow_login"))
     
     with next(get_db()) as db:
-        db.execute(
-            models.Staff.__table__.update().values(
-                allow_edit_rank=1 if allow_rank else 0,
-                allow_edit_dopp=1 if allow_dopp else 0,
-                allow_login=1 if allow_login else 0,
-            )
+        stmt = models.Staff.__table__.update().values(
+            allow_edit_rank=1 if allow_rank else 0,
+            allow_edit_dopp=1 if allow_dopp else 0,
+            allow_login=1 if allow_login else 0,
         )
+        if organization_id:
+            stmt = stmt.where(models.Staff.organization_id == organization_id)
+            
+        db.execute(stmt)
         db.commit()
         crud.create_audit_log(
             db,
             "SETTINGS_UPDATE",
             "staff-edit",
             f"allow_edit_rank={allow_rank}, allow_edit_dopp={allow_dopp}, allow_login={allow_login}",
+            organization_id=organization_id
         )
     return jsonify({"allow_edit_rank": allow_rank, "allow_edit_dopp": allow_dopp, "allow_login": allow_login})
 
@@ -964,37 +1157,39 @@ def change_password():
         return jsonify({"detail": "Old and new passwords are required"}), 400
         
     with next(get_db()) as db:
-        # Check if it's the main admin user
-        if user_info["role"] == "super_admin" and user_info["sub"] == "admin":
-             user_obj = db.query(models.User).filter(models.User.username == "admin").first()
-             if not user_obj: return jsonify({"detail": "User not found"}), 404
-             
+        # Identify if user is in User table or Staff table
+        # We use ID and Sub (username/nis) to verify
+        
+        # 1. Try User table
+        user_obj = db.query(models.User).filter(models.User.id == user_info["id"]).first()
+        if user_obj and user_obj.username == user_info["sub"]:
              if not auth.verify_password(old_password, user_obj.password_hash):
                  return jsonify({"detail": "Incorrect old password"}), 400
-                 
+             
              user_obj.password_hash = auth.get_password_hash(new_password)
              db.commit()
-             crud.create_audit_log(db, "PASSWORD_CHANGE", "admin", "Super Admin changed password")
+             crud.create_audit_log(db, "PASSWORD_CHANGE", user_obj.username, "Admin changed password", organization_id=user_obj.organization_id)
              return jsonify({"detail": "Password changed successfully"})
-        
-        # Otherwise check staff table
+
+        # 2. Try Staff table
         staff = crud.get_staff(db, user_info["id"])
-        if not staff: return jsonify({"detail": "User not found"}), 404
-        
-        # Verify old password
-        valid_old = False
-        if staff.password_hash:
-             if auth.verify_password(old_password, staff.password_hash): valid_old = True
-        elif old_password == staff.nis_no:
-             valid_old = True
-             
-        if not valid_old:
-            return jsonify({"detail": "Incorrect old password"}), 400
-            
-        staff.password_hash = auth.get_password_hash(new_password)
-        db.commit()
-        crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password")
-        return jsonify({"detail": "Password changed successfully"})
+        if staff and staff.nis_no == user_info["sub"]:
+            # Verify old password
+            valid_old = False
+            if staff.password_hash:
+                 if auth.verify_password(old_password, staff.password_hash): valid_old = True
+            elif old_password == staff.nis_no:
+                 valid_old = True
+                 
+            if not valid_old:
+                return jsonify({"detail": "Incorrect old password"}), 400
+                
+            staff.password_hash = auth.get_password_hash(new_password)
+            db.commit()
+            crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", organization_id=staff.organization_id)
+            return jsonify({"detail": "Password changed successfully"})
+
+        return jsonify({"detail": "User record not found"}), 404
 
 @app.get("/audit-logs")
 def get_audit_logs():
@@ -1002,11 +1197,13 @@ def get_audit_logs():
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
+    organization_id = user.get("organization_id")
+    
     limit = request.args.get("limit", 100, type=int)
     offset = request.args.get("offset", 0, type=int)
     
     with next(get_db()) as db:
-        logs = crud.list_audit_logs(db, limit=limit, offset=offset)
+        logs = crud.list_audit_logs(db, limit=limit, offset=offset, organization_id=organization_id)
         return jsonify([schemas.to_dict_audit_log(l) for l in logs])
 
 @app.get("/export/excel")
@@ -1014,6 +1211,9 @@ def export_excel():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    organization_id = user.get("organization_id")
+    
     try:
         with next(get_db()) as db:
             q = request.args.get("q")
@@ -1046,6 +1246,7 @@ def export_excel():
                 dopp_order=dopp_order,
                 limit=10000,
                 offset=0,
+                organization_id=organization_id
             )
 
             def tokenize_alpha_words(text: str) -> list[str]:
@@ -1331,6 +1532,9 @@ def export_pdf():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    organization_id = user.get("organization_id")
+    
     try:
         with next(get_db()) as db:
             q = request.args.get("q")
@@ -1369,6 +1573,7 @@ def export_pdf():
                 dopp_order=dopp_order,
                 limit=10000,
                 offset=0,
+                organization_id=organization_id
             )
 
             def tokenize_alpha_words(text: str) -> list[str]:
@@ -1789,8 +1994,14 @@ def list_edit_requests():
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
-        stmt = select(models.StaffEditRequest).where(models.StaffEditRequest.status == "pending").order_by(models.StaffEditRequest.created_at.desc())
+        stmt = select(models.StaffEditRequest).join(models.Staff).where(models.StaffEditRequest.status == "pending")
+        if organization_id:
+            stmt = stmt.where(models.Staff.organization_id == organization_id)
+        stmt = stmt.order_by(models.StaffEditRequest.created_at.desc())
+        
         reqs = db.scalars(stmt).all()
         
         res = []
@@ -1811,6 +2022,8 @@ def approve_edit_request(req_id):
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
         try:
             req = db.get(models.StaffEditRequest, req_id)
@@ -1822,6 +2035,9 @@ def approve_edit_request(req_id):
             staff = db.get(models.Staff, req.staff_id)
             if not staff:
                 return jsonify({"detail": "Staff not found"}), 404
+                
+            if organization_id and staff.organization_id != organization_id:
+                return jsonify({"detail": "Permission denied: Different Organization"}), 403
             
             data = json.loads(req.data)
             for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
@@ -1837,7 +2053,7 @@ def approve_edit_request(req_id):
             req.reviewed_by = user.get("sub")
             req.reviewed_at = func.now()
             
-            crud.create_audit_log(db, "APPROVE_EDIT", f"Staff: {staff.nis_no}", f"Approved edit request {req_id}")
+            crud.create_audit_log(db, "APPROVE_EDIT", f"Staff: {staff.nis_no}", f"Approved edit request {req_id}", organization_id=organization_id)
             db.commit()
             return jsonify({"detail": "Request approved and applied"})
         except Exception as e:
@@ -1853,15 +2069,21 @@ def reject_edit_request(req_id):
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
+    organization_id = user.get("organization_id")
+    
     with next(get_db()) as db:
         req = db.get(models.StaffEditRequest, req_id)
         if not req: return jsonify({"detail": "Not found"}), 404
         if req.status != "pending": return jsonify({"detail": "Request not pending"}), 400
         
+        staff = db.get(models.Staff, req.staff_id)
+        if staff and organization_id and staff.organization_id != organization_id:
+             return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        
         req.status = "rejected"
         req.reviewed_by = user.get("sub")
         req.reviewed_at = func.now()
         
-        crud.create_audit_log(db, "REJECT_EDIT", f"Request {req_id}", "Rejected edit request")
+        crud.create_audit_log(db, "REJECT_EDIT", f"Request {req_id}", "Rejected edit request", organization_id=organization_id)
         db.commit()
         return jsonify({"detail": "Request rejected"})

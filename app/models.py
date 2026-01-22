@@ -10,6 +10,18 @@ class AuditLog(Base):
     target = Column(String(256), nullable=False)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     details = Column(String(512), nullable=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+
+class Organization(Base):
+    __tablename__ = "organizations"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(128), unique=True, index=True, nullable=False)
+    code = Column(String(32), unique=True, index=True, nullable=False) # e.g. 'NIS'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    users = relationship("User", back_populates="organization")
+    offices = relationship("Office", back_populates="organization")
+    staff = relationship("Staff", back_populates="organization")
 
 class State(Base):
     __tablename__ = "states"
@@ -30,12 +42,20 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(64), unique=True, index=True, nullable=False)
     password_hash = Column(String(128), nullable=False)
-    role = Column(String(32), nullable=False, default="admin") # admin, super_admin
+    role = Column(String(32), nullable=False, default="admin") # admin, super_admin, special_admin
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    organization = relationship("Organization", back_populates="users")
 
 class Office(Base):
     __tablename__ = "offices"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(128), unique=True, index=True, nullable=False)
+    name = Column(String(128), index=True, nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    organization = relationship("Organization", back_populates="offices")
+    
+    __table_args__ = (
+        UniqueConstraint('name', 'organization_id', name='uq_office_name_org'),
+    )
 
 class Staff(Base):
     __tablename__ = "staff"
@@ -77,6 +97,8 @@ class Staff(Base):
     lga = relationship("LGA")
     leaves = relationship("Leave", back_populates="staff", cascade="all, delete-orphan")
     posting_history = relationship("PostingHistory", back_populates="staff", cascade="all, delete-orphan")
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    organization = relationship("Organization", back_populates="staff")
 
 class Leave(Base):
     __tablename__ = "leaves"

@@ -60,3 +60,25 @@ def seed_default_admin(db):
         print("Default admin created: admin / admin123")
     else:
         print("Users already exist, skipping seed.")
+
+def seed_special_admin(db):
+    """
+    Creates a default Special Admin user if not exists.
+    Credentials: special / special123
+    """
+    from . import models, auth
+    
+    # Check if special admin exists
+    user = db.query(models.User).filter(models.User.role == "special_admin").first()
+    if not user:
+        print("Seeding special admin user...")
+        hashed_password = auth.get_password_hash("special123")
+        special_user = models.User(
+            username="special",
+            password_hash=hashed_password,
+            role="special_admin",
+            organization_id=None # Special admin is global
+        )
+        db.add(special_user)
+        db.commit()
+        print("Special admin created: special / special123")

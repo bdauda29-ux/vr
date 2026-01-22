@@ -35,6 +35,7 @@ def list_staff(
     offset: int = 0,
     exit_from=None,
     exit_to=None,
+    organization_id: Optional[int] = None
 ) -> List[models.Staff]:
     # Build Rank Sorting Logic
     # We want to sort by Rank (Custom Order), then DOPA (Date of Present Appointment), then NIS No
@@ -89,6 +90,9 @@ def list_staff(
              stmt = stmt.where(models.Staff.office.in_(office))
         else:
              stmt = stmt.where(models.Staff.office == office)
+             
+    if organization_id is not None:
+        stmt = stmt.where(models.Staff.organization_id == organization_id)
     
     if completeness == "completed":
         # Criteria: Must have State, LGA, and Office
@@ -144,33 +148,37 @@ def delete_staff(db: Session, obj: models.Staff) -> None:
     db.delete(obj)
     db.commit()
 
-def create_audit_log(db: Session, action: str, target: str, details: Optional[str] = None) -> models.AuditLog:
-    obj = models.AuditLog(action=action, target=target, details=details)
+def create_audit_log(db: Session, action: str, target: str, details: Optional[str] = None, organization_id: Optional[int] = None) -> models.AuditLog:
+    obj = models.AuditLog(action=action, target=target, details=details, organization_id=organization_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
-def list_audit_logs(db: Session, limit: int = 100, offset: int = 0) -> List[models.AuditLog]:
-    return list(db.scalars(select(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).offset(offset).limit(limit)))
+def list_audit_logs(db: Session, limit: int = 100, offset: int = 0, organization_id: Optional[int] = None) -> List[models.AuditLog]:
+    stmt = select(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).offset(offset).limit(limit)
+    if organization_id:
+        stmt = stmt.where(models.AuditLog.organization_id == organization_id)
+    return list(db.scalars(stmt))
 
-def get_dashboard_stats(db: Session):
-    total_staff = db.scalar(
-        select(func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None))
-    )
-    total_offices = db.scalar(
-        select(func.count(distinct(models.Staff.office)))
-        .where(
+def get_dashboard_stats(db: Session, organization_id: Optional[int] = None):
+    staff_q = select(func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None))
+    office_q = select(func.count(distinct(models.Staff.office))).where(
             models.Staff.exit_date.is_(None),
             models.Staff.office.is_not(None),
             models.Staff.office != ""
         )
-    )
-    rank_rows = db.execute(
-        select(models.Staff.rank, func.count(models.Staff.id))
-        .where(models.Staff.exit_date.is_(None))
-        .group_by(models.Staff.rank)
-    ).all()
+    rank_q = select(models.Staff.rank, func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None)).group_by(models.Staff.rank)
+
+    if organization_id:
+        staff_q = staff_q.where(models.Staff.organization_id == organization_id)
+        office_q = office_q.where(models.Staff.organization_id == organization_id)
+        rank_q = rank_q.where(models.Staff.organization_id == organization_id)
+
+    total_staff = db.scalar(staff_q)
+    total_offices = db.scalar(office_q)
+    rank_rows = db.execute(rank_q).all()
+    
     rank_counts = {}
     for rank, count in rank_rows:
         key = rank or ""
@@ -181,15 +189,21 @@ def get_dashboard_stats(db: Session):
         "rank_counts": rank_counts,
     }
 
-def list_offices(db: Session) -> List[str]:
+def list_offices(db: Session, organization_id: Optional[int] = None) -> List[str]:
     # Deprecated: returns distinct strings from Staff table
-    return list(db.scalars(select(distinct(models.Staff.office)).where(models.Staff.office.is_not(None)).order_by(models.Staff.office)))
+    stmt = select(distinct(models.Staff.office)).where(models.Staff.office.is_not(None)).order_by(models.Staff.office)
+    if organization_id:
+        stmt = stmt.where(models.Staff.organization_id == organization_id)
+    return list(db.scalars(stmt))
 
-def list_offices_model(db: Session) -> List[models.Office]:
-    return list(db.scalars(select(models.Office).order_by(models.Office.name)))
+def list_offices_model(db: Session, organization_id: Optional[int] = None) -> List[models.Office]:
+    stmt = select(models.Office).order_by(models.Office.name)
+    if organization_id:
+        stmt = stmt.where(models.Office.organization_id == organization_id)
+    return list(db.scalars(stmt))
 
-def create_office(db: Session, name: str) -> models.Office:
-    obj = models.Office(name=name)
+def create_office(db: Session, name: str, organization_id: Optional[int] = None) -> models.Office:
+    obj = models.Office(name=name, organization_id=organization_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -198,12 +212,8 @@ def create_office(db: Session, name: str) -> models.Office:
 def update_office(db: Session, office_id: int, name: str) -> Optional[models.Office]:
     obj = db.get(models.Office, office_id)
     if obj:
-        old_name = obj.name
         obj.name = name
-        # Update staff records
-        db.execute(
-            models.Staff.__table__.update().where(models.Staff.office == old_name).values(office=name)
-        )
+        db.add(obj)
         db.commit()
         db.refresh(obj)
     return obj
@@ -216,36 +226,16 @@ def delete_office(db: Session, office_id: int) -> bool:
         return True
     return False
 
-def create_leave(db: Session, data: dict) -> models.Leave:
-    obj = models.Leave(**data)
+# Organization CRUD
+def create_organization(db: Session, name: str, code: str) -> models.Organization:
+    obj = models.Organization(name=name, code=code)
     db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
-def get_leave(db: Session, leave_id: int) -> Optional[models.Leave]:
-    return db.get(models.Leave, leave_id)
+def list_organizations(db: Session) -> List[models.Organization]:
+    return list(db.scalars(select(models.Organization).order_by(models.Organization.name)))
 
-def list_leaves(
-    db: Session,
-    staff_id: Optional[int] = None,
-    status: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0
-) -> List[models.Leave]:
-    stmt = select(models.Leave).order_by(models.Leave.created_at.desc())
-    if staff_id:
-        stmt = stmt.where(models.Leave.staff_id == staff_id)
-    if status:
-        stmt = stmt.where(models.Leave.status == status)
-    
-    stmt = stmt.limit(limit).offset(offset)
-    return list(db.scalars(stmt))
-
-def update_leave_status(db: Session, leave_id: int, status: str) -> Optional[models.Leave]:
-    leave = get_leave(db, leave_id)
-    if leave:
-        leave.status = status
-        db.commit()
-        db.refresh(leave)
-    return leave
+def get_organization(db: Session, org_id: int) -> Optional[models.Organization]:
+    return db.get(models.Organization, org_id)
