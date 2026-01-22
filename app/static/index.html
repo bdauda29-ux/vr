@@ -369,6 +369,15 @@
                     <ul class="dropdown-menu dropdown-menu-dark text-small shadow" aria-labelledby="dropdownUserSidebar">
                         <li><a class="dropdown-item" href="#" onclick="openChangePasswordModal()">Change Password</a></li>
                         <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Text Size</h6></li>
+                        <li>
+                            <div class="px-3 d-flex justify-content-between align-items-center">
+                                <button class="btn btn-sm btn-outline-light" onclick="adjustTextSize(-5)" title="Decrease"><i class="bi bi-dash"></i></button>
+                                <button class="btn btn-sm btn-outline-light" onclick="resetTextSize()" title="Reset"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                <button class="btn btn-sm btn-outline-light" onclick="adjustTextSize(5)" title="Increase"><i class="bi bi-plus"></i></button>
+                            </div>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item text-danger" href="#" onclick="logout()">Sign out</a></li>
                     </ul>
                 </div>
@@ -4960,7 +4969,34 @@
         let createOrgModalInstance;
         let createOrgAdminModalInstance;
 
+        // --- Text Zoom Logic ---
+        let currentZoom = 100;
+
+        function applyZoom(zoom) {
+            document.documentElement.style.fontSize = zoom + '%';
+            localStorage.setItem('vss_zoom_level', zoom);
+        }
+
+        function adjustTextSize(delta) {
+            currentZoom += delta;
+            // Limit zoom between 75% and 150%
+            if (currentZoom < 75) currentZoom = 75;
+            if (currentZoom > 150) currentZoom = 150;
+            applyZoom(currentZoom);
+        }
+
+        function resetTextSize() {
+            currentZoom = 100;
+            applyZoom(currentZoom);
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
+            const savedZoom = localStorage.getItem('vss_zoom_level');
+            if (savedZoom) {
+                currentZoom = parseInt(savedZoom, 10);
+                applyZoom(currentZoom);
+            }
+            
             const orgModalEl = document.getElementById('createOrgModal');
             if (orgModalEl) createOrgModalInstance = new bootstrap.Modal(orgModalEl);
             
