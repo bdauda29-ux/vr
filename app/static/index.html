@@ -1650,6 +1650,24 @@
             "ASI 1", "ASI 2", "II", "AII", "IA 1", "IA 2", "IA 3"
         ];
         
+        const RANK_NAMES = {
+            "DCG": "Deputy Comptroller General",
+            "ACG": "Assistant Comptroller General",
+            "CIS": "Comptroller of Immigration",
+            "DCI": "Deputy Comptroller of Immigration",
+            "ACI": "Assistant Comptroller of Immigration",
+            "CSI": "Chief Superintendent of Immigration",
+            "SI": "Superintendent of Immigration",
+            "DSI": "Deputy Superintendent of Immigration",
+            "ASI 1": "Assistant Superintendent of Immigration I",
+            "ASI 2": "Assistant Superintendent of Immigration II",
+            "II": "Inspector of Immigration",
+            "AII": "Assistant Inspector of Immigration",
+            "IA 1": "Immigration Assistant I",
+            "IA 2": "Immigration Assistant II",
+            "IA 3": "Immigration Assistant III"
+        };
+        
         // DOM Elements - Sidebar removed
         
         const role = localStorage.getItem('role');
@@ -2363,7 +2381,9 @@
             if(sel) {
                 sel.innerHTML = '<option value="">Select...</option>';
                 RANKS.forEach(r => {
-                    sel.add(new Option(r, r));
+                    const full = RANK_NAMES[r];
+                    const label = full ? `${r} - ${full}` : r;
+                    sel.add(new Option(label, r));
                 });
             }
             
@@ -2372,11 +2392,13 @@
             if(container) {
                 container.innerHTML = '';
                 RANKS.forEach(r => {
+                    const full = RANK_NAMES[r];
+                    const label = full ? `${r} - ${full}` : r;
                     const div = document.createElement('div');
                     div.className = 'form-check';
                     div.innerHTML = `
                         <input class="form-check-input filter-rank-cb" type="checkbox" value="${r}" id="fr_${r.replace(/\s/g, '')}" onchange="updateFilterLabel('Rank'); loadStaff();">
-                        <label class="form-check-label" for="fr_${r.replace(/\s/g, '')}">${r}</label>
+                        <label class="form-check-label" for="fr_${r.replace(/\s/g, '')}">${label}</label>
                     `;
                     container.appendChild(div);
                 });
@@ -2723,7 +2745,7 @@
                 const dopa = isoToDmy(s.dopa);
                 const dopp = isoToDmy(s.dopp);
                 const dob = isoToDmy(s.dob);
-                const rankOpts = RANKS.map(r => `<option value="${r}" ${s.rank===r?'selected':''}>${r}</option>`).join('');
+                const rankOpts = RANKS.map(r => `<option value="${r}" ${s.rank===r?'selected':''}>${r} - ${RANK_NAMES[r] || ''}</option>`).join('');
                 const genderOpts = ['Male','Female'].map(g => `<option value="${g}" ${s.gender===g?'selected':''}>${g}</option>`).join('');
                 const officeOpts = officesList.map(o => `<option value="${o}" ${s.office===o?'selected':''}>${o}</option>`).join('');
                 const stateOpts = allStates.map(st => `<option value="${st.id}" ${s.state && s.state.id===st.id?'selected':''}>${st.name}</option>`).join('');
@@ -3433,6 +3455,15 @@
                     alert('Failed to load staff data');
                 }
             }
+        }
+        
+        function rankBadge(rank) {
+            if (!rank) return '';
+            const full = RANK_NAMES[rank];
+            if (full) {
+                return `<span class="badge bg-secondary" title="${full}">${rank}</span><div class="small text-muted" style="font-size: 0.7em;">${full}</div>`;
+            }
+            return `<span class="badge bg-secondary">${rank}</span>`;
         }
 
         // --- Move / History / View Modals Logic ---
