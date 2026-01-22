@@ -259,6 +259,27 @@ def list_organizations_endpoint():
         orgs = crud.list_organizations(db)
         return jsonify([{"id": o.id, "name": o.name, "code": o.code} for o in orgs])
 
+@app.put("/organizations/<int:org_id>")
+def update_organization_endpoint(org_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json()
+    name = data.get("name")
+    
+    if not name:
+        return jsonify({"detail": "Name is required"}), 400
+        
+    with next(get_db()) as db:
+        org = crud.get_organization(db, org_id)
+        if not org:
+            return jsonify({"detail": "Organization not found"}), 404
+            
+        org.name = name
+        db.commit()
+        return jsonify({"id": org.id, "name": org.name, "code": org.code})
+
 @app.post("/organizations/<int:org_id>/admin")
 def create_organization_admin(org_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
@@ -612,8 +633,9 @@ if engine:
 
             seed_states_lgas(db)
             seed_super_admin(db)
-            from .seeds import seed_special_admin
+            from .seeds import seed_special_admin, seed_vr_organization
             seed_special_admin(db)
+            seed_vr_organization(db)
         finally:
             db.close()
     except Exception as e:
@@ -740,6 +762,12 @@ def list_staff_endpoint():
         offset = request.args.get("offset", 0, type=int)
         
         organization_id = user.get("organization_id")
+        
+        # Allow special_admin to filter by organization
+        if user["role"] == "special_admin":
+             req_org_id = request.args.get("organization_id", type=int)
+             if req_org_id:
+                 organization_id = req_org_id
         
         with next(get_db()) as db:
             if user["role"] == "office_admin":
