@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Union, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import select, or_, case, func, distinct
 from . import models
