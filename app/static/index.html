@@ -105,6 +105,42 @@
             transition: all 0.3s;
         }
 
+        /* Collapsed Sidebar */
+        body.sidebar-collapsed .sidebar {
+            width: 80px;
+        }
+        body.sidebar-collapsed .main-content {
+            margin-left: 80px;
+        }
+        body.sidebar-collapsed .sidebar .nav-text,
+        body.sidebar-collapsed #sidebar-brand-text {
+            display: none;
+        }
+        body.sidebar-collapsed .sidebar .nav-link {
+            justify-content: center;
+            padding: 10px;
+        }
+        body.sidebar-collapsed .sidebar .nav-link i {
+            margin-right: 0;
+            font-size: 1.5em;
+        }
+        body.sidebar-collapsed #sidebar-brand-container {
+            width: 0;
+            overflow: hidden;
+            opacity: 0;
+        }
+        body.sidebar-collapsed #sidebar-header {
+            justify-content: center !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+        body.sidebar-collapsed #sidebar-toggle {
+            margin-left: 0 !important;
+        }
+        body.sidebar-collapsed .sidebar .dropdown-toggle::after {
+            display: none;
+        }
+
         /* Dashboard Widgets */
         .stats-card {
             border: none;
@@ -254,6 +290,10 @@
             return false;
         };
 
+        function toggleSidebar() {
+            document.body.classList.toggle('sidebar-collapsed');
+        }
+
         // Early Auth Check
         (function() {
             try {
@@ -276,41 +316,46 @@
     <!-- Sidebar Navigation -->
     <nav class="sidebar">
         <div class="position-sticky sidebar-sticky">
-            <div class="px-3 mb-4 d-flex align-items-center text-white text-decoration-none border-bottom pb-3">
-                <i class="bi bi-shield-lock-fill fs-4 me-2"></i>
-                <span class="fs-4 fw-bold" id="sidebar-brand">V/R System</span>
+            <div class="px-3 mb-4 d-flex align-items-center justify-content-between text-white border-bottom pb-3" id="sidebar-header">
+                <div class="d-flex align-items-center overflow-hidden" id="sidebar-brand-container" style="transition: all 0.3s;">
+                    <i class="bi bi-shield-lock-fill fs-4 me-2"></i>
+                    <span class="fs-4 fw-bold text-nowrap" id="sidebar-brand-text">V/R System</span>
+                </div>
+                <button id="sidebar-toggle" class="btn btn-link text-white p-0 ms-2" onclick="toggleSidebar()">
+                    <i class="bi bi-list fs-4"></i>
+                </button>
             </div>
             
             <ul class="nav flex-column mb-auto">
                 <li class="nav-item">
-                    <a class="nav-link active" href="#" onclick="showView('dashboard');">
-                        <i class="bi bi-speedometer2"></i> Dashboard
+                    <a class="nav-link active" href="#" onclick="showView('dashboard');" title="Dashboard">
+                        <i class="bi bi-speedometer2"></i> <span class="nav-text">Dashboard</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#" onclick="showPersonnelTab('list-tab'); showView('personnel');">
-                        <i class="bi bi-people-fill"></i> Personnel
+                    <a class="nav-link" href="#" onclick="showPersonnelTab('list-tab'); showView('personnel');" title="Personnel">
+                        <i class="bi bi-people-fill"></i> <span class="nav-text">Personnel</span>
                     </a>
                 </li>
                 <li class="nav-item admin-only">
-                    <a class="nav-link" href="#" onclick="showView('offices');">
-                        <i class="bi bi-building"></i> Offices
+                    <a class="nav-link" href="#" onclick="showView('offices');" title="Offices">
+                        <i class="bi bi-building"></i> <span class="nav-text">Offices</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#" onclick="showView('leave');">
-                        <i class="bi bi-calendar-check"></i> Leave
+                    <a class="nav-link" href="#" onclick="showView('leave');" title="Leave">
+                        <i class="bi bi-calendar-check"></i> <span class="nav-text">Leave</span>
                     </a>
                 </li>
                 <li class="nav-item admin-only">
-                    <a class="nav-link" href="#" onclick="showView('audit');">
-                        <i class="bi bi-journal-text"></i> Audit Logs
+                    <a class="nav-link" href="#" onclick="showView('audit');" title="Audit Logs">
+                        <i class="bi bi-journal-text"></i> <span class="nav-text">Audit Logs</span>
                     </a>
                 </li>
                 <li class="nav-item admin-only">
-                    <a class="nav-link" href="#" onclick="showView('approvals');">
-                        <i class="bi bi-check2-square"></i> Authorizations
-                        <span class="badge bg-danger rounded-pill ms-auto d-none" id="approvalsCounterSidebar">0</span>
+                    <a class="nav-link" href="#" onclick="showView('approvals');" title="Authorizations">
+                        <i class="bi bi-check2-square"></i> <span class="nav-text">Authorizations</span>
+                        <span class="badge bg-danger rounded-pill ms-auto d-none nav-text" id="approvalsCounterSidebar">0</span>
                     </a>
                 </li>
             </ul>
@@ -319,7 +364,7 @@
                 <div class="dropdown">
                     <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" id="dropdownUserSidebar" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="bi bi-person-circle fs-4 me-2"></i>
-                        <strong id="userDisplaySidebar">User</strong>
+                        <strong id="userDisplaySidebar" class="nav-text">User</strong>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-dark text-small shadow" aria-labelledby="dropdownUserSidebar">
                         <li><a class="dropdown-item" href="#" onclick="openChangePasswordModal()">Change Password</a></li>
