@@ -220,6 +220,16 @@ def get_current_user_info():
     if not payload:
         return jsonify({"detail": "Invalid token"}), 401
     
+    # Enrich with organization name
+    organization_id = payload.get("organization_id")
+    organization_name = None
+    if organization_id:
+        with next(get_db()) as db:
+             org = crud.get_organization(db, organization_id)
+             if org:
+                 organization_name = org.name
+    
+    payload["organization_name"] = organization_name
     return jsonify(payload)
 
 # --- ORGANIZATION MANAGEMENT (Special Admin) ---
