@@ -19,6 +19,14 @@ def run_migrations():
             print("Table 'organizations' created successfully.")
         else:
             print("Table 'organizations' already exists.")
+            # Check for description column
+            columns = [c['name'] for c in inspector.get_columns('organizations')]
+            if 'description' not in columns:
+                print("Column 'description' missing in 'organizations'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE organizations ADD COLUMN description VARCHAR(256)"))
+                print("Column 'description' added to 'organizations' successfully.")
 
         # 2. Add organization_id to existing tables
         # We target: users, staff, offices, audit_logs
