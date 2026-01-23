@@ -227,19 +227,19 @@
         </div>
     </div>
 
-    <!-- Create Organization Admin Modal -->
+    <!-- Create Formation Admin Modal -->
     <div class="modal fade" id="createOrgAdminModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Create Organization Admin</h5>
+                    <h5 class="modal-title">Create Formation Admin</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <form id="createOrgAdminForm">
                         <input type="hidden" id="adminOrgId">
                         <div class="mb-3">
-                            <label class="form-label">Organization</label>
+                            <label class="form-label">Formation</label>
                             <input type="text" class="form-control" id="adminOrgNameDisplay" readonly disabled>
                         </div>
                         <div class="mb-3">
@@ -265,18 +265,18 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Update Organization</h5>
+                    <h5 class="modal-title">Update Formation</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <form id="updateOrgForm">
                         <input type="hidden" id="updateOrgId">
                         <div class="mb-3">
-                            <label class="form-label required">Organization Name</label>
+                            <label class="form-label required">Formation Name</label>
                             <input type="text" class="form-control" id="updateOrgName" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Organization Code</label>
+                            <label class="form-label">Formation Code</label>
                             <input type="text" class="form-control" id="updateOrgCode" readonly disabled>
                         </div>
                         <div class="mb-3">
@@ -350,7 +350,10 @@
             <div class="px-3 mb-4 d-flex align-items-center justify-content-between text-white border-bottom pb-3" id="sidebar-header">
                 <div class="d-flex align-items-center overflow-hidden" id="sidebar-brand-container" style="transition: all 0.3s;">
                     <i class="bi bi-shield-lock-fill fs-4 me-2"></i>
-                    <span class="fs-4 fw-bold text-nowrap" id="sidebar-brand-text">V/R System</span>
+                    <div class="d-flex flex-column">
+                        <span class="fs-4 fw-bold text-nowrap" id="sidebar-brand-text">V/R System</span>
+                        <span class="text-nowrap text-white-50" id="sidebar-brand-subtitle" style="font-size: 0.7rem; line-height: 1; display: none;"></span>
+                    </div>
                 </div>
                 <button id="sidebar-toggle" class="btn btn-link text-white p-0 ms-2" onclick="toggleSidebar()">
                     <i class="bi bi-list fs-4"></i>
@@ -1732,12 +1735,31 @@
                     const userData = await res.json();
                     
                     // Update Navbar Brand
-                    const brand = document.getElementById('sidebar-brand');
-                    if (brand) {
-                        if (userData.organization_name) {
-                            brand.textContent = userData.organization_name;
-                        } else {
-                            brand.textContent = 'V/R';
+                    const brandText = document.getElementById('sidebar-brand-text');
+                    const brandSubtitle = document.getElementById('sidebar-brand-subtitle');
+                    
+                    if (brandText && brandSubtitle) {
+                        // Special Admin Role
+                        if (userData.role === 'special_admin') {
+                            brandText.textContent = "NIS";
+                            brandSubtitle.textContent = "Nigeria Immigration Service";
+                            brandSubtitle.style.display = "block";
+                        } 
+                        // Formation User (has organization code)
+                        else if (userData.organization_code) {
+                            brandText.textContent = userData.organization_code;
+                            brandSubtitle.textContent = userData.organization_name || "";
+                            brandSubtitle.style.display = "block";
+                        } 
+                        // Fallback (e.g. Super Admin without org, or just org name)
+                        else if (userData.organization_name) {
+                            brandText.textContent = userData.organization_name;
+                            brandSubtitle.style.display = "none";
+                        } 
+                        // Default
+                        else {
+                            brandText.textContent = 'V/R System';
+                            brandSubtitle.style.display = "none";
                         }
                     }
                 }

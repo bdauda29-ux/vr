@@ -228,6 +228,7 @@ def get_current_user_info():
              org = crud.get_organization(db, organization_id)
              if org:
                  organization_name = org.name
+                 payload["organization_code"] = org.code
     
     payload["organization_name"] = organization_name
     return jsonify(payload)
