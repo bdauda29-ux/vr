@@ -304,6 +304,38 @@
         </div>
     </div>
 
+    <!-- View Admins Modal -->
+    <div class="modal fade" id="viewAdminsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Formation Admins: <span id="viewAdminsOrgName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="viewAdminsOrgId">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orgAdminsTableBody">
+                                <!-- Loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global Error Handler
         window.onerror = function(msg, url, line, col, error) {
@@ -595,6 +627,12 @@
                                                 <option value="asc">DOPP Ascending</option>
                                                 <option value="desc">DOPP Descending</option>
                                             </select>
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <input type="text" id="dopaFrom" class="form-control date-picker" placeholder="DOPA From">
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <input type="text" id="dopaTo" class="form-control date-picker" placeholder="DOPA To">
                                         </div>
                                         <div class="col-6 col-md-2 exited-only d-none">
                                             <input type="text" id="exitFrom" class="form-control date-picker" placeholder="Eff. Date From">
@@ -1741,16 +1779,16 @@
                     if (brandText && brandSubtitle) {
                         // Special Admin Role
                         if (userData.role === 'special_admin') {
-                            brandText.textContent = "NIS";
-                            brandSubtitle.textContent = "Nigeria Immigration Service";
+                            brandText.textContent = "";
+                            brandSubtitle.textContent = "";
                             brandSubtitle.style.display = "block";
                         } 
                         // Formation User (has organization code)
                         else if (userData.organization_code) {
                             const name = userData.organization_name || userData.organization_code;
                             const desc = userData.organization_description || "";
-                            brandText.textContent = desc ? `${name} ${desc}` : name;
-                            brandSubtitle.textContent = userData.organization_code || "";
+                            brandText.textContent = userData.organization_code || "";
+                            brandSubtitle.textContent = desc ? `${name} ${desc}` : name;
                             brandSubtitle.style.display = "block";
                         } 
                         // Fallback (e.g. Super Admin without org, or just org name)
@@ -2609,6 +2647,14 @@
                 if (fromVal) params.append('exit_from', userDateToIsoOrNull(fromVal));
                 if (toVal) params.append('exit_to', userDateToIsoOrNull(toVal));
             }
+            
+            const dopaFrom = document.getElementById('dopaFrom');
+            const dopaTo = document.getElementById('dopaTo');
+            const dopaFromVal = dopaFrom ? dopaFrom.value : '';
+            const dopaToVal = dopaTo ? dopaTo.value : '';
+            if (dopaFromVal) params.append('dopa_from', userDateToIsoOrNull(dopaFromVal));
+            if (dopaToVal) params.append('dopa_to', userDateToIsoOrNull(dopaToVal));
+
              // If searching, include both Completed and Incomplete by omitting completeness filter
              if (!q && currentStatusFilter) params.append('completeness', currentStatusFilter);
              if (currentStatus) params.append('status', currentStatus);
@@ -2645,7 +2691,7 @@
                      throw new Error("Invalid data format received");
                 }
 
-                if (role === 'super_admin' || role === 'main_admin') {
+                if (role === 'super_admin' || role === 'main_admin' || role === 'special_admin') {
                     buildSuperAdminTableHeader();
                     renderTableSuperAdmin(data);
                 } else {
@@ -2716,6 +2762,11 @@
             if (exitFrom) exitFrom.value = '';
             if (exitTo) exitTo.value = '';
             
+            const dopaFrom = document.getElementById('dopaFrom');
+            const dopaTo = document.getElementById('dopaTo');
+            if (dopaFrom) dopaFrom.value = '';
+            if (dopaTo) dopaTo.value = '';
+
             currentStatus = 'active';
             currentStatusFilter = 'completed';
             
@@ -2742,6 +2793,7 @@
                 html = `
                     <tr>
                         <th>S/N</th>
+                        ${role === 'special_admin' ? '<th>Formation</th>' : ''}
                         <th>NIS/No</th>
                         <th>Surname</th>
                         <th>Other Names</th>
@@ -2756,6 +2808,7 @@
                 html = `
                     <tr>
                         <th>S/N</th>
+                        ${role === 'special_admin' ? '<th>Formation</th>' : ''}
                         <th>NIS/No</th>
                         <th>Surname</th>
                         <th>Other Names</th>
@@ -2844,6 +2897,10 @@
                 const surnameFormatted = formatName(s.surname);
                 const otherNamesFormatted = formatName(s.other_names);
                 
+                const formationCell = (role === 'special_admin') 
+                    ? `<td>${s.organization ? (s.organization.code || s.organization.name) : '-'}</td>` 
+                    : '';
+
                 let actionBtns = ``;
                 if (currentStatus === 'exited') {
                     actionBtns = `
@@ -2881,6 +2938,7 @@
                 if (currentStatus === 'exited') {
                     tr.innerHTML = `
                         <td>${index + 1}</td>
+                        ${formationCell}
                         <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
                         <td contenteditable="true" data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
                         <td contenteditable="true" data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
@@ -2899,6 +2957,7 @@
                 } else {
                     tr.innerHTML = `
                         <td>${index + 1}</td>
+                        ${formationCell}
                         <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
                         <td contenteditable="true" data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
                         <td contenteditable="true" data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
@@ -3901,7 +3960,8 @@
                             <td>${o.description || ''}</td>
                             <td>
                                 <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateOrgModal(${o.id}, '${o.name.replace(/'/g, "\\'")}', '${o.code}', '${(o.description || '').replace(/'/g, "\\'")}')">Edit</button>
-                                <button class="btn btn-sm btn-outline-success" onclick="openCreateOrgAdminModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">Add Admin</button>
+                                <button class="btn btn-sm btn-outline-success me-1" onclick="openCreateOrgAdminModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">Add Admin</button>
+                                <button class="btn btn-sm btn-outline-info" onclick="openViewAdminsModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">View Admins</button>
                             </td>
                         `;
                         tbody.appendChild(tr);
@@ -4073,6 +4133,95 @@
             } catch (e) {
                 console.error(e);
                 alert("Request failed");
+            }
+        }
+
+        function openViewAdminsModal(orgId, orgName) {
+            document.getElementById('viewAdminsOrgName').textContent = orgName;
+            document.getElementById('viewAdminsOrgId').value = orgId;
+            new bootstrap.Modal(document.getElementById('viewAdminsModal')).show();
+            loadOrgAdmins(orgId);
+        }
+
+        async function loadOrgAdmins(orgId) {
+            const tbody = document.getElementById('orgAdminsTableBody');
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center">Loading...</td></tr>';
+            try {
+                const res = await fetch(`${API_URL}/organizations/${orgId}/admins`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const admins = await res.json();
+                    tbody.innerHTML = '';
+                    if (admins.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="3" class="text-center">No admins found</td></tr>';
+                        return;
+                    }
+                    admins.forEach(u => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${u.username}</td>
+                            <td>${u.role}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning me-1" onclick="resetAdminPasswordPrompt(${u.id}, '${u.username}')">Reset Pwd</button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteAdminUserPrompt(${u.id}, '${u.username}')">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Failed to load admins</td></tr>';
+                }
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Error loading admins</td></tr>';
+            }
+        }
+
+        async function resetAdminPasswordPrompt(userId, username) {
+            const newPwd = prompt(`Enter new password for ${username}:`);
+            if (newPwd) {
+                try {
+                    const res = await fetch(`${API_URL}/users/${userId}/reset-password`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}` 
+                        },
+                        body: JSON.stringify({ password: newPwd })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        alert("Password reset successfully");
+                    } else {
+                        alert("Error: " + data.detail);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Request failed");
+                }
+            }
+        }
+
+        async function deleteAdminUserPrompt(userId, username) {
+            if (confirm(`Are you sure you want to delete admin ${username}?`)) {
+                try {
+                    const res = await fetch(`${API_URL}/users/${userId}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        alert("User deleted successfully");
+                        const orgId = document.getElementById('viewAdminsOrgId').value;
+                        loadOrgAdmins(orgId);
+                    } else {
+                        alert("Error: " + data.detail);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Request failed");
+                }
             }
         }
 

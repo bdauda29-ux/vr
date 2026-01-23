@@ -35,6 +35,8 @@ def list_staff(
     offset: int = 0,
     exit_from=None,
     exit_to=None,
+    dopa_from=None,
+    dopa_to=None,
     organization_id: Optional[int] = None,
     include_count: bool = False
 ) -> Union[List[models.Staff], Tuple[List[models.Staff], int]]:
@@ -61,6 +63,11 @@ def list_staff(
             stmt = stmt.where(models.Staff.exit_date >= exit_from)
         if exit_to is not None:
             stmt = stmt.where(models.Staff.exit_date <= exit_to)
+
+    if dopa_from is not None:
+        stmt = stmt.where(models.Staff.dopa >= dopa_from)
+    if dopa_to is not None:
+        stmt = stmt.where(models.Staff.dopa <= dopa_to)
 
     if state_id is not None:
         stmt = stmt.where(models.Staff.state_id == state_id)
@@ -267,3 +274,26 @@ def list_organizations(db: Session) -> List[models.Organization]:
 
 def get_organization(db: Session, org_id: int) -> Optional[models.Organization]:
     return db.get(models.Organization, org_id)
+
+def get_users_by_organization(db: Session, org_id: int) -> List[models.User]:
+    return list(db.scalars(select(models.User).where(models.User.organization_id == org_id)))
+
+def get_user(db: Session, user_id: int) -> Optional[models.User]:
+    return db.get(models.User, user_id)
+
+def delete_user(db: Session, user_id: int) -> bool:
+    user = db.get(models.User, user_id)
+    if user:
+        db.delete(user)
+        db.commit()
+        return True
+    return False
+
+def update_user_password(db: Session, user_id: int, password_hash: str) -> Optional[models.User]:
+    user = db.get(models.User, user_id)
+    if user:
+        user.password_hash = password_hash
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user

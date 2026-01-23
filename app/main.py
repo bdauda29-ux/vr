@@ -270,7 +270,9 @@ def list_organizations_endpoint():
     
     with next(get_db()) as db:
         orgs = crud.list_organizations(db)
-        return jsonify([{"id": o.id, "name": o.name, "code": o.code, "description": o.description} for o in orgs])
+        # Filter out NIS from the list
+        filtered_orgs = [o for o in orgs if o.code != "NIS"]
+        return jsonify([{"id": o.id, "name": o.name, "code": o.code, "description": o.description} for o in filtered_orgs])
 
 @app.put("/organizations/<int:org_id>")
 def update_organization_endpoint(org_id):
@@ -326,6 +328,60 @@ def create_organization_admin(org_id):
         db.commit()
         
         return jsonify({"detail": f"Admin created for {org.name}", "username": username})
+
+@app.get("/organizations/<int:org_id>/admins")
+def list_organization_admins(org_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        org = crud.get_organization(db, org_id)
+        if not org:
+            return jsonify({"detail": "Organization not found"}), 404
+            
+        users = crud.get_users_by_organization(db, org_id)
+        return jsonify([{"id": u.id, "username": u.username, "role": u.role} for u in users])
+
+@app.post("/users/<int:user_id>/reset-password")
+def reset_user_password(user_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json()
+    new_password = data.get("password")
+    
+    if not new_password:
+        return jsonify({"detail": "Password is required"}), 400
+        
+    with next(get_db()) as db:
+        pwd_hash = auth.get_password_hash(new_password)
+        updated_user = crud.update_user_password(db, user_id, pwd_hash)
+        if not updated_user:
+            return jsonify({"detail": "User not found"}), 404
+            
+        return jsonify({"detail": "Password reset successfully"})
+
+@app.delete("/users/<int:user_id>")
+def delete_user_endpoint(user_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        target_user = crud.get_user(db, user_id)
+        if not target_user:
+             return jsonify({"detail": "User not found"}), 404
+             
+        if target_user.role == "special_admin":
+             return jsonify({"detail": "Cannot delete special admin"}), 403
+             
+        success = crud.delete_user(db, user_id)
+        if not success:
+            return jsonify({"detail": "Failed to delete user"}), 500
+            
+        return jsonify({"detail": "User deleted successfully"})
 
 @app.get("/dashboard/stats")
 def dashboard_stats():
@@ -770,6 +826,10 @@ def list_staff_endpoint():
         exit_to_raw = request.args.get("exit_to")
         exit_from = parse_date_value(exit_from_raw) if exit_from_raw else None
         exit_to = parse_date_value(exit_to_raw) if exit_to_raw else None
+        dopa_from_raw = request.args.get("dopa_from")
+        dopa_to_raw = request.args.get("dopa_to")
+        dopa_from = parse_date_value(dopa_from_raw) if dopa_from_raw else None
+        dopa_to = parse_date_value(dopa_to_raw) if dopa_to_raw else None
         limit = request.args.get("limit", 50, type=int)
         offset = request.args.get("offset", 0, type=int)
         
@@ -780,6 +840,9 @@ def list_staff_endpoint():
              req_org_id = request.args.get("organization_id", type=int)
              if req_org_id:
                  organization_id = req_org_id
+             else:
+                 # If no specific organization requested, show all (global view)
+                 organization_id = None
         
         with next(get_db()) as db:
             if user["role"] == "office_admin":
@@ -800,6 +863,8 @@ def list_staff_endpoint():
                 offset=offset,
                 exit_from=exit_from,
                 exit_to=exit_to,
+                dopa_from=dopa_from,
+                dopa_to=dopa_to,
                 organization_id=organization_id,
                 include_count=True
             )
