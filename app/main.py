@@ -229,6 +229,7 @@ def get_current_user_info():
              if org:
                  organization_name = org.name
                  payload["organization_code"] = org.code
+                 payload["organization_description"] = org.description
     
     payload["organization_name"] = organization_name
     return jsonify(payload)
@@ -1358,7 +1359,7 @@ def export_excel():
 
             def merged_name_by_rank(staff) -> str:
                 other_words = tokenize_alpha_words(staff.other_names or "")
-                surname_full = (staff.surname or "").strip()
+                surname_full = (staff.surname or "").strip().title()
                 surname_words = tokenize_alpha_words(staff.surname or "")
 
                 other_initials = initials_from_words(other_words)
@@ -1407,9 +1408,9 @@ def export_excel():
                 if col_key == "nis_no":
                     return staff.nis_no
                 if col_key == "surname":
-                    return staff.surname
+                    return (staff.surname or "").title()
                 if col_key == "other_names":
-                    return staff.other_names
+                    return (staff.other_names or "").title()
                 if col_key == "rank":
                     return staff.rank
                 if col_key == "gender":
@@ -1484,8 +1485,19 @@ def export_excel():
             
             label_map["sn"] = "S/N"
             
-            main_title = "Visa/Residency Directorate"
+            # Fetch Organization Details
+            org_name = "Visa/Residency Directorate"
+            org_desc = ""
+            if organization_id:
+                org_obj = crud.get_organization(db, organization_id)
+                if org_obj:
+                    org_name = org_obj.name
+                    org_desc = org_obj.description or ""
+            
+            formation_full_name = f"{org_name} {org_desc}".strip()
+            main_title = formation_full_name
             subtitle_text = ""
+            
             office_title = None
             rank_title = None
             if office:
@@ -1504,12 +1516,13 @@ def export_excel():
                         rank_title = ", ".join(rank)
                 else:
                     rank_title = rank
+                    
             if office_title:
                 main_title = office_title
-                subtitle_text = "Visa/Residency Directorate"
+                subtitle_text = formation_full_name
             elif rank_title:
                 main_title = rank_title
-                subtitle_text = "Visa/Residency Directorate"
+                subtitle_text = formation_full_name
             main_title = str(main_title)
             safe_filename = "".join([c for c in main_title if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
 
@@ -1650,7 +1663,7 @@ def export_pdf():
 
             def merged_name_by_rank(staff) -> str:
                 other_words = tokenize_alpha_words(staff.other_names or "")
-                surname_full = (staff.surname or "").strip()
+                surname_full = (staff.surname or "").strip().title()
                 surname_words = tokenize_alpha_words(staff.surname or "")
                 other_initials = initials_from_words(other_words)
                 surname_initials = initials_from_words(surname_words)
@@ -1676,9 +1689,9 @@ def export_pdf():
                 if col_key == "nis_no":
                     return staff.nis_no or ""
                 if col_key == "surname":
-                    return staff.surname or ""
+                    return (staff.surname or "").title()
                 if col_key == "other_names":
-                    return staff.other_names or ""
+                    return (staff.other_names or "").title()
                 if col_key == "rank":
                     return staff.rank or ""
                 if col_key == "gender":
@@ -1764,8 +1777,19 @@ def export_pdf():
             styles = getSampleStyleSheet()
             elements = []
             
-            main_title = "Visa/Residency Directorate"
+            # Fetch Organization Details
+            org_name = "Visa/Residency Directorate"
+            org_desc = ""
+            if organization_id:
+                org_obj = crud.get_organization(db, organization_id)
+                if org_obj:
+                    org_name = org_obj.name
+                    org_desc = org_obj.description or ""
+            
+            formation_full_name = f"{org_name} {org_desc}".strip()
+            main_title = formation_full_name
             subtitle_text = ""
+            
             office_title = None
             rank_title = None
             if office:
@@ -1784,12 +1808,13 @@ def export_pdf():
                         rank_title = ", ".join(rank)
                 else:
                     rank_title = rank
+                    
             if office_title:
                 main_title = office_title
-                subtitle_text = "Visa/Residency Directorate"
+                subtitle_text = formation_full_name
             elif rank_title:
                 main_title = rank_title
-                subtitle_text = "Visa/Residency Directorate"
+                subtitle_text = formation_full_name
             main_title = str(main_title)
             title_style = styles["Title"]
             title_style.fontSize = 14

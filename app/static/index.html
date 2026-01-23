@@ -67,7 +67,7 @@
             z-index: 100;
             padding: 48px 0 0;
             box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
-            background-color: #343a40;
+            background-color: #67461e;
             width: 240px;
             transition: all 0.3s;
         }
@@ -351,7 +351,7 @@
                 <div class="d-flex align-items-center overflow-hidden" id="sidebar-brand-container" style="transition: all 0.3s;">
                     <i class="bi bi-shield-lock-fill fs-4 me-2"></i>
                     <div class="d-flex flex-column">
-                        <span class="fs-4 fw-bold text-nowrap" id="sidebar-brand-text">V/R System</span>
+                        <span class="fs-4 fw-bold text-nowrap" id="sidebar-brand-text">NIS System</span>
                         <span class="text-nowrap text-white-50" id="sidebar-brand-subtitle" style="font-size: 0.7rem; line-height: 1; display: none;"></span>
                     </div>
                 </div>
@@ -1747,13 +1747,17 @@
                         } 
                         // Formation User (has organization code)
                         else if (userData.organization_code) {
-                            brandText.textContent = userData.organization_code;
-                            brandSubtitle.textContent = userData.organization_name || "";
+                            const name = userData.organization_name || userData.organization_code;
+                            const desc = userData.organization_description || "";
+                            brandText.textContent = desc ? `${name} ${desc}` : name;
+                            brandSubtitle.textContent = userData.organization_code || "";
                             brandSubtitle.style.display = "block";
                         } 
                         // Fallback (e.g. Super Admin without org, or just org name)
                         else if (userData.organization_name) {
-                            brandText.textContent = userData.organization_name;
+                            const name = userData.organization_name;
+                            const desc = userData.organization_description || "";
+                            brandText.textContent = desc ? `${name} ${desc}` : name;
                             brandSubtitle.style.display = "none";
                         } 
                         // Default
@@ -1840,7 +1844,7 @@
                 'organizations': 'Management',
                 'success': 'Action Successful'
             };
-            document.getElementById('pageTitle').textContent = titles[viewId] || 'V/R';
+            document.getElementById('pageTitle').textContent = titles[viewId] || 'NIS';
 
             // Trigger loads
             if(viewId === 'dashboard') loadDashboardStats();
@@ -2814,6 +2818,11 @@
             thead.innerHTML = html;
         }
 
+        function formatName(name) {
+            if (!name) return '';
+            return name.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        }
+
         function renderTableSuperAdmin(data) {
             const tbody = document.getElementById('staffTableBody');
             tbody.innerHTML = '';
@@ -2830,6 +2839,11 @@
                 const genderOpts = ['Male','Female'].map(g => `<option value="${g}" ${s.gender===g?'selected':''}>${g}</option>`).join('');
                 const officeOpts = officesList.map(o => `<option value="${o}" ${s.office===o?'selected':''}>${o}</option>`).join('');
                 const stateOpts = allStates.map(st => `<option value="${st.id}" ${s.state && s.state.id===st.id?'selected':''}>${st.name}</option>`).join('');
+                
+                // Format Names
+                const surnameFormatted = formatName(s.surname);
+                const otherNamesFormatted = formatName(s.other_names);
+                
                 let actionBtns = ``;
                 if (currentStatus === 'exited') {
                     actionBtns = `
@@ -2868,8 +2882,8 @@
                     tr.innerHTML = `
                         <td>${index + 1}</td>
                         <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
-                        <td contenteditable="true" data-field="surname" data-original="${s.surname || ''}">${s.surname || ''}</td>
-                        <td contenteditable="true" data-field="other_names" data-original="${s.other_names || ''}">${s.other_names || ''}</td>
+                        <td contenteditable="true" data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
+                        <td contenteditable="true" data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
                         <td data-rank-cell>
                             <span class="rank-badge">${rankBadge(s.rank)}</span>
                             <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
@@ -2886,8 +2900,8 @@
                     tr.innerHTML = `
                         <td>${index + 1}</td>
                         <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
-                        <td contenteditable="true" data-field="surname" data-original="${s.surname || ''}">${s.surname || ''}</td>
-                        <td contenteditable="true" data-field="other_names" data-original="${s.other_names || ''}">${s.other_names || ''}</td>
+                        <td contenteditable="true" data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
+                        <td contenteditable="true" data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
                         <td data-rank-cell>
                             <span class="rank-badge">${rankBadge(s.rank)}</span>
                             <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
@@ -3103,6 +3117,10 @@
                 const dates = `${dofaStr}${separator}${dopaStr}`;
                 const exitDate = isoToDmy(s.exit_date);
                 const exitReason = s.exit_mode || '';
+                
+                // Format Names
+                const surnameFormatted = capitalizeName(s.surname);
+                const otherNamesFormatted = capitalizeName(s.other_names);
 
                 let rowHtml = '';
 
@@ -3129,8 +3147,8 @@
                     rowHtml = `
                         <td>${index + 1}</td>
                         <td>${s.nis_no}</td>
-                        <td>${capitalizeName(s.surname)}</td>
-                        <td>${capitalizeName(s.other_names)}</td>
+                        <td>${surnameFormatted}</td>
+                        <td>${otherNamesFormatted}</td>
                         <td>${rankBadge(s.rank)}</td>
                         <td>${s.phone_no || ''}</td>
                         <td>${exitReason}</td>
@@ -3747,7 +3765,7 @@
                     body.innerHTML = `
                         <div class="row">
                             <div class="col-12 mb-4 text-center">
-                                <h4 class="mb-0">${s.surname} ${s.other_names}</h4>
+                                <h4 class="mb-0">${formatName(s.surname)} ${formatName(s.other_names)}</h4>
                                 <span class="badge bg-primary">${s.rank || 'No Rank'}</span>
                                 <span class="badge bg-secondary">${s.nis_no || 'No NIS'}</span>
                             </div>
@@ -4425,7 +4443,7 @@
                         tr.innerHTML = `
                             <td>${idx + 1}</td>
                             <td>${r.staff_nis}</td>
-                            <td>${r.staff_name}</td>
+                            <td>${formatName(r.staff_name)}</td>
                             <td class="text-truncate" style="max-width: 320px;" title="${changesDetails}">${changeCount} change${changeCount !== 1 ? 's' : ''}</td>
                             <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
                             <td>
