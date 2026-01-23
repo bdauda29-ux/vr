@@ -1758,7 +1758,7 @@
                         } 
                         // Default
                         else {
-                            brandText.textContent = 'V/R System';
+                            brandText.textContent = 'NIS System';
                             brandSubtitle.style.display = "none";
                         }
                     }
@@ -3080,6 +3080,12 @@
         function renderTable(data) {
             const tbody = document.getElementById('staffTableBody');
             tbody.innerHTML = '';
+            
+            const capitalizeName = (name) => {
+                if (!name) return '';
+                return name.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
+            
             data.forEach((s, index) => {
                 const tr = document.createElement('tr');
                 // Rank, DOPA, NIS sorting logic is handled by backend now
@@ -3123,8 +3129,8 @@
                     rowHtml = `
                         <td>${index + 1}</td>
                         <td>${s.nis_no}</td>
-                        <td>${s.surname}</td>
-                        <td>${s.other_names}</td>
+                        <td>${capitalizeName(s.surname)}</td>
+                        <td>${capitalizeName(s.other_names)}</td>
                         <td>${rankBadge(s.rank)}</td>
                         <td>${s.phone_no || ''}</td>
                         <td>${exitReason}</td>

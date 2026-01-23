@@ -89,8 +89,8 @@ def seed_vr_organization(db):
     """
     from . import models
     
-    org_code = "VR"
-    org_name = "V/R"
+    org_code = "NIS"
+    org_name = "NIS"
     
     org = db.query(models.Organization).filter(models.Organization.code == org_code).first()
     if not org:
