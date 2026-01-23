@@ -1774,14 +1774,8 @@
                     const brandSubtitle = document.getElementById('sidebar-brand-subtitle');
                     
                     if (brandText && brandSubtitle) {
-                        // Special Admin Role
-                        if (userData.role === 'special_admin') {
-                            brandText.textContent = "";
-                            brandSubtitle.textContent = "";
-                            brandSubtitle.style.display = "block";
-                        } 
                         // Formation User (has organization code)
-                        else if (userData.organization_code) {
+                        if (userData.organization_code) {
                             const name = userData.organization_name || userData.organization_code;
                             const desc = userData.organization_description || "";
                             brandText.textContent = userData.organization_code || "";

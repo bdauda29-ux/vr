@@ -1551,8 +1551,8 @@ def export_excel():
             label_map["sn"] = "S/N"
             
             # Fetch Organization Details
-            org_name = "Visa/Residency Directorate"
-            org_desc = ""
+            org_name = "Nigeria Immigration Service"
+            org_desc = "Headquarters"
             if organization_id:
                 org_obj = crud.get_organization(db, organization_id)
                 if org_obj:
@@ -1843,8 +1843,8 @@ def export_pdf():
             elements = []
             
             # Fetch Organization Details
-            org_name = "Visa/Residency Directorate"
-            org_desc = ""
+            org_name = "Nigeria Immigration Service"
+            org_desc = "Headquarters"
             if organization_id:
                 org_obj = crud.get_organization(db, organization_id)
                 if org_obj:
