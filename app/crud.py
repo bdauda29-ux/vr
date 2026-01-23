@@ -244,11 +244,22 @@ def delete_office(db: Session, office_id: int) -> bool:
     return False
 
 # Organization CRUD
-def create_organization(db: Session, name: str, code: str) -> models.Organization:
-    obj = models.Organization(name=name, code=code)
+def create_organization(db: Session, name: str, code: str, description: Optional[str] = None) -> models.Organization:
+    obj = models.Organization(name=name, code=code, description=description)
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    return obj
+
+def update_organization(db: Session, org_id: int, name: str, description: Optional[str] = None) -> Optional[models.Organization]:
+    obj = db.get(models.Organization, org_id)
+    if obj:
+        obj.name = name
+        if description is not None:
+            obj.description = description
+        db.add(obj)
+        db.commit()
+        db.refresh(obj)
     return obj
 
 def list_organizations(db: Session) -> List[models.Organization]:

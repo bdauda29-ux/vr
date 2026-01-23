@@ -243,6 +243,7 @@ def create_organization_endpoint():
     data = request.get_json()
     name = data.get("name")
     code_val = data.get("code")
+    description = data.get("description")
     
     if not name or not code_val:
         return jsonify({"detail": "Name and Code are required"}), 400
@@ -254,8 +255,8 @@ def create_organization_endpoint():
             if existing:
                 return jsonify({"detail": "Organization code already exists"}), 400
                 
-            org = crud.create_organization(db, name, code_val)
-            return jsonify({"id": org.id, "name": org.name, "code": org.code})
+            org = crud.create_organization(db, name, code_val, description)
+            return jsonify({"id": org.id, "name": org.name, "code": org.code, "description": org.description})
         except Exception as e:
             return jsonify({"detail": str(e)}), 400
 
@@ -267,7 +268,7 @@ def list_organizations_endpoint():
     
     with next(get_db()) as db:
         orgs = crud.list_organizations(db)
-        return jsonify([{"id": o.id, "name": o.name, "code": o.code} for o in orgs])
+        return jsonify([{"id": o.id, "name": o.name, "code": o.code, "description": o.description} for o in orgs])
 
 @app.put("/organizations/<int:org_id>")
 def update_organization_endpoint(org_id):
@@ -277,18 +278,17 @@ def update_organization_endpoint(org_id):
     
     data = request.get_json()
     name = data.get("name")
+    description = data.get("description")
     
     if not name:
         return jsonify({"detail": "Name is required"}), 400
         
     with next(get_db()) as db:
-        org = crud.get_organization(db, org_id)
+        org = crud.update_organization(db, org_id, name, description)
         if not org:
             return jsonify({"detail": "Organization not found"}), 404
             
-        org.name = name
-        db.commit()
-        return jsonify({"id": org.id, "name": org.name, "code": org.code})
+        return jsonify({"id": org.id, "name": org.name, "code": org.code, "description": org.description})
 
 @app.post("/organizations/<int:org_id>/admin")
 def create_organization_admin(org_id):

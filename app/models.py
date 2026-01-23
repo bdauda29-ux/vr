@@ -17,6 +17,7 @@ class Organization(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(128), unique=True, index=True, nullable=False)
     code = Column(String(32), unique=True, index=True, nullable=False) # e.g. 'NIS'
+    description = Column(String(256), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     users = relationship("User", back_populates="organization")

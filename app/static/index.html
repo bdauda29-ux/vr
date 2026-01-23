@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personnel Information System</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -201,6 +202,21 @@
                             <input type="text" class="form-control" id="orgCode" required placeholder="e.g. NIS">
                             <div class="form-text">Unique code for the organization.</div>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <select class="form-select" id="orgDescriptionSelect" onchange="toggleOrgDescriptionOther('create')">
+                                <option value="">Select Description...</option>
+                                <option value="Directorate">Directorate</option>
+                                <option value="Zonal Command">Zonal Command</option>
+                                <option value="State Command">State Command</option>
+                                <option value="Airport">Airport</option>
+                                <option value="Border Command">Border Command</option>
+                                <option value="Special Command">Special Command</option>
+                                <option value="FTZ">FTZ</option>
+                                <option value="Other">Other</option>
+                            </select>
+                            <input type="text" class="form-control mt-2 d-none" id="orgDescriptionOther" placeholder="Enter description">
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -262,6 +278,21 @@
                         <div class="mb-3">
                             <label class="form-label">Organization Code</label>
                             <input type="text" class="form-control" id="updateOrgCode" readonly disabled>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <select class="form-select" id="updateOrgDescriptionSelect" onchange="toggleOrgDescriptionOther('update')">
+                                <option value="">Select Description...</option>
+                                <option value="Directorate">Directorate</option>
+                                <option value="Zonal Command">Zonal Command</option>
+                                <option value="State Command">State Command</option>
+                                <option value="Airport">Airport</option>
+                                <option value="Border Command">Border Command</option>
+                                <option value="Special Command">Special Command</option>
+                                <option value="FTZ">FTZ</option>
+                                <option value="Other">Other</option>
+                            </select>
+                            <input type="text" class="form-control mt-2 d-none" id="updateOrgDescriptionOther" placeholder="Enter description">
                         </div>
                     </form>
                 </div>
@@ -447,7 +478,7 @@
                 <div id="view-organizations" class="view-section d-none">
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Organization Management</h5>
+                            <h5 class="mb-0">Management</h5>
                             <button class="btn btn-primary btn-sm" onclick="openCreateOrgModal()">
                                 <i class="bi bi-plus-lg"></i> New Organization
                             </button>
@@ -460,6 +491,7 @@
                                             <th>ID</th>
                                             <th>Name</th>
                                             <th>Code</th>
+                                            <th>Description</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -1716,6 +1748,24 @@
             });
         }
 
+        // --- Organization Management UI Functions ---
+
+        function toggleOrgDescriptionOther(mode) {
+            const selectId = mode === 'create' ? 'orgDescriptionSelect' : 'updateOrgDescriptionSelect';
+            const inputId = mode === 'create' ? 'orgDescriptionOther' : 'updateOrgDescriptionOther';
+            const selectVal = document.getElementById(selectId).value;
+            const inputEl = document.getElementById(inputId);
+            
+            if (selectVal === 'Other') {
+                inputEl.classList.remove('d-none');
+                inputEl.required = true;
+            } else {
+                inputEl.classList.add('d-none');
+                inputEl.required = false;
+                inputEl.value = '';
+            }
+        }
+
         function logout() {
             localStorage.clear();
             window.location.href = '/login.html';
@@ -1765,7 +1815,7 @@
                 'leave': 'Leave Management',
                 'audit': 'Audit Logs',
                 'approvals': 'Change Authorizations',
-                'organizations': 'Organization Management',
+                'organizations': 'Management',
                 'success': 'Action Successful'
             };
             document.getElementById('pageTitle').textContent = titles[viewId] || 'V/R';
@@ -3802,8 +3852,9 @@
                             <td>${o.id}</td>
                             <td>${o.name}</td>
                             <td>${o.code}</td>
+                            <td>${o.description || ''}</td>
                             <td>
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateOrgModal(${o.id}, '${o.name.replace(/'/g, "\\'")}', '${o.code}')">Edit</button>
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateOrgModal(${o.id}, '${o.name.replace(/'/g, "\\'")}', '${o.code}', '${(o.description || '').replace(/'/g, "\\'")}')">Edit</button>
                                 <button class="btn btn-sm btn-outline-success" onclick="openCreateOrgAdminModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">Add Admin</button>
                             </td>
                         `;
@@ -3827,6 +3878,12 @@
             const name = document.getElementById('orgName').value;
             const code = document.getElementById('orgCode').value;
             
+            const descSelect = document.getElementById('orgDescriptionSelect').value;
+            let description = descSelect;
+            if (descSelect === 'Other') {
+                description = document.getElementById('orgDescriptionOther').value;
+            }
+
             if (!name || !code) {
                 alert("Name and Code are required");
                 return;
@@ -3839,7 +3896,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}` 
                     },
-                    body: JSON.stringify({ name, code })
+                    body: JSON.stringify({ name, code, description })
                 });
                 
                 if (res.ok) {
@@ -3898,16 +3955,50 @@
             }
         }
         
-        function openUpdateOrgModal(id, name, code) {
+        function openUpdateOrgModal(id, name, code, description) {
             document.getElementById('updateOrgId').value = id;
             document.getElementById('updateOrgName').value = name;
             document.getElementById('updateOrgCode').value = code;
+            
+            const select = document.getElementById('updateOrgDescriptionSelect');
+            const otherInput = document.getElementById('updateOrgDescriptionOther');
+            
+            // Reset state
+            select.value = "";
+            otherInput.value = "";
+            otherInput.classList.add('d-none');
+            otherInput.required = false;
+
+            if (description) {
+                let found = false;
+                for(let i=0; i<select.options.length; i++) {
+                    if(select.options[i].value === description) {
+                        select.value = description;
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    select.value = 'Other';
+                    otherInput.value = description;
+                    otherInput.classList.remove('d-none');
+                    otherInput.required = true;
+                }
+            }
+            
             new bootstrap.Modal(document.getElementById('updateOrgModal')).show();
         }
 
         async function submitUpdateOrg() {
             const id = document.getElementById('updateOrgId').value;
             const name = document.getElementById('updateOrgName').value;
+            
+            const descSelect = document.getElementById('updateOrgDescriptionSelect').value;
+            let description = descSelect;
+            if (descSelect === 'Other') {
+                description = document.getElementById('updateOrgDescriptionOther').value;
+            }
             
             if (!name) {
                 alert("Name is required");
@@ -3921,7 +4012,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}` 
                     },
-                    body: JSON.stringify({ name })
+                    body: JSON.stringify({ name, description })
                 });
                 
                 if (res.ok) {
