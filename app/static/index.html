@@ -628,11 +628,8 @@
                                                 <option value="desc">DOPP Descending</option>
                                             </select>
                                         </div>
-                                        <div class="col-6 col-md-2">
-                                            <input type="text" id="dopaFrom" class="form-control date-picker" placeholder="DOPA From">
-                                        </div>
-                                        <div class="col-6 col-md-2">
-                                            <input type="text" id="dopaTo" class="form-control date-picker" placeholder="DOPA To">
+                                        <div class="col-6 col-md-3">
+                                            <input type="text" id="dopaRange" class="form-control" placeholder="DOPA Range (From to To)">
                                         </div>
                                         <div class="col-6 col-md-2 exited-only d-none">
                                             <input type="text" id="exitFrom" class="form-control date-picker" placeholder="Eff. Date From">
@@ -1978,6 +1975,14 @@
                     allowInput: true,
                     disableMobile: true
                 });
+                
+                // Init DOPA Range Picker
+                flatpickr("#dopaRange", {
+                    mode: "range",
+                    dateFormat: "d/m/Y",
+                    allowInput: true,
+                    disableMobile: true
+                });
 
                 // Listen for tab changes to load specific data
                 const privilegesTab = document.getElementById('privileges-tab');
@@ -2648,12 +2653,12 @@
                 if (toVal) params.append('exit_to', userDateToIsoOrNull(toVal));
             }
             
-            const dopaFrom = document.getElementById('dopaFrom');
-            const dopaTo = document.getElementById('dopaTo');
-            const dopaFromVal = dopaFrom ? dopaFrom.value : '';
-            const dopaToVal = dopaTo ? dopaTo.value : '';
-            if (dopaFromVal) params.append('dopa_from', userDateToIsoOrNull(dopaFromVal));
-            if (dopaToVal) params.append('dopa_to', userDateToIsoOrNull(dopaToVal));
+            const dopaRange = document.getElementById('dopaRange');
+            if (dopaRange && dopaRange.value) {
+                const parts = dopaRange.value.split(' to ');
+                if (parts.length >= 1) params.append('dopa_from', userDateToIsoOrNull(parts[0]));
+                if (parts.length === 2) params.append('dopa_to', userDateToIsoOrNull(parts[1]));
+            }
 
              // If searching, include both Completed and Incomplete by omitting completeness filter
              if (!q && currentStatusFilter) params.append('completeness', currentStatusFilter);
@@ -2762,10 +2767,12 @@
             if (exitFrom) exitFrom.value = '';
             if (exitTo) exitTo.value = '';
             
-            const dopaFrom = document.getElementById('dopaFrom');
-            const dopaTo = document.getElementById('dopaTo');
-            if (dopaFrom) dopaFrom.value = '';
-            if (dopaTo) dopaTo.value = '';
+            const dopaRange = document.getElementById('dopaRange');
+            if (dopaRange) {
+                 // Clear flatpickr if instance exists
+                 if (dopaRange._flatpickr) dopaRange._flatpickr.clear();
+                 dopaRange.value = '';
+            }
 
             currentStatus = 'active';
             currentStatusFilter = 'completed';
@@ -4399,6 +4406,14 @@
                 if (fromVal) params.append('exit_from', userDateToIsoOrNull(fromVal));
                 if (toVal) params.append('exit_to', userDateToIsoOrNull(toVal));
             }
+
+            const dopaRange = document.getElementById('dopaRange');
+            if (dopaRange && dopaRange.value) {
+                const parts = dopaRange.value.split(' to ');
+                if (parts.length >= 1) params.append('dopa_from', userDateToIsoOrNull(parts[0]));
+                if (parts.length === 2) params.append('dopa_to', userDateToIsoOrNull(parts[1]));
+            }
+
             if (!q && currentStatusFilter) params.append('completeness', currentStatusFilter);
             if (currentStatus) params.append('status', currentStatus);
             if (columns && columns.length) params.append('columns', columns.join(','));
