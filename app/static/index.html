@@ -2127,6 +2127,11 @@
 
         // View Navigation
         function showView(viewId) {
+            // Redirect staff to staff-dashboard when clicking 'dashboard'
+            if (viewId === 'dashboard' && role === 'staff') {
+                viewId = 'staff-dashboard';
+            }
+
             if (viewId === 'offices' && role === 'office_admin') {
                 alert('Permission denied');
                 return;
@@ -2135,8 +2140,14 @@
             // Update Sidebar Active State
             document.querySelectorAll('.sidebar .nav-link').forEach(link => {
                 link.classList.remove('active');
-                if (link.getAttribute('onclick') && link.getAttribute('onclick').includes(`'${viewId}'`)) {
-                    link.classList.add('active');
+                const onclick = link.getAttribute('onclick');
+                if (onclick) {
+                    if (onclick.includes(`'${viewId}'`)) {
+                        link.classList.add('active');
+                    } else if (viewId === 'staff-dashboard' && onclick.includes(`'dashboard'`)) {
+                        // Highlight Dashboard link for staff dashboard too
+                        link.classList.add('active');
+                    }
                 }
             });
 
@@ -2164,6 +2175,7 @@
             // Update Title
             const titles = {
                 'dashboard': 'Dashboard',
+                'staff-dashboard': 'Staff Dashboard',
                 'personnel': 'Personnel Management',
                 'offices': 'Offices Directory',
                 'leave': 'Leave Management',
@@ -2364,7 +2376,7 @@
 
         function setupStaffDashboardView() {
             const dashView = document.getElementById('view-staff-dashboard');
-            if (dashView && !dashView.innerHTML.trim()) {
+            if (dashView && dashView.children.length === 0) {
                 dashView.innerHTML = `
                     <div class="container mt-4">
                         <div class="row">
