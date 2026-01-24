@@ -183,8 +183,8 @@
         <button class="btn btn-sm btn-outline-danger mt-4" onclick="document.getElementById('global-loader').style.display='none'">Force Close Loader</button>
     </div>
 
-    <!-- Create Organization Modal -->
-    <div class="modal fade" id="createOrgModal" tabindex="-1">
+    <!-- Create Formation Modal -->
+    <div class="modal fade" id="createFormationModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -192,19 +192,19 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="createOrgForm">
+                    <form id="createFormationForm">
                         <div class="mb-3">
-                            <label class="form-label required">Organization Name</label>
-                            <input type="text" class="form-control" id="orgName" required>
+                            <label class="form-label required">Formation Name</label>
+                            <input type="text" class="form-control" id="formationName" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label required">Organization Code</label>
-                            <input type="text" class="form-control" id="orgCode" required placeholder="e.g. NIS">
-                            <div class="form-text">Unique code for the organization.</div>
+                            <label class="form-label required">Formation Code</label>
+                            <input type="text" class="form-control" id="formationCode" required placeholder="e.g. NIS">
+                            <div class="form-text">Unique code for the formation.</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Description</label>
-                            <select class="form-select" id="orgDescriptionSelect" onchange="toggleOrgDescriptionOther('create')">
+                            <select class="form-select" id="formationDescriptionSelect" onchange="toggleFormationDescriptionOther('create')">
                                 <option value="">Select Description...</option>
                                 <option value="Directorate">Directorate</option>
                                 <option value="Zonal Command">Zonal Command</option>
@@ -215,20 +215,20 @@
                                 <option value="FTZ">FTZ</option>
                                 <option value="Other">Other</option>
                             </select>
-                            <input type="text" class="form-control mt-2 d-none" id="orgDescriptionOther" placeholder="Enter description">
+                            <input type="text" class="form-control mt-2 d-none" id="formationDescriptionOther" placeholder="Enter description">
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="submitCreateOrg()">Create</button>
+                    <button type="button" class="btn btn-primary" onclick="submitCreateFormation()">Create</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Create Formation Admin Modal -->
-    <div class="modal fade" id="createOrgAdminModal" tabindex="-1">
+    <div class="modal fade" id="createFormationAdminModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -236,11 +236,11 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="createOrgAdminForm">
-                        <input type="hidden" id="adminOrgId">
+                    <form id="createFormationAdminForm">
+                        <input type="hidden" id="adminFormationId">
                         <div class="mb-3">
                             <label class="form-label">Formation</label>
-                            <input type="text" class="form-control" id="adminOrgNameDisplay" readonly disabled>
+                            <input type="text" class="form-control" id="adminFormationNameDisplay" readonly disabled>
                         </div>
                         <div class="mb-3">
                             <label class="form-label required">Admin Username</label>
@@ -254,14 +254,14 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="submitCreateOrgAdmin()">Create Admin</button>
+                    <button type="button" class="btn btn-primary" onclick="submitCreateFormationAdmin()">Create Admin</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Update Organization Modal -->
-    <div class="modal fade" id="updateOrgModal" tabindex="-1">
+    <!-- Update Formation Modal -->
+    <div class="modal fade" id="updateFormationModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -269,19 +269,19 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="updateOrgForm">
-                        <input type="hidden" id="updateOrgId">
+                    <form id="updateFormationForm">
+                        <input type="hidden" id="updateFormationId">
                         <div class="mb-3">
                             <label class="form-label required">Formation Name</label>
-                            <input type="text" class="form-control" id="updateOrgName" required>
+                            <input type="text" class="form-control" id="updateFormationName" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Formation Code</label>
-                            <input type="text" class="form-control" id="updateOrgCode" readonly disabled>
+                            <input type="text" class="form-control" id="updateFormationCode" readonly disabled>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Description</label>
-                            <select class="form-select" id="updateOrgDescriptionSelect" onchange="toggleOrgDescriptionOther('update')">
+                            <select class="form-select" id="updateFormationDescriptionSelect" onchange="toggleFormationDescriptionOther('update')">
                                 <option value="">Select Description...</option>
                                 <option value="Directorate">Directorate</option>
                                 <option value="Zonal Command">Zonal Command</option>
@@ -292,28 +292,28 @@
                                 <option value="FTZ">FTZ</option>
                                 <option value="Other">Other</option>
                             </select>
-                            <input type="text" class="form-control mt-2 d-none" id="updateOrgDescriptionOther" placeholder="Enter description">
+                            <input type="text" class="form-control mt-2 d-none" id="updateFormationDescriptionOther" placeholder="Enter description">
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="submitUpdateOrg()">Update</button>
+                    <button type="button" class="btn btn-primary" onclick="submitUpdateFormation()">Update</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- View Admins Modal -->
-    <div class="modal fade" id="viewAdminsModal" tabindex="-1">
+    <div class="modal fade" id="viewFormationAdminsModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Formation Admins: <span id="viewAdminsOrgName"></span></h5>
+                    <h5 class="modal-title">Formation Admins: <span id="viewAdminsFormationName"></span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" id="viewAdminsOrgId">
+                    <input type="hidden" id="viewAdminsFormationId">
                     <div class="table-responsive">
                         <table class="table table-hover table-bordered">
                             <thead>
@@ -323,7 +323,7 @@
                                     <th>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody id="orgAdminsTableBody">
+                            <tbody id="formationAdminsTableBody">
                                 <!-- Loaded dynamically -->
                             </tbody>
                         </table>
@@ -509,18 +509,18 @@
                     </div>
                 </div>
 
-                <!-- Organizations View (Special Admin Only) -->
-                <div id="view-organizations" class="view-section d-none">
+                <!-- Formations View (Special Admin Only) -->
+                <div id="view-formations" class="view-section d-none">
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">Management</h5>
-                            <button class="btn btn-primary btn-sm" onclick="openCreateOrgModal()">
+                            <button class="btn btn-primary btn-sm" onclick="openCreateFormationModal()">
                                 <i class="bi bi-plus-lg"></i> Add Formation
                             </button>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
-                                <table class="table table-hover table-bordered" id="orgTable">
+                                <table class="table table-hover table-bordered" id="formationTable">
                                     <thead class="table-light">
                                         <tr>
                                             <th>ID</th>
@@ -530,7 +530,7 @@
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="orgTableBody">
+                                    <tbody id="formationTableBody">
                                         <!-- Populated by JS -->
                                     </tbody>
                                 </table>
@@ -607,15 +607,15 @@
                                                 </ul>
                                             </div>
                                         </div>
-                                        <div class="col-6 col-md-2" id="orgFilterContainer" style="display:none;">
-                                            <div class="dropdown" id="filterOrgDropdown">
-                                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterOrgBtn">
-                                                    All Organizations
+                                        <div class="col-6 col-md-2" id="formationFilterContainer" style="display:none;">
+                                            <div class="dropdown" id="filterFormationDropdown">
+                                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterFormationBtn">
+                                                    All Formations
                                                 </button>
                                                 <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
                                                      <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
                                                      <li><hr class="dropdown-divider"></li>
-                                                     <div id="filterOrgListContainer">
+                                                     <div id="filterFormationListContainer">
                                                         <!-- Checkboxes go here -->
                                                      </div>
                                                 </ul>
@@ -1774,18 +1774,18 @@
                     const brandSubtitle = document.getElementById('sidebar-brand-subtitle');
                     
                     if (brandText && brandSubtitle) {
-                        // Formation User (has organization code)
-                        if (userData.organization_code) {
-                            const name = userData.organization_name || userData.organization_code;
-                            const desc = userData.organization_description || "";
-                            brandText.textContent = userData.organization_code || "";
+                        // Formation User (has formation code)
+                        if (userData.formation_code) {
+                            const name = userData.formation_name || userData.formation_code;
+                            const desc = userData.formation_description || "";
+                            brandText.textContent = userData.formation_code || "";
                             brandSubtitle.textContent = desc ? `${name} ${desc}` : name;
                             brandSubtitle.style.display = "block";
                         } 
                         // Fallback (e.g. Super Admin without org, or just org name)
-                        else if (userData.organization_name) {
-                            const name = userData.organization_name;
-                            const desc = userData.organization_description || "";
+                        else if (userData.formation_name) {
+                            const name = userData.formation_name;
+                            const desc = userData.formation_description || "";
                             brandText.textContent = desc ? `${name} ${desc}` : name;
                             brandSubtitle.style.display = "none";
                         } 
@@ -1803,11 +1803,11 @@
             });
         }
 
-        // --- Organization Management UI Functions ---
+        // --- Formation Management UI Functions ---
 
-        function toggleOrgDescriptionOther(mode) {
-            const selectId = mode === 'create' ? 'orgDescriptionSelect' : 'updateOrgDescriptionSelect';
-            const inputId = mode === 'create' ? 'orgDescriptionOther' : 'updateOrgDescriptionOther';
+        function toggleFormationDescriptionOther(mode) {
+            const selectId = mode === 'create' ? 'formationDescriptionSelect' : 'updateFormationDescriptionSelect';
+            const inputId = mode === 'create' ? 'formationDescriptionOther' : 'updateFormationDescriptionOther';
             const selectVal = document.getElementById(selectId).value;
             const inputEl = document.getElementById(inputId);
             
@@ -1870,7 +1870,7 @@
                 'leave': 'Leave Management',
                 'audit': 'Audit Logs',
                 'approvals': 'Change Authorizations',
-                'organizations': 'Management',
+                'formations': 'Management',
                 'success': 'Action Successful'
             };
             document.getElementById('pageTitle').textContent = titles[viewId] || 'NIS';
@@ -1881,7 +1881,7 @@
             if(viewId === 'audit') loadAuditLogs();
             if(viewId === 'approvals') loadApprovalsView();
             if(viewId === 'leave') loadLeaveRequests();
-            if(viewId === 'organizations') loadOrganizations();
+            if(viewId === 'formations') loadFormations();
             if(viewId === 'personnel') {
                 // If coming to personnel, maybe refresh list?
                 // loadStaff(); // Optional
@@ -1992,8 +1992,8 @@
                 // Role Based UI
                     if (role === 'special_admin') {
                         document.querySelectorAll('.special-only').forEach(el => el.classList.remove('d-none'));
-                        populateOrgFilter();
-                        showView('organizations');
+                        populateFormationFilter();
+                        showView('formations');
                         
                         // Hide loader
                         const loader = document.getElementById('global-loader');
@@ -2664,8 +2664,8 @@
             // Multi-select Offices
             document.querySelectorAll('.filter-office-cb:checked').forEach(cb => params.append('office', cb.value));
             
-            // Multi-select Organizations (Special Admin)
-            document.querySelectorAll('.filter-org-cb:checked').forEach(cb => params.append('organization_id', cb.value));
+            // Multi-select Formations (Special Admin)
+            document.querySelectorAll('.filter-formation-cb:checked').forEach(cb => params.append('formation_id', cb.value));
 
             try {
                 const res = await fetch(`${API_URL}/staff?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` }});
@@ -2752,8 +2752,8 @@
             document.querySelectorAll('.filter-office-cb').forEach(cb => cb.checked = false);
             updateFilterLabel('Office');
             
-            document.querySelectorAll('.filter-org-cb').forEach(cb => cb.checked = false);
-            updateFilterLabel('Org');
+            document.querySelectorAll('.filter-formation-cb').forEach(cb => cb.checked = false);
+            updateFilterLabel('Formation');
 
             document.getElementById('sortDopp').value = '';
             const exitFrom = document.getElementById('exitFrom');
@@ -3879,49 +3879,49 @@
             document.getElementById('staffForm').reset();
         }
 
-        // --- Organization Management (Special Admin) ---
+        // --- Formation Management (Special Admin) ---
         
-        async function populateOrgFilter() {
+        async function populateFormationFilter() {
             if (role !== 'special_admin') return;
             
-            const container = document.getElementById('filterOrgListContainer');
-            const wrapper = document.getElementById('orgFilterContainer');
+            const container = document.getElementById('filterFormationListContainer');
+            const wrapper = document.getElementById('formationFilterContainer');
             if (!container || !wrapper) return;
             
             wrapper.style.display = 'block';
             container.innerHTML = '<li class="dropdown-item text-muted">Loading...</li>';
             
             try {
-                const res = await fetch(`${API_URL}/organizations`, {
+                const res = await fetch(`${API_URL}/formations`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
-                    const orgs = await res.json();
+                    const formations = await res.json();
                     container.innerHTML = '';
-                    if (orgs.length === 0) {
-                        container.innerHTML = '<li class="dropdown-item text-muted">No organizations found</li>';
+                    if (formations.length === 0) {
+                        container.innerHTML = '<li class="dropdown-item text-muted">No formations found</li>';
                         return;
                     }
                     
                     // Add "Select All" option
-                    const selectAllId = 'filter-org-all';
+                    const selectAllId = 'filter-formation-all';
                     const liAll = document.createElement('li');
                     liAll.className = 'dropdown-item';
                     liAll.innerHTML = `
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="${selectAllId}" onchange="toggleSelectAllFilter(this, '.filter-org-cb', 'Org')">
+                            <input class="form-check-input" type="checkbox" id="${selectAllId}" onchange="toggleSelectAllFilter(this, '.filter-formation-cb', 'Formation')">
                             <label class="form-check-label w-100 stretched-link" for="${selectAllId}">Select All</label>
                         </div>
                     `;
                     container.appendChild(liAll);
                     
-                    orgs.forEach(o => {
+                    formations.forEach(o => {
                         const li = document.createElement('li');
                         li.className = 'dropdown-item';
                         li.innerHTML = `
                             <div class="form-check">
-                                <input class="form-check-input filter-org-cb" type="checkbox" value="${o.id}" id="filter-org-${o.id}" onchange="updateFilterLabel('Org')">
-                                <label class="form-check-label w-100 stretched-link" for="filter-org-${o.id}">
+                                <input class="form-check-input filter-formation-cb" type="checkbox" value="${o.id}" id="filter-formation-${o.id}" onchange="updateFilterLabel('Formation')">
+                                <label class="form-check-label w-100 stretched-link" for="filter-formation-${o.id}">
                                     ${o.name} <small class="text-muted">(${o.code})</small>
                                 </label>
                             </div>
@@ -3937,22 +3937,22 @@
             }
         }
 
-        async function loadOrganizations() {
-            const tbody = document.getElementById('orgTableBody');
+        async function loadFormations() {
+            const tbody = document.getElementById('formationTableBody');
             tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
             
             try {
-                const res = await fetch(`${API_URL}/organizations`, {
+                const res = await fetch(`${API_URL}/formations`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
-                    const orgs = await res.json();
+                    const formations = await res.json();
                     tbody.innerHTML = '';
-                    if (orgs.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No organizations found</td></tr>';
+                    if (formations.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No formations found</td></tr>';
                         return;
                     }
-                    orgs.forEach(o => {
+                    formations.forEach(o => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td>${o.id}</td>
@@ -3960,35 +3960,35 @@
                             <td>${o.code}</td>
                             <td>${o.description || ''}</td>
                             <td>
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateOrgModal(${o.id}, '${o.name.replace(/'/g, "\\'")}', '${o.code}', '${(o.description || '').replace(/'/g, "\\'")}')">Edit</button>
-                                <button class="btn btn-sm btn-outline-success me-1" onclick="openCreateOrgAdminModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">Add Admin</button>
-                                <button class="btn btn-sm btn-outline-info" onclick="openViewAdminsModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">View Admins</button>
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateFormationModal(${o.id}, '${o.name.replace(/'/g, "\\'")}', '${o.code}', '${(o.description || '').replace(/'/g, "\\'")}')">Edit</button>
+                                <button class="btn btn-sm btn-outline-success me-1" onclick="openCreateFormationAdminModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">Add Admin</button>
+                                <button class="btn btn-sm btn-outline-info" onclick="openViewFormationAdminsModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">View Admins</button>
                             </td>
                         `;
                         tbody.appendChild(tr);
                     });
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Failed to load organizations</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Failed to load formations</td></tr>';
                 }
             } catch (e) {
                 console.error(e);
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading organizations</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading formations</td></tr>';
             }
         }
 
-        function openCreateOrgModal() {
-            document.getElementById('createOrgForm').reset();
-            new bootstrap.Modal(document.getElementById('createOrgModal')).show();
+        function openCreateFormationModal() {
+            document.getElementById('createFormationForm').reset();
+            new bootstrap.Modal(document.getElementById('createFormationModal')).show();
         }
 
-        async function submitCreateOrg() {
-            const name = document.getElementById('orgName').value;
-            const code = document.getElementById('orgCode').value;
+        async function submitCreateFormation() {
+            const name = document.getElementById('formationName').value;
+            const code = document.getElementById('formationCode').value;
             
-            const descSelect = document.getElementById('orgDescriptionSelect').value;
+            const descSelect = document.getElementById('formationDescriptionSelect').value;
             let description = descSelect;
             if (descSelect === 'Other') {
-                description = document.getElementById('orgDescriptionOther').value;
+                description = document.getElementById('formationDescriptionOther').value;
             }
 
             if (!name || !code) {
@@ -3997,7 +3997,7 @@
             }
             
             try {
-                const res = await fetch(`${API_URL}/organizations`, {
+                const res = await fetch(`${API_URL}/formations`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -4007,13 +4007,13 @@
                 });
                 
                 if (res.ok) {
-                    alert("Organization created successfully");
-                    bootstrap.Modal.getInstance(document.getElementById('createOrgModal')).hide();
-                    loadOrganizations();
-                    populateOrgFilter(); // Refresh filter too
+                    alert("Formation created successfully");
+                    bootstrap.Modal.getInstance(document.getElementById('createFormationModal')).hide();
+                    loadFormations();
+                    populateFormationFilter(); // Refresh filter too
                 } else {
                     const err = await res.json();
-                    alert("Error: " + (err.detail || "Failed to create organization"));
+                    alert("Error: " + (err.detail || "Failed to create formation"));
                 }
             } catch (e) {
                 console.error(e);
@@ -4021,15 +4021,15 @@
             }
         }
 
-        function openCreateOrgAdminModal(orgId, orgName) {
-            document.getElementById('createOrgAdminForm').reset();
-            document.getElementById('adminOrgId').value = orgId;
-            document.getElementById('adminOrgNameDisplay').value = orgName;
-            new bootstrap.Modal(document.getElementById('createOrgAdminModal')).show();
+        function openCreateFormationAdminModal(formationId, formationName) {
+            document.getElementById('createFormationAdminForm').reset();
+            document.getElementById('adminFormationId').value = formationId;
+            document.getElementById('adminFormationNameDisplay').value = formationName;
+            new bootstrap.Modal(document.getElementById('createFormationAdminModal')).show();
         }
 
-        async function submitCreateOrgAdmin() {
-            const orgId = document.getElementById('adminOrgId').value;
+        async function submitCreateFormationAdmin() {
+            const formationId = document.getElementById('adminFormationId').value;
             const username = document.getElementById('adminUsername').value;
             const password = document.getElementById('adminPassword').value;
             
@@ -4039,7 +4039,7 @@
             }
             
             try {
-                const res = await fetch(`${API_URL}/organizations/${orgId}/admin`, {
+                const res = await fetch(`${API_URL}/formations/${formationId}/admin`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -4051,7 +4051,7 @@
                 if (res.ok) {
                     const data = await res.json();
                     alert(data.detail || "Admin created successfully");
-                    bootstrap.Modal.getInstance(document.getElementById('createOrgAdminModal')).hide();
+                    bootstrap.Modal.getInstance(document.getElementById('createFormationAdminModal')).hide();
                 } else {
                     const err = await res.json();
                     alert("Error: " + (err.detail || "Failed to create admin"));
@@ -4062,13 +4062,13 @@
             }
         }
         
-        function openUpdateOrgModal(id, name, code, description) {
-            document.getElementById('updateOrgId').value = id;
-            document.getElementById('updateOrgName').value = name;
-            document.getElementById('updateOrgCode').value = code;
+        function openUpdateFormationModal(id, name, code, description) {
+            document.getElementById('updateFormationId').value = id;
+            document.getElementById('updateFormationName').value = name;
+            document.getElementById('updateFormationCode').value = code;
             
-            const select = document.getElementById('updateOrgDescriptionSelect');
-            const otherInput = document.getElementById('updateOrgDescriptionOther');
+            const select = document.getElementById('updateFormationDescriptionSelect');
+            const otherInput = document.getElementById('updateFormationDescriptionOther');
             
             // Reset state
             select.value = "";
@@ -4094,17 +4094,17 @@
                 }
             }
             
-            new bootstrap.Modal(document.getElementById('updateOrgModal')).show();
+            new bootstrap.Modal(document.getElementById('updateFormationModal')).show();
         }
 
-        async function submitUpdateOrg() {
-            const id = document.getElementById('updateOrgId').value;
-            const name = document.getElementById('updateOrgName').value;
+        async function submitUpdateFormation() {
+            const id = document.getElementById('updateFormationId').value;
+            const name = document.getElementById('updateFormationName').value;
             
-            const descSelect = document.getElementById('updateOrgDescriptionSelect').value;
+            const descSelect = document.getElementById('updateFormationDescriptionSelect').value;
             let description = descSelect;
             if (descSelect === 'Other') {
-                description = document.getElementById('updateOrgDescriptionOther').value;
+                description = document.getElementById('updateFormationDescriptionOther').value;
             }
             
             if (!name) {
@@ -4113,7 +4113,7 @@
             }
             
             try {
-                const res = await fetch(`${API_URL}/organizations/${id}`, {
+                const res = await fetch(`${API_URL}/formations/${id}`, {
                     method: 'PUT',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -4123,13 +4123,13 @@
                 });
                 
                 if (res.ok) {
-                    alert("Organization updated successfully");
-                    bootstrap.Modal.getInstance(document.getElementById('updateOrgModal')).hide();
-                    loadOrganizations();
-                    populateOrgFilter(); // Refresh filter too
+                    alert("Formation updated successfully");
+                    bootstrap.Modal.getInstance(document.getElementById('updateFormationModal')).hide();
+                    loadFormations();
+                    populateFormationFilter(); // Refresh filter too
                 } else {
                     const err = await res.json();
-                    alert("Error: " + (err.detail || "Failed to update organization"));
+                    alert("Error: " + (err.detail || "Failed to update formation"));
                 }
             } catch (e) {
                 console.error(e);
@@ -4137,18 +4137,18 @@
             }
         }
 
-        function openViewAdminsModal(orgId, orgName) {
-            document.getElementById('viewAdminsOrgName').textContent = orgName;
-            document.getElementById('viewAdminsOrgId').value = orgId;
-            new bootstrap.Modal(document.getElementById('viewAdminsModal')).show();
-            loadOrgAdmins(orgId);
+        function openViewFormationAdminsModal(formationId, formationName) {
+            document.getElementById('viewAdminsFormationName').textContent = formationName;
+            document.getElementById('viewAdminsFormationId').value = formationId;
+            new bootstrap.Modal(document.getElementById('viewFormationAdminsModal')).show();
+            loadFormationAdmins(formationId);
         }
 
-        async function loadOrgAdmins(orgId) {
-            const tbody = document.getElementById('orgAdminsTableBody');
+        async function loadFormationAdmins(formationId) {
+            const tbody = document.getElementById('formationAdminsTableBody');
             tbody.innerHTML = '<tr><td colspan="3" class="text-center">Loading...</td></tr>';
             try {
-                const res = await fetch(`${API_URL}/organizations/${orgId}/admins`, {
+                const res = await fetch(`${API_URL}/formations/${formationId}/admins`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -4214,8 +4214,8 @@
                     const data = await res.json();
                     if (res.ok) {
                         alert("User deleted successfully");
-                        const orgId = document.getElementById('viewAdminsOrgId').value;
-                        loadOrgAdmins(orgId);
+                        const formationId = document.getElementById('viewAdminsFormationId').value;
+                        loadFormationAdmins(formationId);
                     } else {
                         alert("Error: " + data.detail);
                     }
@@ -5259,10 +5259,10 @@
             }
         }
 
-        // --- Organization Management (Special Admin) ---
+        // --- Formation Management (Special Admin) ---
 
-        let createOrgModalInstance;
-        let createOrgAdminModalInstance;
+        let createFormationModalInstance;
+        let createFormationAdminModalInstance;
 
         // --- Text Zoom Logic ---
         let currentZoom = 100;
@@ -5292,11 +5292,11 @@
                 applyZoom(currentZoom);
             }
             
-            const orgModalEl = document.getElementById('createOrgModal');
-            if (orgModalEl) createOrgModalInstance = new bootstrap.Modal(orgModalEl);
+            const formationModalEl = document.getElementById('createFormationModal');
+            if (formationModalEl) createFormationModalInstance = new bootstrap.Modal(formationModalEl);
             
-            const adminModalEl = document.getElementById('createOrgAdminModal');
-            if (adminModalEl) createOrgAdminModalInstance = new bootstrap.Modal(adminModalEl);
+            const adminModalEl = document.getElementById('createFormationAdminModal');
+            if (adminModalEl) createFormationAdminModalInstance = new bootstrap.Modal(adminModalEl);
         });
 
 

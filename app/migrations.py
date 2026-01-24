@@ -10,41 +10,59 @@ def run_migrations():
         inspector = inspect(engine)
         table_names = inspector.get_table_names()
         
-        # --- Multi-Tenancy Migrations ---
+        # --- Formation Refactor Migrations ---
         
-        # 1. Create organizations table if not exists
-        if 'organizations' not in table_names:
-            print("Table 'organizations' missing. Creating it...")
-            models.Organization.__table__.create(engine)
-            print("Table 'organizations' created successfully.")
+        # 1. Rename organizations table to formations
+        if 'organizations' in table_names and 'formations' not in table_names:
+            print("Renaming table 'organizations' to 'formations'...")
+            with engine.connect() as conn:
+                with conn.begin():
+                    conn.execute(text("ALTER TABLE organizations RENAME TO formations"))
+            print("Table renamed successfully.")
+            # Refresh table names
+            table_names = inspector.get_table_names()
+
+        # 2. Create formations table if not exists (and wasn't renamed)
+        if 'formations' not in table_names:
+            print("Table 'formations' missing. Creating it...")
+            models.Formation.__table__.create(engine)
+            print("Table 'formations' created successfully.")
         else:
-            print("Table 'organizations' already exists.")
+            print("Table 'formations' already exists.")
             # Check for description column
-            columns = [c['name'] for c in inspector.get_columns('organizations')]
+            columns = [c['name'] for c in inspector.get_columns('formations')]
             if 'description' not in columns:
-                print("Column 'description' missing in 'organizations'. Adding it...")
+                print("Column 'description' missing in 'formations'. Adding it...")
                 with engine.connect() as conn:
                     with conn.begin():
-                        conn.execute(text("ALTER TABLE organizations ADD COLUMN description VARCHAR(256)"))
-                print("Column 'description' added to 'organizations' successfully.")
+                        conn.execute(text("ALTER TABLE formations ADD COLUMN description VARCHAR(256)"))
+                print("Column 'description' added to 'formations' successfully.")
 
-        # 2. Add organization_id to existing tables
-        # We target: users, staff, offices, audit_logs
+        # 3. Rename/Add formation_id to existing tables
         tables_to_update = ['users', 'staff', 'offices', 'audit_logs']
         
         for table in tables_to_update:
             if table in table_names:
                 columns = [c['name'] for c in inspector.get_columns(table)]
-                if 'organization_id' not in columns:
-                    print(f"Column 'organization_id' missing in '{table}'. Adding it...")
+                
+                # Check for old column name
+                if 'organization_id' in columns and 'formation_id' not in columns:
+                    print(f"Renaming 'organization_id' to 'formation_id' in '{table}'...")
                     with engine.connect() as conn:
                         with conn.begin():
-                            # Note: SQLite has limited ALTER TABLE support for FKs.
-                            # We just add the column. SQLAlchemy models handle the relationship logic.
-                            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN organization_id INTEGER"))
-                    print(f"Column 'organization_id' added to '{table}' successfully.")
+                            conn.execute(text(f"ALTER TABLE {table} RENAME COLUMN organization_id TO formation_id"))
+                    print(f"Renamed 'organization_id' to 'formation_id' in '{table}'.")
+                
+                # Check for new column name (if rename didn't happen or wasn't needed)
+                columns = [c['name'] for c in inspector.get_columns(table)] # Refresh columns
+                if 'formation_id' not in columns:
+                    print(f"Column 'formation_id' missing in '{table}'. Adding it...")
+                    with engine.connect() as conn:
+                        with conn.begin():
+                            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN formation_id INTEGER"))
+                    print(f"Column 'formation_id' added to '{table}' successfully.")
                 else:
-                    print(f"Column 'organization_id' already exists in '{table}'.")
+                    print(f"Column 'formation_id' already exists in '{table}'.")
 
         # --- Existing Migrations ---
 

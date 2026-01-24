@@ -131,7 +131,7 @@ def login():
                             "sub": user.username, 
                             "role": user.role, 
                             "id": user.id,
-                            "organization_id": user.organization_id
+                            "formation_id": user.formation_id
                         })
                         return jsonify({
                             "access_token": token, 
@@ -139,7 +139,7 @@ def login():
                             "role": user.role, 
                             "username": user.username, 
                             "id": user.id,
-                            "organization_id": user.organization_id
+                            "formation_id": user.formation_id
                         })
                 
                 staff = crud.get_staff_by_nis(db, username)
@@ -171,7 +171,7 @@ def login():
                             "sub": staff.nis_no, 
                             "role": staff.role, 
                             "id": staff.id,
-                            "organization_id": staff.organization_id
+                            "formation_id": staff.formation_id
                         })
                         return jsonify({
                             "access_token": token, 
@@ -179,7 +179,7 @@ def login():
                             "role": staff.role, 
                             "username": staff.nis_no, 
                             "id": staff.id,
-                            "organization_id": staff.organization_id
+                            "formation_id": staff.formation_id
                         })
                 
                 return jsonify({"detail": "Invalid credentials"}), 401
@@ -220,24 +220,24 @@ def get_current_user_info():
     if not payload:
         return jsonify({"detail": "Invalid token"}), 401
     
-    # Enrich with organization name
-    organization_id = payload.get("organization_id")
-    organization_name = None
-    if organization_id:
+    # Enrich with formation name
+    formation_id = payload.get("formation_id")
+    formation_name = None
+    if formation_id:
         with next(get_db()) as db:
-             org = crud.get_organization(db, organization_id)
+             org = crud.get_formation(db, formation_id)
              if org:
-                 organization_name = org.name
-                 payload["organization_code"] = org.code
-                 payload["organization_description"] = org.description
+                 formation_name = org.name
+                 payload["formation_code"] = org.code
+                 payload["formation_description"] = org.description
     
-    payload["organization_name"] = organization_name
+    payload["formation_name"] = formation_name
     return jsonify(payload)
 
-# --- ORGANIZATION MANAGEMENT (Special Admin) ---
+# --- FORMATION MANAGEMENT (Special Admin) ---
 
-@app.post("/organizations")
-def create_organization_endpoint():
+@app.post("/formations")
+def create_formation_endpoint():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["special_admin"])
     if err: return err, code
@@ -253,29 +253,29 @@ def create_organization_endpoint():
     with next(get_db()) as db:
         try:
             # Check if code exists
-            existing = db.query(models.Organization).filter(models.Organization.code == code_val).first()
+            existing = db.query(models.Formation).filter(models.Formation.code == code_val).first()
             if existing:
-                return jsonify({"detail": "Organization code already exists"}), 400
+                return jsonify({"detail": "Formation code already exists"}), 400
                 
-            org = crud.create_organization(db, name, code_val, description)
-            return jsonify({"id": org.id, "name": org.name, "code": org.code, "description": org.description})
+            formation = crud.create_formation(db, name, code_val, description)
+            return jsonify({"id": formation.id, "name": formation.name, "code": formation.code, "description": formation.description})
         except Exception as e:
             return jsonify({"detail": str(e)}), 400
 
-@app.get("/organizations")
-def list_organizations_endpoint():
+@app.get("/formations")
+def list_formations_endpoint():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["special_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
-        orgs = crud.list_organizations(db)
+        formations = crud.list_formations(db)
         # Filter out NIS from the list
-        filtered_orgs = [o for o in orgs if o.code != "NIS"]
-        return jsonify([{"id": o.id, "name": o.name, "code": o.code, "description": o.description} for o in filtered_orgs])
+        filtered_formations = [o for o in formations if o.code != "NIS"]
+        return jsonify([{"id": o.id, "name": o.name, "code": o.code, "description": o.description} for o in filtered_formations])
 
-@app.put("/organizations/<int:org_id>")
-def update_organization_endpoint(org_id):
+@app.put("/formations/<int:formation_id>")
+def update_formation_endpoint(formation_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["special_admin"])
     if err: return err, code
@@ -288,14 +288,14 @@ def update_organization_endpoint(org_id):
         return jsonify({"detail": "Name is required"}), 400
         
     with next(get_db()) as db:
-        org = crud.update_organization(db, org_id, name, description)
-        if not org:
-            return jsonify({"detail": "Organization not found"}), 404
+        formation = crud.update_formation(db, formation_id, name, description)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
             
-        return jsonify({"id": org.id, "name": org.name, "code": org.code, "description": org.description})
+        return jsonify({"id": formation.id, "name": formation.name, "code": formation.code, "description": formation.description})
 
-@app.post("/organizations/<int:org_id>/admin")
-def create_organization_admin(org_id):
+@app.post("/formations/<int:formation_id>/admin")
+def create_formation_admin(formation_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["special_admin"])
     if err: return err, code
@@ -308,9 +308,9 @@ def create_organization_admin(org_id):
         return jsonify({"detail": "Username and password required"}), 400
         
     with next(get_db()) as db:
-        org = crud.get_organization(db, org_id)
-        if not org:
-            return jsonify({"detail": "Organization not found"}), 404
+        formation = crud.get_formation(db, formation_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
             
         # Check if user exists
         existing = db.query(models.User).filter(models.User.username == username).first()
@@ -321,26 +321,26 @@ def create_organization_admin(org_id):
         new_admin = models.User(
             username=username,
             password_hash=pwd_hash,
-            role="super_admin", # Organization super admin
-            organization_id=org_id
+            role="super_admin", # Formation super admin
+            formation_id=formation_id
         )
         db.add(new_admin)
         db.commit()
         
-        return jsonify({"detail": f"Admin created for {org.name}", "username": username})
+        return jsonify({"detail": f"Admin created for {formation.name}", "username": username})
 
-@app.get("/organizations/<int:org_id>/admins")
-def list_organization_admins(org_id):
+@app.get("/formations/<int:formation_id>/admins")
+def list_formation_admins(formation_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
     user, err, code = require_role(["special_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
-        org = crud.get_organization(db, org_id)
-        if not org:
-            return jsonify({"detail": "Organization not found"}), 404
+        formation = crud.get_formation(db, formation_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
             
-        users = crud.get_users_by_organization(db, org_id)
+        users = crud.get_users_by_formation(db, formation_id)
         return jsonify([{"id": u.id, "username": u.username, "role": u.role} for u in users])
 
 @app.post("/users/<int:user_id>/reset-password")
@@ -389,7 +389,7 @@ def dashboard_stats():
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         if user.get("role") == "office_admin":
@@ -402,7 +402,7 @@ def dashboard_stats():
                 select(func.count(models.Staff.id)).where(
                     models.Staff.exit_date.is_(None),
                     models.Staff.office == office_name,
-                    models.Staff.organization_id == organization_id
+                    models.Staff.formation_id == formation_id
                 )
             )
 
@@ -411,7 +411,7 @@ def dashboard_stats():
                 .where(
                     models.Staff.exit_date.is_(None),
                     models.Staff.office == office_name,
-                    models.Staff.organization_id == organization_id
+                    models.Staff.formation_id == formation_id
                 )
                 .group_by(models.Staff.rank)
             ).all()
@@ -426,7 +426,7 @@ def dashboard_stats():
                 "rank_counts": rank_counts,
             })
 
-        stats = crud.get_dashboard_stats(db, organization_id=organization_id)
+        stats = crud.get_dashboard_stats(db, formation_id=formation_id)
         stats["office_name"] = None
         return jsonify(stats)
 
@@ -436,12 +436,12 @@ def list_exit_requests():
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         stmt = select(models.Staff).where(models.Staff.out_request_status == "Pending")
-        if organization_id is not None:
-            stmt = stmt.where(models.Staff.organization_id == organization_id)
+        if formation_id is not None:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
         stmt = stmt.order_by(models.Staff.out_request_date.asc())
         items = db.scalars(stmt).all()
         return jsonify([schemas.to_dict_staff(item) for item in items])
@@ -551,7 +551,7 @@ def import_excel():
     user, err, code = require_role(["office_admin", "super_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
 
     if 'file' not in request.files: return jsonify({"detail": "No file uploaded"}), 400
     file = request.files['file']
@@ -634,8 +634,8 @@ def import_excel():
                                 db_session.flush()
                             data["lga_id"] = lga_obj.id
                                 
-                    if organization_id is not None:
-                        data["organization_id"] = organization_id
+                    if formation_id is not None:
+                        data["formation_id"] = formation_id
 
                     crud.create_staff(db_session, data)
                     success_count += 1
@@ -701,9 +701,9 @@ if engine:
 
             seed_states_lgas(db)
             seed_super_admin(db)
-            from .seeds import seed_special_admin, seed_vr_organization
+            from .seeds import seed_special_admin, seed_vr_formation
             seed_special_admin(db)
-            seed_vr_organization(db)
+            seed_vr_formation(db)
         finally:
             db.close()
     except Exception as e:
@@ -716,17 +716,17 @@ def list_offices_route():
     # Optional: if not authenticated, return empty or global?
     # Let's assume offices are protected now, or if public, return only public ones?
     # For now, let's try to get org from user if logged in.
-    organization_id = user.get("organization_id") if user else None
+    formation_id = user.get("formation_id") if user else None
     
     with next(get_db()) as db:
-        items = crud.list_offices_model(db, organization_id=organization_id)
+        items = crud.list_offices_model(db, formation_id=formation_id)
         existing_names = {i.name.strip().lower() for i in items if i and i.name and i.name.strip()}
         
         # Only sync staff offices if user is logged in and belongs to an org (or is special admin)
         if user:
              stmt = select(distinct(models.Staff.office)).where(models.Staff.office.is_not(None), models.Staff.office != "")
-             if organization_id:
-                 stmt = stmt.where(models.Staff.organization_id == organization_id)
+             if formation_id:
+                 stmt = stmt.where(models.Staff.formation_id == formation_id)
              stmt = stmt.order_by(models.Staff.office)
              
              staff_office_names = list(db.scalars(stmt))
@@ -737,12 +737,12 @@ def list_offices_route():
                 if not clean: continue
                 key = clean.lower()
                 if key in existing_names: continue
-                db.add(models.Office(name=clean, organization_id=organization_id))
+                db.add(models.Office(name=clean, formation_id=formation_id))
                 existing_names.add(key)
                 added = True
              if added:
                 db.commit()
-                items = crud.list_offices_model(db, organization_id=organization_id)
+                items = crud.list_offices_model(db, formation_id=formation_id)
                 
         return jsonify([schemas.to_dict_office(i) for i in items])
 
@@ -756,11 +756,11 @@ def create_office_route():
     name = data.get("name")
     if not name: return jsonify({"detail": "Name is required"}), 400
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         try:
-            obj = crud.create_office(db, name, organization_id=organization_id)
+            obj = crud.create_office(db, name, formation_id=formation_id)
             return jsonify(schemas.to_dict_office(obj)), 201
         except Exception as e:
             return jsonify({"detail": str(e)}), 400
@@ -833,16 +833,16 @@ def list_staff_endpoint():
         limit = request.args.get("limit", 50, type=int)
         offset = request.args.get("offset", 0, type=int)
         
-        organization_id = user.get("organization_id")
+        formation_id = user.get("formation_id")
         
-        # Allow special_admin to filter by organization
+        # Allow special_admin to filter by formation
         if user["role"] == "special_admin":
-             req_org_id = request.args.get("organization_id", type=int)
+             req_org_id = request.args.get("formation_id", type=int)
              if req_org_id:
-                 organization_id = req_org_id
+                 formation_id = req_org_id
              else:
-                 # If no specific organization requested, show all (global view)
-                 organization_id = None
+                 # If no specific formation requested, show all (global view)
+                 formation_id = None
         
         with next(get_db()) as db:
             if user["role"] == "office_admin":
@@ -865,7 +865,7 @@ def list_staff_endpoint():
                 exit_to=exit_to,
                 dopa_from=dopa_from,
                 dopa_to=dopa_to,
-                organization_id=organization_id,
+                formation_id=formation_id,
                 include_count=True
             )
             return jsonify({
@@ -895,9 +895,9 @@ def create_staff():
             data[k] = parsed
     if "gender" not in data or data["gender"] is None: data["gender"] = ""
     
-    organization_id = user.get("organization_id")
-    if organization_id:
-        data["organization_id"] = organization_id
+    formation_id = user.get("formation_id")
+    if formation_id:
+        data["formation_id"] = formation_id
         
     with next(get_db()) as db:
         if user["role"] == "office_admin":
@@ -910,7 +910,7 @@ def create_staff():
 
         try:
             obj = crud.create_staff(db, data)
-            crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff", organization_id=organization_id)
+            crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff", formation_id=formation_id)
             return jsonify(schemas.to_dict_staff(obj)), 201
         except ValueError as e: return jsonify({"detail": str(e)}), 400
 
@@ -928,7 +928,7 @@ def update_staff(staff_id: int):
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     data = request.get_json(force=True)
     for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
@@ -937,9 +937,9 @@ def update_staff(staff_id: int):
         existing = crud.get_staff(db, staff_id)
         if not existing: return jsonify({"detail": "Not found"}), 404
         
-        # Organization check
-        if organization_id and existing.organization_id != organization_id:
-            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        # Formation check
+        if formation_id and existing.formation_id != formation_id:
+            return jsonify({"detail": "Permission denied: Different Formation"}), 403
         
         if user["role"] in ["staff", "office_admin"]:
             # Check ownership for staff, or office match for office_admin
@@ -990,7 +990,7 @@ def update_staff(staff_id: int):
                     "UPDATE_REQUEST_APPEND",
                     f"Staff: {existing.nis_no}",
                     f"Appended to EDIT_REQUEST_ID={existing_req.id}",
-                    organization_id=organization_id
+                    formation_id=formation_id
                 )
                 return jsonify({"detail": "Update appended to pending request", "status": "pending_approval"}), 202
             else:
@@ -1006,7 +1006,7 @@ def update_staff(staff_id: int):
                     "UPDATE_REQUEST",
                     f"Staff: {existing.nis_no}",
                     f"EDIT_REQUEST_ID={req.id}",
-                    organization_id=organization_id
+                    formation_id=formation_id
                 )
                 return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
         
@@ -1014,7 +1014,7 @@ def update_staff(staff_id: int):
         try:
             obj = crud.update_staff(db, existing, data)
             if obj:
-                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details", organization_id=organization_id)
+                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details", formation_id=formation_id)
                 return jsonify(schemas.to_dict_staff(obj))
             return jsonify({"detail": "Not found"}), 404
         except ValueError as e:
@@ -1026,18 +1026,18 @@ def delete_staff(staff_id: int):
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj:
             return jsonify({"detail": "Not found"}), 404
             
-        if organization_id and obj.organization_id != organization_id:
-            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        if formation_id and obj.formation_id != formation_id:
+            return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
         crud.delete_staff(db, obj)
-        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", organization_id=organization_id)
+        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=formation_id)
         return jsonify({"detail": "Deleted"})
 
 @app.post("/staff/<int:staff_id>/reset-login")
@@ -1046,19 +1046,19 @@ def reset_login_count(staff_id: int):
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
         
-        if organization_id and obj.organization_id != organization_id:
-            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        if formation_id and obj.formation_id != formation_id:
+            return jsonify({"detail": "Permission denied: Different Formation"}), 403
         
         obj.login_count = 0
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", organization_id=organization_id)
+        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=formation_id)
         return jsonify({"detail": "Login count reset successfully"})
 
 @app.post("/staff/<int:staff_id>/reset-password")
@@ -1067,19 +1067,19 @@ def reset_staff_password(staff_id: int):
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
         
-        if organization_id and obj.organization_id != organization_id:
-            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        if formation_id and obj.formation_id != formation_id:
+            return jsonify({"detail": "Permission denied: Different Formation"}), 403
         
         obj.password_hash = None # Reset to use NIS number
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", organization_id=organization_id)
+        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=formation_id)
         return jsonify({"detail": "Password reset successfully"})
 
 @app.put("/staff/<int:staff_id>/role")
@@ -1088,7 +1088,7 @@ def update_staff_role(staff_id: int):
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     data = request.get_json(force=True)
     new_role = data.get("role")
@@ -1098,14 +1098,14 @@ def update_staff_role(staff_id: int):
         obj = crud.get_staff(db, staff_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
         
-        if organization_id and obj.organization_id != organization_id:
-            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        if formation_id and obj.formation_id != formation_id:
+            return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
         obj.role = new_role
         db.add(obj)
         db.commit()
         db.refresh(obj)
-        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", organization_id=organization_id)
+        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=formation_id)
         return jsonify(schemas.to_dict_staff(obj))
 
 @app.post("/staff/<int:staff_id>/move")
@@ -1114,7 +1114,7 @@ def move_staff(staff_id: int):
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     data = request.get_json(force=True)
     new_office = data.get("office")
@@ -1132,8 +1132,8 @@ def move_staff(staff_id: int):
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
         
-        if organization_id and staff.organization_id != organization_id:
-            return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        if formation_id and staff.formation_id != formation_id:
+            return jsonify({"detail": "Permission denied: Different Formation"}), 403
         
         old_office = staff.office
         if old_office == new_office:
@@ -1156,7 +1156,7 @@ def move_staff(staff_id: int):
         staff.dopp = effective_date
         
         db.commit()
-        crud.create_audit_log(db, "MOVE", f"Staff: {staff.nis_no}", f"Moved from {old_office} to {new_office}", organization_id=organization_id)
+        crud.create_audit_log(db, "MOVE", f"Staff: {staff.nis_no}", f"Moved from {old_office} to {new_office}", formation_id=formation_id)
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/staff/<int:staff_id>/history")
@@ -1188,13 +1188,13 @@ def get_staff_edit_settings():
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
-        # Filter by organization_id if present
+        # Filter by formation_id if present
         stmt = select(models.Staff)
-        if organization_id:
-            stmt = stmt.where(models.Staff.organization_id == organization_id)
+        if formation_id:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
             
         # We need to aggregate over the filtered set.
         # But wait, crud operations or simple scalars?
@@ -1204,10 +1204,10 @@ def get_staff_edit_settings():
         q_max_dopp = select(func.max(models.Staff.allow_edit_dopp))
         q_max_login = select(func.max(models.Staff.allow_login))
         
-        if organization_id:
-            q_max_rank = q_max_rank.where(models.Staff.organization_id == organization_id)
-            q_max_dopp = q_max_dopp.where(models.Staff.organization_id == organization_id)
-            q_max_login = q_max_login.where(models.Staff.organization_id == organization_id)
+        if formation_id:
+            q_max_rank = q_max_rank.where(models.Staff.formation_id == formation_id)
+            q_max_dopp = q_max_dopp.where(models.Staff.formation_id == formation_id)
+            q_max_login = q_max_login.where(models.Staff.formation_id == formation_id)
 
         max_rank = db.scalar(q_max_rank) or 0
         max_dopp = db.scalar(q_max_dopp) or 0
@@ -1227,7 +1227,7 @@ def update_staff_edit_settings():
     user, err, code = require_role(["super_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     data = request.get_json(force=True)
     allow_rank = bool(data.get("allow_edit_rank"))
@@ -1240,8 +1240,8 @@ def update_staff_edit_settings():
             allow_edit_dopp=1 if allow_dopp else 0,
             allow_login=1 if allow_login else 0,
         )
-        if organization_id:
-            stmt = stmt.where(models.Staff.organization_id == organization_id)
+        if formation_id:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
             
         db.execute(stmt)
         db.commit()
@@ -1250,7 +1250,7 @@ def update_staff_edit_settings():
             "SETTINGS_UPDATE",
             "staff-edit",
             f"allow_edit_rank={allow_rank}, allow_edit_dopp={allow_dopp}, allow_login={allow_login}",
-            organization_id=organization_id
+            formation_id=formation_id
         )
     return jsonify({"allow_edit_rank": allow_rank, "allow_edit_dopp": allow_dopp, "allow_login": allow_login})
 
@@ -1279,7 +1279,7 @@ def change_password():
              
              user_obj.password_hash = auth.get_password_hash(new_password)
              db.commit()
-             crud.create_audit_log(db, "PASSWORD_CHANGE", user_obj.username, "Admin changed password", organization_id=user_obj.organization_id)
+             crud.create_audit_log(db, "PASSWORD_CHANGE", user_obj.username, "Admin changed password", formation_id=user_obj.formation_id)
              return jsonify({"detail": "Password changed successfully"})
 
         # 2. Try Staff table
@@ -1297,7 +1297,7 @@ def change_password():
                 
             staff.password_hash = auth.get_password_hash(new_password)
             db.commit()
-            crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", organization_id=staff.organization_id)
+            crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", formation_id=staff.formation_id)
             return jsonify({"detail": "Password changed successfully"})
 
         return jsonify({"detail": "User record not found"}), 404
@@ -1308,13 +1308,13 @@ def get_audit_logs():
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     limit = request.args.get("limit", 100, type=int)
     offset = request.args.get("offset", 0, type=int)
     
     with next(get_db()) as db:
-        logs = crud.list_audit_logs(db, limit=limit, offset=offset, organization_id=organization_id)
+        logs = crud.list_audit_logs(db, limit=limit, offset=offset, formation_id=formation_id)
         return jsonify([schemas.to_dict_audit_log(l) for l in logs])
 
 @app.get("/export/excel")
@@ -1323,7 +1323,7 @@ def export_excel():
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     try:
         with next(get_db()) as db:
@@ -1357,7 +1357,7 @@ def export_excel():
                 dopp_order=dopp_order,
                 limit=10000,
                 offset=0,
-                organization_id=organization_id
+                formation_id=formation_id
             )
 
             def tokenize_alpha_words(text: str) -> list[str]:
@@ -1550,14 +1550,14 @@ def export_excel():
             
             label_map["sn"] = "S/N"
             
-            # Fetch Organization Details
+            # Fetch Formation Details
             org_name = "Nigeria Immigration Service"
             org_desc = "Headquarters"
-            if organization_id:
-                org_obj = crud.get_organization(db, organization_id)
-                if org_obj:
-                    org_name = org_obj.name
-                    org_desc = org_obj.description or ""
+            if formation_id:
+                formation_obj = crud.get_formation(db, formation_id)
+                if formation_obj:
+                    org_name = formation_obj.name
+                    org_desc = formation_obj.description or ""
             
             formation_full_name = f"{org_name} {org_desc}".strip()
             main_title = formation_full_name
@@ -1656,7 +1656,7 @@ def export_pdf():
     user = get_current_user()
     if not user: return jsonify({"detail": "Not authenticated"}), 401
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     try:
         with next(get_db()) as db:
@@ -1696,7 +1696,7 @@ def export_pdf():
                 dopp_order=dopp_order,
                 limit=10000,
                 offset=0,
-                organization_id=organization_id
+                formation_id=formation_id
             )
 
             def tokenize_alpha_words(text: str) -> list[str]:
@@ -1842,14 +1842,14 @@ def export_pdf():
             styles = getSampleStyleSheet()
             elements = []
             
-            # Fetch Organization Details
+            # Fetch Formation Details
             org_name = "Nigeria Immigration Service"
             org_desc = "Headquarters"
-            if organization_id:
-                org_obj = crud.get_organization(db, organization_id)
-                if org_obj:
-                    org_name = org_obj.name
-                    org_desc = org_obj.description or ""
+            if formation_id:
+                formation_obj = crud.get_formation(db, formation_id)
+                if formation_obj:
+                    org_name = formation_obj.name
+                    org_desc = formation_obj.description or ""
             
             formation_full_name = f"{org_name} {org_desc}".strip()
             main_title = formation_full_name
@@ -2129,12 +2129,12 @@ def list_edit_requests():
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         stmt = select(models.StaffEditRequest).join(models.Staff).where(models.StaffEditRequest.status == "pending")
-        if organization_id:
-            stmt = stmt.where(models.Staff.organization_id == organization_id)
+        if formation_id:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
         stmt = stmt.order_by(models.StaffEditRequest.created_at.desc())
         
         reqs = db.scalars(stmt).all()
@@ -2157,7 +2157,7 @@ def approve_edit_request(req_id):
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         try:
@@ -2171,8 +2171,8 @@ def approve_edit_request(req_id):
             if not staff:
                 return jsonify({"detail": "Staff not found"}), 404
                 
-            if organization_id and staff.organization_id != organization_id:
-                return jsonify({"detail": "Permission denied: Different Organization"}), 403
+            if formation_id and staff.formation_id != formation_id:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
             data = json.loads(req.data)
             for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
@@ -2188,7 +2188,7 @@ def approve_edit_request(req_id):
             req.reviewed_by = user.get("sub")
             req.reviewed_at = func.now()
             
-            crud.create_audit_log(db, "APPROVE_EDIT", f"Staff: {staff.nis_no}", f"Approved edit request {req_id}", organization_id=organization_id)
+            crud.create_audit_log(db, "APPROVE_EDIT", f"Staff: {staff.nis_no}", f"Approved edit request {req_id}", formation_id=formation_id)
             db.commit()
             return jsonify({"detail": "Request approved and applied"})
         except Exception as e:
@@ -2204,7 +2204,7 @@ def reject_edit_request(req_id):
     user, err, code = require_role(["super_admin", "main_admin"])
     if err: return err, code
     
-    organization_id = user.get("organization_id")
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         req = db.get(models.StaffEditRequest, req_id)
@@ -2212,13 +2212,13 @@ def reject_edit_request(req_id):
         if req.status != "pending": return jsonify({"detail": "Request not pending"}), 400
         
         staff = db.get(models.Staff, req.staff_id)
-        if staff and organization_id and staff.organization_id != organization_id:
-             return jsonify({"detail": "Permission denied: Different Organization"}), 403
+        if staff and formation_id and staff.formation_id != formation_id:
+             return jsonify({"detail": "Permission denied: Different Formation"}), 403
         
         req.status = "rejected"
         req.reviewed_by = user.get("sub")
         req.reviewed_at = func.now()
         
-        crud.create_audit_log(db, "REJECT_EDIT", f"Request {req_id}", "Rejected edit request", organization_id=organization_id)
+        crud.create_audit_log(db, "REJECT_EDIT", f"Request {req_id}", "Rejected edit request", formation_id=formation_id)
         db.commit()
         return jsonify({"detail": "Request rejected"})

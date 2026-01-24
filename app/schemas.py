@@ -14,7 +14,7 @@ def to_dict_lga(obj) -> Dict[str, Any]:
 def to_dict_office(obj) -> Dict[str, Any]:
     return {"id": obj.id, "name": obj.name}
 
-def to_dict_organization_simple(obj) -> Dict[str, Any]:
+def to_dict_formation_simple(obj) -> Dict[str, Any]:
     if not obj: return None
     return {"id": obj.id, "name": obj.name, "code": obj.code}
 
@@ -26,7 +26,7 @@ def to_dict_staff(obj) -> Dict[str, Any]:
         "other_names": obj.other_names,
         "rank": obj.rank,
         "gender": obj.gender,
-        "organization": to_dict_organization_simple(obj.organization),
+        "formation": to_dict_formation_simple(obj.formation),
         "dofa": obj.dofa.isoformat() if obj.dofa else None,
         "dopa": obj.dopa.isoformat() if obj.dopa else None,
         "dopp": obj.dopp.isoformat() if obj.dopp else None,

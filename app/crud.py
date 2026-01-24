@@ -37,7 +37,7 @@ def list_staff(
     exit_to=None,
     dopa_from=None,
     dopa_to=None,
-    organization_id: Optional[int] = None,
+    formation_id: Optional[int] = None,
     include_count: bool = False
 ) -> Union[List[models.Staff], Tuple[List[models.Staff], int]]:
     # Build Rank Sorting Logic
@@ -84,8 +84,8 @@ def list_staff(
         else:
              stmt = stmt.where(models.Staff.office == office)
              
-    if organization_id is not None:
-        stmt = stmt.where(models.Staff.organization_id == organization_id)
+    if formation_id is not None:
+        stmt = stmt.where(models.Staff.formation_id == formation_id)
     
     if completeness == "completed":
         # Criteria: Must have State, LGA, and Office
@@ -172,20 +172,20 @@ def delete_staff(db: Session, obj: models.Staff) -> None:
     db.delete(obj)
     db.commit()
 
-def create_audit_log(db: Session, action: str, target: str, details: Optional[str] = None, organization_id: Optional[int] = None) -> models.AuditLog:
-    obj = models.AuditLog(action=action, target=target, details=details, organization_id=organization_id)
+def create_audit_log(db: Session, action: str, target: str, details: Optional[str] = None, formation_id: Optional[int] = None) -> models.AuditLog:
+    obj = models.AuditLog(action=action, target=target, details=details, formation_id=formation_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
-def list_audit_logs(db: Session, limit: int = 100, offset: int = 0, organization_id: Optional[int] = None) -> List[models.AuditLog]:
+def list_audit_logs(db: Session, limit: int = 100, offset: int = 0, formation_id: Optional[int] = None) -> List[models.AuditLog]:
     stmt = select(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).offset(offset).limit(limit)
-    if organization_id:
-        stmt = stmt.where(models.AuditLog.organization_id == organization_id)
+    if formation_id:
+        stmt = stmt.where(models.AuditLog.formation_id == formation_id)
     return list(db.scalars(stmt))
 
-def get_dashboard_stats(db: Session, organization_id: Optional[int] = None):
+def get_dashboard_stats(db: Session, formation_id: Optional[int] = None):
     staff_q = select(func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None))
     office_q = select(func.count(distinct(models.Staff.office))).where(
             models.Staff.exit_date.is_(None),
@@ -194,10 +194,10 @@ def get_dashboard_stats(db: Session, organization_id: Optional[int] = None):
         )
     rank_q = select(models.Staff.rank, func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None)).group_by(models.Staff.rank)
 
-    if organization_id:
-        staff_q = staff_q.where(models.Staff.organization_id == organization_id)
-        office_q = office_q.where(models.Staff.organization_id == organization_id)
-        rank_q = rank_q.where(models.Staff.organization_id == organization_id)
+    if formation_id:
+        staff_q = staff_q.where(models.Staff.formation_id == formation_id)
+        office_q = office_q.where(models.Staff.formation_id == formation_id)
+        rank_q = rank_q.where(models.Staff.formation_id == formation_id)
 
     total_staff = db.scalar(staff_q)
     total_offices = db.scalar(office_q)
@@ -213,21 +213,21 @@ def get_dashboard_stats(db: Session, organization_id: Optional[int] = None):
         "rank_counts": rank_counts,
     }
 
-def list_offices(db: Session, organization_id: Optional[int] = None) -> List[str]:
+def list_offices(db: Session, formation_id: Optional[int] = None) -> List[str]:
     # Deprecated: returns distinct strings from Staff table
     stmt = select(distinct(models.Staff.office)).where(models.Staff.office.is_not(None)).order_by(models.Staff.office)
-    if organization_id:
-        stmt = stmt.where(models.Staff.organization_id == organization_id)
+    if formation_id:
+        stmt = stmt.where(models.Staff.formation_id == formation_id)
     return list(db.scalars(stmt))
 
-def list_offices_model(db: Session, organization_id: Optional[int] = None) -> List[models.Office]:
+def list_offices_model(db: Session, formation_id: Optional[int] = None) -> List[models.Office]:
     stmt = select(models.Office).order_by(models.Office.name)
-    if organization_id:
-        stmt = stmt.where(models.Office.organization_id == organization_id)
+    if formation_id:
+        stmt = stmt.where(models.Office.formation_id == formation_id)
     return list(db.scalars(stmt))
 
-def create_office(db: Session, name: str, organization_id: Optional[int] = None) -> models.Office:
-    obj = models.Office(name=name, organization_id=organization_id)
+def create_office(db: Session, name: str, formation_id: Optional[int] = None) -> models.Office:
+    obj = models.Office(name=name, formation_id=formation_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -250,16 +250,16 @@ def delete_office(db: Session, office_id: int) -> bool:
         return True
     return False
 
-# Organization CRUD
-def create_organization(db: Session, name: str, code: str, description: Optional[str] = None) -> models.Organization:
-    obj = models.Organization(name=name, code=code, description=description)
+# Formation CRUD
+def create_formation(db: Session, name: str, code: str, description: Optional[str] = None) -> models.Formation:
+    obj = models.Formation(name=name, code=code, description=description)
     db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
-def update_organization(db: Session, org_id: int, name: str, description: Optional[str] = None) -> Optional[models.Organization]:
-    obj = db.get(models.Organization, org_id)
+def update_formation(db: Session, formation_id: int, name: str, description: Optional[str] = None) -> Optional[models.Formation]:
+    obj = db.get(models.Formation, formation_id)
     if obj:
         obj.name = name
         if description is not None:
@@ -269,14 +269,14 @@ def update_organization(db: Session, org_id: int, name: str, description: Option
         db.refresh(obj)
     return obj
 
-def list_organizations(db: Session) -> List[models.Organization]:
-    return list(db.scalars(select(models.Organization).order_by(models.Organization.name)))
+def list_formations(db: Session) -> List[models.Formation]:
+    return list(db.scalars(select(models.Formation).order_by(models.Formation.name)))
 
-def get_organization(db: Session, org_id: int) -> Optional[models.Organization]:
-    return db.get(models.Organization, org_id)
+def get_formation(db: Session, formation_id: int) -> Optional[models.Formation]:
+    return db.get(models.Formation, formation_id)
 
-def get_users_by_organization(db: Session, org_id: int) -> List[models.User]:
-    return list(db.scalars(select(models.User).where(models.User.organization_id == org_id)))
+def get_users_by_formation(db: Session, formation_id: int) -> List[models.User]:
+    return list(db.scalars(select(models.User).where(models.User.formation_id == formation_id)))
 
 def get_user(db: Session, user_id: int) -> Optional[models.User]:
     return db.get(models.User, user_id)

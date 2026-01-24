@@ -77,31 +77,31 @@ def seed_special_admin(db):
             username="special",
             password_hash=hashed_password,
             role="special_admin",
-            organization_id=None # Special admin is global
+            formation_id=None # Special admin is global
         )
         db.add(special_user)
         db.commit()
         print("Special admin created: special / special123")
 
-def seed_vr_organization(db):
+def seed_vr_formation(db):
     """
-    Creates the default V/R organization if it doesn't exist.
+    Creates the default V/R formation if it doesn't exist.
     """
     from . import models
     
     org_code = "NIS"
     org_name = "NIS"
     
-    org = db.query(models.Organization).filter(models.Organization.code == org_code).first()
+    org = db.query(models.Formation).filter(models.Formation.code == org_code).first()
     if not org:
-        print(f"Seeding Organization: {org_name} ({org_code})...")
-        org = models.Organization(name=org_name, code=org_code)
+        print(f"Seeding Formation: {org_name} ({org_code})...")
+        org = models.Formation(name=org_name, code=org_code)
         db.add(org)
         db.commit()
-        print(f"Organization '{org_name}' created.")
+        print(f"Formation '{org_name}' created.")
     else:
         # Update name if it doesn't match, to ensure "V/R" is the name
         if org.name != org_name:
-             print(f"Updating Organization name from '{org.name}' to '{org_name}'")
+             print(f"Updating Formation name from '{org.name}' to '{org_name}'")
              org.name = org_name
              db.commit()
