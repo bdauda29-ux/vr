@@ -2308,38 +2308,7 @@
                         const loader = document.getElementById('global-loader');
                         if (loader) loader.style.display = 'none';
                         return;
-                    }
-                    
-                    // Show form tab
-                    const formTabBtn = document.getElementById('form-tab');
-                    formTabBtn.classList.remove('d-none');
-                    const formTab = new bootstrap.Tab(formTabBtn);
-                    formTab.show();
-                    
-                    // Hide list tab navigation and cancel button
-                    const listTabBtn = document.getElementById('list-tab');
-                    if(listTabBtn) listTabBtn.parentElement.classList.add('d-none');
-                    const cancelBtn = document.querySelector('#staffForm button[onclick="showList()"]');
-                    if(cancelBtn) cancelBtn.classList.add('d-none');
-                    
-                    // Hide Personnel and Leave from Navbar
-                    const navPersonnel = document.getElementById('nav-personnel');
-                    if (navPersonnel) navPersonnel.classList.add('d-none');
-                    
-                    const navLeave = document.getElementById('nav-leave');
-                    if (navLeave) navLeave.classList.add('d-none');
-                    
-                    // Load own data if userId exists
-                    if(userId) {
-                        console.log("Found userId:", userId, "- triggering editStaff");
-                        await editStaff(userId);
-                    } else {
-                        console.error("No userId found in localStorage for staff user");
-                        alert("Error: User ID missing. Please logout and login again.");
-                    }
-                    
-                    return;
-                } else if (role === 'office_admin') {
+                    } else if (role === 'office_admin') {
                     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
                     await fetchUserOffice();
                 } else if (role === 'main_admin') {
