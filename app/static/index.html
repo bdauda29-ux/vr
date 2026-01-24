@@ -560,7 +560,7 @@
                         <i class="bi bi-shield-lock"></i> <span class="nav-text">Switch to Admin</span>
                     </a>
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" id="personnelNavItem">
                     <a class="nav-link" href="#" onclick="showPersonnelTab('list-tab'); showView('personnel');" title="Personnel">
                         <i class="bi bi-people-fill"></i> <span class="nav-text">Personnel</span>
                     </a>
@@ -585,7 +585,7 @@
                         <i class="bi bi-journal-text"></i> <span class="nav-text">Audit Logs</span>
                     </a>
                 </li>
-                <li class="nav-item admin-only">
+                <li class="nav-item admin-only" id="approvalsNavItem">
                     <a class="nav-link" href="#" onclick="showView('approvals');" title="Authorizations">
                         <i class="bi bi-check2-square"></i> <span class="nav-text">Authorizations</span>
                         <span class="badge bg-danger rounded-pill ms-auto d-none nav-text" id="approvalsCounterSidebar">0</span>
@@ -2032,6 +2032,7 @@
                     // Update Navbar Brand
                     const brandText = document.getElementById('sidebar-brand-text');
                     const brandSubtitle = document.getElementById('sidebar-brand-subtitle');
+                    const navbarBrand = document.getElementById('navbarBrandText');
                     
                     if (brandText && brandSubtitle) {
                         // Formation User (has formation code)
@@ -2041,6 +2042,8 @@
                             brandText.textContent = userData.formation_code || "";
                             brandSubtitle.textContent = desc ? `${name} ${desc}` : name;
                             brandSubtitle.style.display = "block";
+                            
+                            if (navbarBrand) navbarBrand.textContent = name;
                         } 
                         // Fallback (e.g. Super Admin without org, or just org name)
                         else if (userData.formation_name) {
@@ -2048,6 +2051,8 @@
                             const desc = userData.formation_description || "";
                             brandText.textContent = desc ? `${name} ${desc}` : name;
                             brandSubtitle.style.display = "none";
+                            
+                            if (navbarBrand) navbarBrand.textContent = name;
                         } 
                         // Default
                         else {
@@ -2335,8 +2340,17 @@
                     // Setup Staff Dashboard View (HTML injection)
                     setupStaffDashboardView();
 
-                    if (role === 'staff') {
+                    const isStaff = localStorage.getItem('is_staff') === 'true';
+
+                    if (role === 'staff' || isStaff) {
                         document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+                        
+                        // If admin-capable but viewing as staff, allow switch
+                        if (['super_admin', 'main_admin', 'office_admin', 'admin', 'special_admin'].includes(role)) {
+                             const switchBtn = document.getElementById('switchToAdminItem');
+                             if(switchBtn) switchBtn.classList.remove('d-none');
+                        }
+
                         await loadStaffDashboardInfo();
                         showView('staff-dashboard');
                         
@@ -2345,6 +2359,23 @@
                         if (loader) loader.style.display = 'none';
                         return;
                     } 
+                    
+                    // Formation Admin specific
+                    if (role === 'formation_admin') {
+                         document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+                         const personnelNav = document.getElementById('personnelNavItem');
+                         if (personnelNav) personnelNav.classList.add('d-none');
+                         
+                         const approvalsNav = document.getElementById('approvalsNavItem');
+                         if (approvalsNav) approvalsNav.classList.add('d-none');
+                         
+                         loadDashboardStats();
+                         showView('dashboard');
+                         
+                         const loader = document.getElementById('global-loader');
+                         if (loader) loader.style.display = 'none';
+                         return;
+                    }
                     
                     // Admins: Go straight to Admin Dashboard
                     
@@ -2516,12 +2547,15 @@
 
         function formatStaffName(rank, surname, otherNames) {
             const seniorRanks = ["CGI", "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI", "ASI 1", "ASI 2", "ASI1", "ASI2"];
+            const juniorRanks = ["II", "AII", "IA 1", "IA 2", "IA 3", "IA1", "IA2", "IA3"];
             
             const normalizeRank = (r) => (r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
             const rankCode = normalizeRank(rank);
             const seniors = seniorRanks.map(normalizeRank);
+            const juniors = juniorRanks.map(normalizeRank);
             
             const surnameFull = (surname || '').trim().toUpperCase();
+            const surnameWords = (surname || '').trim().split(/\s+/).filter(w => w);
             const otherWords = (otherNames || '').trim().split(/\s+/).filter(w => w);
             const initialsFromWords = (words) => words.map(w => w[0].toUpperCase()).join(' ');
             
@@ -2532,6 +2566,22 @@
                     return `${otherInitials} ${surnameFull}`;
                 }
                 return surnameFull || otherInitials;
+            }
+
+            if (juniors.includes(rankCode)) {
+                // Logic: First Name (Full) + Other Initials + Surname Initials
+                if (otherWords.length === 0) {
+                    return surnameFull;
+                }
+                const firstName = otherWords[0].toUpperCase();
+                const restOtherInitials = initialsFromWords(otherWords.slice(1));
+                const surnameInitials = initialsFromWords(surnameWords);
+                
+                let parts = [firstName];
+                if (restOtherInitials) parts.push(restOtherInitials);
+                if (surnameInitials) parts.push(surnameInitials);
+                
+                return parts.join(' ');
             }
             
             return `${surnameFull} ${otherWords.join(' ').toUpperCase()}`;
@@ -4205,7 +4255,7 @@
                     rowHtml = `
                         <td>${index + 1}</td>
                         <td>${s.nis_no}</td>
-                        <td>${s.surname} ${s.other_names}</td>
+                        <td>${formatStaffName(s.rank, s.surname, s.other_names)}</td>
                         <td>${rankBadge(s.rank)}</td>
                         <td>${dates}</td>
                         <td>${s.office || ''}</td>

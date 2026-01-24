@@ -179,7 +179,8 @@ def login():
                             "role": staff.role, 
                             "username": staff.nis_no, 
                             "id": staff.id,
-                            "formation_id": staff.formation_id
+                            "formation_id": staff.formation_id,
+                            "is_staff": True
                         })
                 
                 return jsonify({"detail": "Invalid credentials"}), 401
@@ -438,7 +439,7 @@ def create_formation_admin(formation_id):
         new_admin = models.User(
             username=username,
             password_hash=pwd_hash,
-            role="super_admin", # Formation super admin
+            role="formation_admin", # Formation super admin
             formation_id=formation_id
         )
         db.add(new_admin)
@@ -880,7 +881,7 @@ def list_offices_route():
 @app.post("/offices")
 def create_office_route():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "admin"])
+    user, err, code = require_role(["super_admin", "admin", "formation_admin"])
     if err: return err, code
     
     data = request.get_json(force=True)
@@ -901,7 +902,7 @@ def create_office_route():
 @app.put("/offices/<int:office_id>")
 def update_office_route(office_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "admin"])
+    user, err, code = require_role(["super_admin", "admin", "formation_admin"])
     if err: return err, code
     
     data = request.get_json(force=True)
@@ -911,6 +912,12 @@ def update_office_route(office_id: int):
     if not name: return jsonify({"detail": "Name is required"}), 400
     
     with next(get_db()) as db:
+        # Check permissions for formation_admin
+        if user["role"] == "formation_admin":
+             office = crud.get_office(db, office_id)
+             if not office or office.formation_id != user["formation_id"]:
+                 return jsonify({"detail": "Permission denied"}), 403
+
         obj = crud.update_office(db, office_id, name, office_type=office_type, parent_id=parent_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
         return jsonify(schemas.to_dict_office(obj))
@@ -918,10 +925,16 @@ def update_office_route(office_id: int):
 @app.delete("/offices/<int:office_id>")
 def delete_office_route(office_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "admin"])
+    user, err, code = require_role(["super_admin", "admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
+        # Check permissions for formation_admin
+        if user["role"] == "formation_admin":
+             office = crud.get_office(db, office_id)
+             if not office or office.formation_id != user["formation_id"]:
+                 return jsonify({"detail": "Permission denied"}), 403
+                 
         if crud.delete_office(db, office_id):
             return jsonify({"detail": "Deleted"}), 200
         return jsonify({"detail": "Not found"}), 404
@@ -978,6 +991,10 @@ def list_staff_endpoint():
              else:
                  # If no specific formation requested, show all (global view)
                  formation_id = None
+        
+        # Formation Admin: Do not display personnel list
+        if user["role"] == "formation_admin":
+            return jsonify({"items": [], "total": 0}), 200
         
         with next(get_db()) as db:
             if user["role"] == "office_admin":
@@ -1581,7 +1598,7 @@ def change_password():
 @app.get("/audit-logs")
 def get_audit_logs():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "special_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")

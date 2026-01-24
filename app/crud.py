@@ -228,6 +228,9 @@ def list_offices_model(db: Session, formation_id: Optional[int] = None) -> List[
         stmt = stmt.where(models.Office.formation_id == formation_id)
     return list(db.scalars(stmt))
 
+def get_office(db: Session, office_id: int) -> Optional[models.Office]:
+    return db.get(models.Office, office_id)
+
 def create_office(db: Session, name: str, formation_id: Optional[int] = None, office_type: Optional[str] = None, parent_id: Optional[int] = None) -> models.Office:
     obj = models.Office(name=name, formation_id=formation_id, office_type=office_type, parent_id=parent_id)
     db.add(obj)
