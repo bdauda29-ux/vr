@@ -343,6 +343,20 @@ def list_formation_admins(formation_id):
         users = crud.get_users_by_formation(db, formation_id)
         return jsonify([{"id": u.id, "username": u.username, "role": u.role} for u in users])
 
+@app.get("/formations/<int:formation_id>/offices")
+def list_formation_offices(formation_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        formation = crud.get_formation(db, formation_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
+            
+        offices = crud.list_offices_model(db, formation_id=formation_id)
+        return jsonify([schemas.to_dict_office(o) for o in offices])
+
 @app.post("/users/<int:user_id>/reset-password")
 def reset_user_password(user_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
@@ -754,13 +768,15 @@ def create_office_route():
     
     data = request.get_json(force=True)
     name = data.get("name")
+    office_type = data.get("office_type")
+    parent_id = data.get("parent_id")
     if not name: return jsonify({"detail": "Name is required"}), 400
     
     formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         try:
-            obj = crud.create_office(db, name, formation_id=formation_id)
+            obj = crud.create_office(db, name, formation_id=formation_id, office_type=office_type, parent_id=parent_id)
             return jsonify(schemas.to_dict_office(obj)), 201
         except Exception as e:
             return jsonify({"detail": str(e)}), 400
@@ -773,10 +789,12 @@ def update_office_route(office_id: int):
     
     data = request.get_json(force=True)
     name = data.get("name")
+    office_type = data.get("office_type")
+    parent_id = data.get("parent_id")
     if not name: return jsonify({"detail": "Name is required"}), 400
     
     with next(get_db()) as db:
-        obj = crud.update_office(db, office_id, name)
+        obj = crud.update_office(db, office_id, name, office_type=office_type, parent_id=parent_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
         return jsonify(schemas.to_dict_office(obj))
 
@@ -1162,11 +1180,20 @@ def move_staff(staff_id: int):
 @app.get("/staff/<int:staff_id>/history")
 def get_staff_history(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "special_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
-        stmt = select(models.PostingHistory).where(models.PostingHistory.staff_id == staff_id).order_by(models.PostingHistory.action_date.desc(), models.PostingHistory.created_at.desc())
+        stmt = select(models.PostingHistory).where(models.PostingHistory.staff_id == staff_id)
+        
+        # If special_admin, maybe filter? For now, showing all history is safer unless requested otherwise.
+        # But user said "posting history". 
+        # I'll add support for filtering by action_type if provided in query
+        action_type = request.args.get("action_type")
+        if action_type:
+             stmt = stmt.where(models.PostingHistory.action_type == action_type)
+             
+        stmt = stmt.order_by(models.PostingHistory.action_date.desc(), models.PostingHistory.created_at.desc())
         history = db.scalars(stmt).all()
         
         res = []
@@ -1181,6 +1208,62 @@ def get_staff_history(staff_id: int):
                 "created_at": h.created_at.isoformat() if h.created_at else None
             })
         return jsonify(res)
+
+@app.post("/staff/<int:staff_id>/posting")
+def posting_staff(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json(force=True)
+    new_formation_id = data.get("formation_id")
+    new_office = data.get("office")
+    effective_date_str = data.get("date")
+    remarks = data.get("remarks", "")
+    
+    if not new_formation_id: return jsonify({"detail": "Formation is required"}), 400
+    if not new_office: return jsonify({"detail": "Office is required"}), 400
+    
+    effective_date = date.today()
+    if effective_date_str:
+        effective_date = parse_date_value(effective_date_str) or date.today()
+        
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        old_formation_id = staff.formation_id
+        old_office = staff.office
+        
+        if old_formation_id == new_formation_id and old_office == new_office:
+            return jsonify({"detail": "No change in posting"}), 400
+            
+        old_fmt = db.get(models.Formation, old_formation_id) if old_formation_id else None
+        new_fmt = db.get(models.Formation, new_formation_id)
+        if not new_fmt: return jsonify({"detail": "Target formation not found"}), 404
+        
+        old_fmt_name = old_fmt.name if old_fmt else "None"
+        new_fmt_name = new_fmt.name
+        
+        full_remarks = f"Posted from {old_fmt_name} to {new_fmt_name}. {remarks}"
+        
+        history = models.PostingHistory(
+            staff_id=staff.id,
+            action_type="POSTING",
+            from_office=f"{old_fmt_name} - {old_office}",
+            to_office=f"{new_fmt_name} - {new_office}",
+            action_date=effective_date,
+            remarks=full_remarks
+        )
+        db.add(history)
+        
+        staff.formation_id = new_formation_id
+        staff.office = new_office
+        staff.dopp = effective_date
+        
+        db.commit()
+        crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id)
+        return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/settings/staff-edit")
 def get_staff_edit_settings():
@@ -1305,16 +1388,22 @@ def change_password():
 @app.get("/audit-logs")
 def get_audit_logs():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "special_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
+    actions = None
     
+    if user["role"] == "special_admin":
+        # Special admin sees logs from all formations, but only "posting" related events
+        formation_id = None
+        actions = ["POSTING", "MOVE", "EXIT", "RETURN", "POSTED_OUT", "UNDO_EXIT"] # Broad interpretation of "posting"
+        
     limit = request.args.get("limit", 100, type=int)
     offset = request.args.get("offset", 0, type=int)
     
     with next(get_db()) as db:
-        logs = crud.list_audit_logs(db, limit=limit, offset=offset, formation_id=formation_id)
+        logs = crud.list_audit_logs(db, limit=limit, offset=offset, formation_id=formation_id, actions=actions)
         return jsonify([schemas.to_dict_audit_log(l) for l in logs])
 
 @app.get("/export/excel")

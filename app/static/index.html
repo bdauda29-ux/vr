@@ -408,6 +408,11 @@
                         <i class="bi bi-building"></i> <span class="nav-text">Offices</span>
                     </a>
                 </li>
+                <li class="nav-item special-only d-none">
+                    <a class="nav-link" href="#" onclick="showView('formations');" title="Formations">
+                        <i class="bi bi-building-fill"></i> <span class="nav-text">Formations</span>
+                    </a>
+                </li>
                 <li class="nav-item">
                     <a class="nav-link" href="#" onclick="showView('leave');" title="Leave">
                         <i class="bi bi-calendar-check"></i> <span class="nav-text">Leave</span>
@@ -1216,6 +1221,22 @@
                         <label class="form-label required">Office Name</label>
                         <input type="text" class="form-control" id="officeName" required>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Office Type</label>
+                        <select class="form-select" id="officeType" onchange="handleOfficeTypeChange()">
+                            <option value="">Select Type...</option>
+                            <option value="Directorate">Directorate/DCG</option>
+                            <option value="Division">Division</option>
+                            <option value="Section">Section</option>
+                            <option value="Unit">Unit</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 d-none" id="parentOfficeDiv">
+                        <label class="form-label" id="parentOfficeLabel">Parent Office</label>
+                        <select class="form-select" id="parentOfficeId">
+                            <option value="">Select Parent...</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1663,6 +1684,77 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" onclick="submitChangePassword()">Change Password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Posting Modal -->
+    <div class="modal fade" id="postingModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Post Staff</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="postingStaffId">
+                    <div class="mb-3">
+                        <label class="form-label required">New Formation</label>
+                        <select class="form-select" id="postingFormationId" required onchange="loadPostingOffices(this.value)">
+                            <option value="">Select Formation...</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label required">New Office</label>
+                        <select class="form-select" id="postingOffice" required>
+                            <option value="">Select Formation First...</option>
+                        </select>
+                        <div class="form-text">Or type a new office name:</div>
+                         <input type="text" class="form-control mt-1" id="postingOfficeInput" placeholder="New Office Name">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Effective Date</label>
+                        <input type="text" class="form-control date-picker" id="postingDate" placeholder="dd/mm/yyyy">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Remarks</label>
+                        <textarea class="form-control" id="postingRemarks" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="submitPosting()">Submit Posting</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Posting History Modal -->
+    <div class="modal fade" id="postingHistoryModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Posting History</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>From</th>
+                                    <th>To</th>
+                                    <th>Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody id="postingHistoryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -2303,16 +2395,26 @@
                 });
                 if(res.ok) {
                     const offices = await res.json();
+                    window.currentOffices = offices; // Store for modal usage
                     const tbody = document.getElementById('officesTableBody');
                     tbody.innerHTML = '';
                     offices.forEach(off => {
                         const tr = document.createElement('tr');
+                        // Escape single quotes for the function call
                         const safeName = String(off.name || '').replace(/'/g, "\\'");
+                        // Also pass the full object properties needed for edit
+                        const safeType = String(off.office_type || '');
+                        const safeParentId = off.parent_id || '';
+                        
                         const urlName = encodeURIComponent(off.name || '');
                         tr.innerHTML = `
-                            <td class="text-primary" style="cursor:pointer;" onclick="openOfficeChartPage('${urlName}')">${off.name}</td>
+                            <td class="text-primary" style="cursor:pointer;" onclick="openOfficeChartPage('${urlName}')">
+                                ${off.name}
+                                ${off.office_type ? `<br><small class="text-muted">${off.office_type}</small>` : ''}
+                                ${off.parent_name ? `<br><small class="text-muted">Under: ${off.parent_name}</small>` : ''}
+                            </td>
                             <td>
-                                <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, '${safeName}')">Rename</button>
+                                <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, '${safeName}', '${safeType}', '${safeParentId}')">Edit</button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteOffice(${off.id})">Remove</button>
                             </td>
                         `;
@@ -2341,24 +2443,90 @@
         function openOfficeModal() {
             document.getElementById('officeId').value = '';
             document.getElementById('officeName').value = '';
+            document.getElementById('officeType').value = '';
+            document.getElementById('parentOfficeId').value = '';
+            document.getElementById('parentOfficeDiv').classList.add('d-none');
             document.getElementById('officeModalTitle').textContent = 'Add Office';
             officeModal.show();
         }
 
-        function editOffice(id, name) {
+        function editOffice(id, name, type, parentId) {
             document.getElementById('officeId').value = id;
             document.getElementById('officeName').value = name;
-            document.getElementById('officeModalTitle').textContent = 'Rename Office';
+            
+            const typeSelect = document.getElementById('officeType');
+            typeSelect.value = (type && type !== 'null') ? type : '';
+            
+            // Trigger change to populate parent dropdown, then set value
+            handleOfficeTypeChange();
+            
+            if (parentId && parentId !== 'null') {
+                document.getElementById('parentOfficeId').value = parentId;
+            }
+            
+            document.getElementById('officeModalTitle').textContent = 'Edit Office';
             officeModal.show();
+        }
+        
+        function handleOfficeTypeChange() {
+            const type = document.getElementById('officeType').value;
+            const parentDiv = document.getElementById('parentOfficeDiv');
+            const parentSelect = document.getElementById('parentOfficeId');
+            const parentLabel = document.getElementById('parentOfficeLabel');
+            
+            parentSelect.innerHTML = '<option value="">Select Parent...</option>';
+            
+            if (!type || type === 'Directorate') {
+                parentDiv.classList.add('d-none');
+                return;
+            }
+            
+            parentDiv.classList.remove('d-none');
+            
+            // Determine valid parent types
+            let validParentTypes = [];
+            if (type === 'Division') {
+                validParentTypes = ['Directorate'];
+                parentLabel.textContent = 'Under Directorate/DCG';
+            } else if (type === 'Section' || type === 'Unit') {
+                // Can be under Division or directly under DCG (Directorate)
+                validParentTypes = ['Division', 'Directorate'];
+                parentLabel.textContent = 'Under Division or DCG';
+            }
+            
+            // Populate dropdown from window.currentOffices
+            if (window.currentOffices) {
+                window.currentOffices.forEach(off => {
+                    // Prevent circular reference (self as parent)
+                    const currentId = document.getElementById('officeId').value;
+                    if (currentId && String(off.id) === String(currentId)) return;
+                    
+                    if (validParentTypes.includes(off.office_type)) {
+                        const opt = document.createElement('option');
+                        opt.value = off.id;
+                        opt.textContent = off.name + (off.office_type ? ` (${off.office_type})` : '');
+                        parentSelect.appendChild(opt);
+                    }
+                });
+            }
         }
 
         async function saveOffice() {
             const id = document.getElementById('officeId').value;
             const name = document.getElementById('officeName').value;
+            const officeType = document.getElementById('officeType').value;
+            const parentId = document.getElementById('parentOfficeId').value;
+            
             if(!name) return alert("Name is required");
 
             const method = id ? 'PUT' : 'POST';
             const url = id ? `${API_URL}/offices/${id}` : `${API_URL}/offices`;
+            
+            const payload = {
+                name: name,
+                office_type: officeType || null,
+                parent_id: parentId || null
+            };
             
             try {
                 const res = await fetch(url, {
@@ -2367,7 +2535,7 @@
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ name: name })
+                    body: JSON.stringify(payload)
                 });
                 if(res.ok) {
                     officeModal.hide();
@@ -2558,6 +2726,168 @@
                     });
                 }
             } catch(e) { console.error(e); }
+        }
+
+
+        async function populatePostingFormationFilter() {
+             const sel = document.getElementById('postingFormationId');
+             if (!sel) return;
+             sel.innerHTML = '<option value="">Loading...</option>';
+             
+             try {
+                 const res = await fetch(`${API_URL}/formations`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                 });
+                 if (res.ok) {
+                     const data = await res.json();
+                     sel.innerHTML = '<option value="">Select Formation...</option>';
+                     data.forEach(f => {
+                         const opt = document.createElement('option');
+                         opt.value = f.id;
+                         opt.textContent = `${f.code} - ${f.name}`;
+                         sel.appendChild(opt);
+                     });
+                 } else {
+                     sel.innerHTML = '<option value="">Failed to load</option>';
+                 }
+             } catch (e) {
+                 console.error(e);
+                 sel.innerHTML = '<option value="">Error</option>';
+             }
+        }
+
+        async function loadPostingOffices(formationId) {
+            const officeSel = document.getElementById('postingOffice');
+            officeSel.innerHTML = '<option value="">Loading offices...</option>';
+            officeSel.disabled = true;
+            
+            if (!formationId) {
+                officeSel.innerHTML = '<option value="">Select Formation First...</option>';
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_URL}/formations/${formationId}/offices`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const offices = await res.json();
+                    officeSel.innerHTML = '<option value="">Select Office...</option>';
+                    offices.forEach(o => {
+                        const opt = document.createElement('option');
+                        opt.value = o.name;
+                        opt.textContent = o.name;
+                        officeSel.appendChild(opt);
+                    });
+                    officeSel.disabled = false;
+                } else {
+                    officeSel.innerHTML = '<option value="">Failed to load offices</option>';
+                }
+            } catch (e) {
+                console.error(e);
+                officeSel.innerHTML = '<option value="">Error loading offices</option>';
+            }
+        }
+
+        function openPostingModal(staffId) {
+            document.getElementById('postingStaffId').value = staffId;
+            document.getElementById('postingFormationId').value = "";
+            document.getElementById('postingOffice').innerHTML = '<option value="">Select Formation First...</option>';
+            document.getElementById('postingOffice').disabled = true;
+            document.getElementById('postingOfficeInput').value = "";
+            document.getElementById('postingDate').value = "";
+            document.getElementById('postingRemarks').value = "";
+            
+            populatePostingFormationFilter(); // Refresh list
+            
+            const modal = new bootstrap.Modal(document.getElementById('postingModal'));
+            modal.show();
+        }
+
+        async function submitPosting() {
+            const staffId = document.getElementById('postingStaffId').value;
+            const formationId = document.getElementById('postingFormationId').value;
+            let office = document.getElementById('postingOffice').value;
+            const officeInput = document.getElementById('postingOfficeInput').value.trim();
+            const dateVal = document.getElementById('postingDate').value;
+            const remarks = document.getElementById('postingRemarks').value;
+            
+            if (officeInput) office = officeInput;
+            
+            if (!formationId || !office) {
+                alert("Formation and Office are required.");
+                return;
+            }
+            
+            if (!confirm("Are you sure you want to post this staff?")) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/staff/${staffId}/posting`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        formation_id: parseInt(formationId),
+                        office: office,
+                        date: dateVal,
+                        remarks: remarks
+                    })
+                });
+                
+                const data = await res.json();
+                if (res.ok) {
+                    alert("Staff posted successfully.");
+                    bootstrap.Modal.getInstance(document.getElementById('postingModal')).hide();
+                    loadStaff();
+                } else {
+                    alert("Error: " + (data.detail || "Unknown error"));
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Network error");
+            }
+        }
+
+        let postingHistoryModalInstance;
+        async function openPostingHistoryModal(staffId) {
+             const modalEl = document.getElementById('postingHistoryModal');
+             postingHistoryModalInstance = new bootstrap.Modal(modalEl);
+             postingHistoryModalInstance.show();
+             
+             const tbody = document.getElementById('postingHistoryTableBody');
+             tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
+             
+             try {
+                 // Use staff history endpoint, filtered by action_type=POSTING
+                 const res = await fetch(`${API_URL}/staff/${staffId}/history?action_type=POSTING`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                 });
+                 if (res.ok) {
+                     const data = await res.json();
+                     tbody.innerHTML = '';
+                     if (data.length === 0) {
+                         tbody.innerHTML = '<tr><td colspan="4" class="text-center">No posting history found.</td></tr>';
+                     } else {
+                         data.forEach(h => {
+                             const tr = document.createElement('tr');
+                             tr.innerHTML = `
+                                 <td>${h.action_date || '-'}</td>
+                                 <td>${h.from_office || '-'}</td>
+                                 <td>${h.to_office || '-'}</td>
+                                 <td>${h.remarks || '-'}</td>
+                             `;
+                             tbody.appendChild(tr);
+                         });
+                     }
+                 } else {
+                     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Failed to load history</td></tr>';
+                 }
+             } catch (e) {
+                 console.error(e);
+                 tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading history</td></tr>';
+             }
         }
 
 
@@ -2899,7 +3229,7 @@
                 const otherNamesFormatted = formatName(s.other_names);
                 
                 const formationCell = (role === 'special_admin') 
-                    ? `<td>${s.organization ? (s.organization.code || s.organization.name) : '-'}</td>` 
+                    ? `<td>${s.formation ? (s.formation.code || s.formation.name) : '-'}</td>` 
                     : '';
 
                 let actionBtns = ``;
@@ -2920,8 +3250,21 @@
                             <button class="btn btn-sm btn-light border dropdown-toggle" type="button" data-bs-toggle="dropdown">Actions</button>
                             <ul class="dropdown-menu">
                                 <li><a class="dropdown-item" href="#" onclick="editStaff(${s.id}); return false;"><i class="bi bi-pencil me-2"></i>Edit</a></li>
-                                <li><a class="dropdown-item" href="#" onclick="openMoveModal(${s.id}); return false;"><i class="bi bi-arrow-right-circle me-2"></i>Move</a></li>
-                                <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>History</a></li>
+                    `;
+                    
+                    if (role === 'special_admin') {
+                        actionBtns += `
+                            <li><a class="dropdown-item" href="#" onclick="openPostingModal(${s.id}); return false;"><i class="bi bi-send me-2"></i>Posting</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="openPostingHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>Posting History</a></li>
+                        `;
+                    } else {
+                        actionBtns += `
+                            <li><a class="dropdown-item" href="#" onclick="openMoveModal(${s.id}); return false;"><i class="bi bi-arrow-right-circle me-2"></i>Move</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>History</a></li>
+                        `;
+                    }
+
+                    actionBtns += `
                                 <li><hr class="dropdown-divider"></li>
                     `;
                     if (s.out_request_status === 'Pending') {
@@ -3665,6 +4008,18 @@
                  window.viewModalInstance = viewModalInstance;
              }
              
+             const postingEl = document.getElementById('postingModal');
+             if (postingEl) {
+                 postingModalInstance = new bootstrap.Modal(postingEl);
+                 window.postingModalInstance = postingModalInstance;
+             }
+
+             const postingHistEl = document.getElementById('postingHistoryModal');
+             if (postingHistEl) {
+                 postingHistoryModalInstance = new bootstrap.Modal(postingHistEl);
+                 window.postingHistoryModalInstance = postingHistoryModalInstance;
+             }
+
              initSortable();
         });
 
@@ -3740,6 +4095,158 @@
             } catch(e) {
                 console.error(e);
                 alert("Request failed");
+            }
+        }
+
+        async function openPostingModal(id) {
+            document.getElementById('postingStaffId').value = id;
+            document.getElementById('postingOffice').innerHTML = '<option value="">Select Formation First...</option>';
+            document.getElementById('postingOffice').disabled = true;
+            document.getElementById('postingOfficeInput').value = '';
+            document.getElementById('postingDate').value = '';
+            document.getElementById('postingRemarks').value = '';
+            
+            // Populate formation dropdown if empty
+            const formationSel = document.getElementById('postingFormationId');
+            if (formationSel.options.length <= 1) {
+                try {
+                    const res = await fetch(`${API_URL}/formations`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const items = await res.json();
+                        items.forEach(f => {
+                            const opt = document.createElement('option');
+                            opt.value = f.id;
+                            opt.textContent = `${f.code} - ${f.name}`;
+                            formationSel.appendChild(opt);
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to load formations", e);
+                }
+            } else {
+                formationSel.value = "";
+            }
+            
+            postingModalInstance.show();
+        }
+
+        async function loadPostingOffices(formationId) {
+            const officeSel = document.getElementById('postingOffice');
+            officeSel.innerHTML = '<option value="">Loading offices...</option>';
+            officeSel.disabled = true;
+            
+            if (!formationId) {
+                officeSel.innerHTML = '<option value="">Select Formation First...</option>';
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_URL}/formations/${formationId}/offices`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const offices = await res.json();
+                    officeSel.innerHTML = '<option value="">Select Office...</option>';
+                    offices.forEach(o => {
+                        const opt = document.createElement('option');
+                        opt.value = o.name;
+                        opt.textContent = o.name;
+                        officeSel.appendChild(opt);
+                    });
+                    officeSel.disabled = false;
+                } else {
+                    officeSel.innerHTML = '<option value="">Failed to load offices</option>';
+                }
+            } catch (e) {
+                console.error(e);
+                officeSel.innerHTML = '<option value="">Error loading offices</option>';
+            }
+        }
+
+        async function submitPosting() {
+            const staffId = document.getElementById('postingStaffId').value;
+            const formationId = document.getElementById('postingFormationId').value;
+            let office = document.getElementById('postingOffice').value;
+            const officeInput = document.getElementById('postingOfficeInput').value.trim();
+            const dateStr = document.getElementById('postingDate').value;
+            const remarks = document.getElementById('postingRemarks').value;
+            
+            if (officeInput) {
+                office = officeInput;
+            }
+
+            if (!formationId) {
+                alert("Please select a target formation");
+                return;
+            }
+            if (!office) {
+                alert("Please select or enter a new office");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/staff/${staffId}/posting`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        formation_id: parseInt(formationId),
+                        office: office,
+                        date: userDateToIsoOrNull(dateStr),
+                        remarks: remarks
+                    })
+                });
+
+                if (res.ok) {
+                    alert("Staff posted successfully");
+                    postingModalInstance.hide();
+                    loadStaff(); 
+                } else {
+                    const err = await res.json();
+                    alert("Error: " + (err.detail || "Posting failed"));
+                }
+            } catch(e) {
+                console.error(e);
+                alert("Request failed");
+            }
+        }
+
+        async function openPostingHistoryModal(id) {
+            const tbody = document.getElementById('postingHistoryTableBody');
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
+            postingHistoryModalInstance.show();
+
+            try {
+                const res = await fetch(`${API_URL}/staff/${id}/history?action_type=POSTING`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const history = await res.json();
+                    tbody.innerHTML = '';
+                    if (Array.isArray(history) && history.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No posting history found</td></tr>';
+                        return;
+                    }
+                    history.forEach(h => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${isoToDmy(h.action_date) || '-'}</td>
+                            <td>${h.from_office || '-'}</td>
+                            <td>${h.to_office || '-'}</td>
+                            <td>${h.remarks || '-'}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Failed to load history</td></tr>';
+                }
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading history</td></tr>';
             }
         }
 

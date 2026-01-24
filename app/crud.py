@@ -179,10 +179,12 @@ def create_audit_log(db: Session, action: str, target: str, details: Optional[st
     db.refresh(obj)
     return obj
 
-def list_audit_logs(db: Session, limit: int = 100, offset: int = 0, formation_id: Optional[int] = None) -> List[models.AuditLog]:
+def list_audit_logs(db: Session, limit: int = 100, offset: int = 0, formation_id: Optional[int] = None, actions: Optional[List[str]] = None) -> List[models.AuditLog]:
     stmt = select(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).offset(offset).limit(limit)
     if formation_id:
         stmt = stmt.where(models.AuditLog.formation_id == formation_id)
+    if actions:
+        stmt = stmt.where(models.AuditLog.action.in_(actions))
     return list(db.scalars(stmt))
 
 def get_dashboard_stats(db: Session, formation_id: Optional[int] = None):
@@ -226,17 +228,21 @@ def list_offices_model(db: Session, formation_id: Optional[int] = None) -> List[
         stmt = stmt.where(models.Office.formation_id == formation_id)
     return list(db.scalars(stmt))
 
-def create_office(db: Session, name: str, formation_id: Optional[int] = None) -> models.Office:
-    obj = models.Office(name=name, formation_id=formation_id)
+def create_office(db: Session, name: str, formation_id: Optional[int] = None, office_type: Optional[str] = None, parent_id: Optional[int] = None) -> models.Office:
+    obj = models.Office(name=name, formation_id=formation_id, office_type=office_type, parent_id=parent_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
-def update_office(db: Session, office_id: int, name: str) -> Optional[models.Office]:
+def update_office(db: Session, office_id: int, name: str, office_type: Optional[str] = None, parent_id: Optional[int] = None) -> Optional[models.Office]:
     obj = db.get(models.Office, office_id)
     if obj:
         obj.name = name
+        if office_type is not None:
+            obj.office_type = office_type
+        if parent_id is not None:
+            obj.parent_id = parent_id
         db.add(obj)
         db.commit()
         db.refresh(obj)

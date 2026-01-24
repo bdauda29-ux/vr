@@ -54,6 +54,10 @@ class Office(Base):
     formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True)
     formation = relationship("Formation", back_populates="offices")
     
+    office_type = Column(String(32), nullable=True)
+    parent_id = Column(Integer, ForeignKey("offices.id"), nullable=True)
+    parent = relationship("Office", remote_side=[id], backref="children")
+
     __table_args__ = (
         UniqueConstraint('name', 'formation_id', name='uq_office_name_formation'),
     )

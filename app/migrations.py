@@ -66,6 +66,23 @@ def run_migrations():
 
         # --- Existing Migrations ---
 
+        if 'offices' in table_names:
+            columns = [c['name'] for c in inspector.get_columns('offices')]
+            
+            if 'office_type' not in columns:
+                print("Column 'office_type' missing in 'offices'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE offices ADD COLUMN office_type VARCHAR(32)"))
+                print("Column 'office_type' added successfully.")
+            
+            if 'parent_id' not in columns:
+                print("Column 'parent_id' missing in 'offices'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE offices ADD COLUMN parent_id INTEGER"))
+                print("Column 'parent_id' added successfully.")
+
         if 'staff' in table_names:
             columns = [c['name'] for c in inspector.get_columns('staff')]
             
