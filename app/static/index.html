@@ -535,6 +535,11 @@
                         <i class="bi bi-speedometer2"></i> <span class="nav-text">Dashboard</span>
                     </a>
                 </li>
+                <li class="nav-item d-none" id="switchToAdminItem">
+                    <a class="nav-link" href="#" onclick="switchToAdminMode()" title="Switch to Admin">
+                        <i class="bi bi-shield-lock"></i> <span class="nav-text">Switch to Admin</span>
+                    </a>
+                </li>
                 <li class="nav-item">
                     <a class="nav-link" href="#" onclick="showPersonnelTab('list-tab'); showView('personnel');" title="Personnel">
                         <i class="bi bi-people-fill"></i> <span class="nav-text">Personnel</span>
@@ -600,6 +605,11 @@
              <h4 class="mb-0" id="pageTitle">Dashboard</h4>
         </div>
                 
+                <!-- Staff Dashboard View -->
+                <div id="view-staff-dashboard" class="view-section d-none">
+                    <!-- Content injected by JS -->
+                </div>
+
                 <!-- Dashboard View -->
                 <div id="view-dashboard" class="view-section">
                     <div class="row g-4 mb-4">
@@ -2290,135 +2300,57 @@
                         return;
                     }
 
+                    // Setup Staff Dashboard View (HTML injection)
+                    setupStaffDashboardView();
+
                     if (role === 'staff') {
                         document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
-                        
-                        // Customize Dashboard for Staff
-                        const dashView = document.getElementById('view-dashboard');
-                        if (dashView) {
-                            dashView.innerHTML = `
-                                <div class="container mt-4">
-                                    <div class="row">
-                                        <div class="col-md-12 mb-4">
-                                            <div class="card shadow-sm">
-                                                <div class="card-body">
-                                                    <h2 class="card-title">Welcome, <span id="staffDashboardName">Loading...</span></h2>
-                                                    <div class="row mt-3">
-                                                        <div class="col-md-6">
-                                                            <p><strong>Current Office:</strong> <span id="staffDashboardOffice">Loading...</span></p>
-                                                            <p><strong>Office DOPP:</strong> <span id="staffDashboardDopp">Loading...</span></p>
-                                                        </div>
-                                                        <div class="col-md-6 text-md-end">
-                                                            <button class="btn btn-primary" onclick="openStaffEditModal()">
-                                                                <i class="bi bi-pencil me-2"></i>Edit Information
-                                                            </button>
-                                                            <button class="btn btn-outline-secondary ms-2" onclick="openChangePasswordModal()">
-                                                                <i class="bi bi-key me-2"></i>Change Password
-                                                            </button>
-                                                            <button class="btn btn-outline-danger ms-2" onclick="logout()">
-                                                                <i class="bi bi-box-arrow-right me-2"></i>Logout
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <!-- Posting History -->
-                                        <div class="col-md-6 mb-4">
-                                            <div class="card shadow-sm h-100">
-                                                <div class="card-header bg-light">
-                                                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Posting History</h5>
-                                                </div>
-                                                <div class="card-body p-0">
-                                                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                                                        <table class="table table-hover table-striped mb-0">
-                                                            <thead class="table-light sticky-top">
-                                                                <tr>
-                                                                    <th>Date</th>
-                                                                    <th>From</th>
-                                                                    <th>To</th>
-                                                                    <th>Remark</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody id="staffPostingHistoryBody">
-                                                                <tr><td colspan="4" class="text-center p-3">Loading...</td></tr>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Promotion History -->
-                                        <div class="col-md-6 mb-4">
-                                            <div class="card shadow-sm h-100">
-                                                <div class="card-header bg-light">
-                                                    <h5 class="mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Promotion History</h5>
-                                                </div>
-                                                <div class="card-body p-0">
-                                                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                                                        <table class="table table-hover table-striped mb-0">
-                                                            <thead class="table-light sticky-top">
-                                                                <tr>
-                                                                    <th>Date</th>
-                                                                    <th>Details</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody id="staffPromotionHistoryBody">
-                                                                <tr><td colspan="2" class="text-center p-3">Loading...</td></tr>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                            
-                            // We need the staff ID. It should be stored in localStorage or decoded from token.
-                            // Assuming we can get it or the backend /me endpoint helps. 
-                            // Actually loadStaffDashboardInfo uses /auth/me or similar? 
-                            // We'll use the ID stored in localStorage if available, or fetch user profile first.
-                            await loadStaffDashboardInfo();
-                        }
-
-                        // Show dashboard view directly
-                        showView('dashboard');
+                        await loadStaffDashboardInfo();
+                        showView('staff-dashboard');
                         
                         // Hide loader
                         const loader = document.getElementById('global-loader');
                         if (loader) loader.style.display = 'none';
                         return;
-                    } else if (role === 'office_admin') {
+                    } 
+                    
+                    // Admins: Default to Staff Dashboard, but allow switch
+                    
+                    // 1. Hide admin items initially
                     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
-                    await fetchUserOffice();
-                } else if (role === 'main_admin') {
-                    const importTab = document.getElementById('import-tab')?.parentElement;
-                    if (importTab) importTab.classList.add('d-none');
-                    document.querySelectorAll('.super-only').forEach(el => el.classList.add('d-none'));
-                }
-
-                if (role === 'super_admin' || role === 'main_admin') {
-                    await fetchApprovalCounts();
-                }
-
-                loadStaff();
-
-                const params = new URLSearchParams(window.location.search);
-                const officeChart = params.get('officeChart');
-                const officeName = params.get('office');
-
-                if (officeChart === '1' && officeName) {
-                    showView('offices');
-                    await loadOfficesView();
-                    await showOfficeSummary(officeName);
-                } else {
-                    showView('dashboard');
-                }
+                    
+                    // 2. Show Switch Button
+                    const switchBtn = document.getElementById('switchToAdminItem');
+                    if(switchBtn) switchBtn.classList.remove('d-none');
+                    
+                    // 3. Load Staff Dashboard Data
+                    await loadStaffDashboardInfo();
+                    showView('staff-dashboard');
+                    
+                    // 4. Background Admin Init
+                    if (role === 'office_admin') {
+                        await fetchUserOffice();
+                    } else if (role === 'main_admin') {
+                        const importTab = document.getElementById('import-tab')?.parentElement;
+                        if (importTab) importTab.classList.add('d-none');
+                        document.querySelectorAll('.super-only').forEach(el => el.classList.add('d-none'));
+                    }
+                    
+                    if (role === 'super_admin' || role === 'main_admin') {
+                        await fetchApprovalCounts();
+                    }
+                    
+                    loadStaff();
+                    
+                    const params = new URLSearchParams(window.location.search);
+                    const officeChart = params.get('officeChart');
+                    const officeName = params.get('office');
+    
+                    if (officeChart === '1' && officeName) {
+                        showView('offices');
+                        await loadOfficesView();
+                        await showOfficeSummary(officeName);
+                    }
 
             } catch (err) {
                 console.error("Initialization Error:", err);
@@ -2429,6 +2361,107 @@
                 if (loader) loader.style.display = 'none';
             }
         });
+
+        function setupStaffDashboardView() {
+            const dashView = document.getElementById('view-staff-dashboard');
+            if (dashView && !dashView.innerHTML.trim()) {
+                dashView.innerHTML = `
+                    <div class="container mt-4">
+                        <div class="row">
+                            <div class="col-md-12 mb-4">
+                                <div class="card shadow-sm">
+                                    <div class="card-body">
+                                        <h2 class="card-title">Welcome, <span id="staffDashboardName">Loading...</span></h2>
+                                        <div class="row mt-3">
+                                            <div class="col-md-6">
+                                                <p><strong>Current Office:</strong> <span id="staffDashboardOffice">Loading...</span></p>
+                                                <p><strong>Office DOPP:</strong> <span id="staffDashboardDopp">Loading...</span></p>
+                                                <p><strong>Date of Retirement:</strong> <span id="staffDashboardRetirement">Loading...</span></p>
+                                            </div>
+                                            <div class="col-md-6 text-md-end">
+                                                <button class="btn btn-primary" onclick="openStaffEditModal()">
+                                                    <i class="bi bi-pencil me-2"></i>Edit Information
+                                                </button>
+                                                <button class="btn btn-outline-secondary ms-2" onclick="openChangePasswordModal()">
+                                                    <i class="bi bi-key me-2"></i>Change Password
+                                                </button>
+                                                <button class="btn btn-outline-danger ms-2" onclick="logout()">
+                                                    <i class="bi bi-box-arrow-right me-2"></i>Logout
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Posting History -->
+                            <div class="col-md-6 mb-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-light">
+                                        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Posting History</h5>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                            <table class="table table-hover table-striped mb-0">
+                                                <thead class="table-light sticky-top">
+                                                    <tr>
+                                                        <th>Date</th>
+                                                        <th>From</th>
+                                                        <th>To</th>
+                                                        <th>Remark</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="staffPostingHistoryBody">
+                                                    <tr><td colspan="4" class="text-center p-3">Loading...</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Promotion History -->
+                            <div class="col-md-6 mb-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-light">
+                                        <h5 class="mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Promotion History</h5>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                            <table class="table table-hover table-striped mb-0">
+                                                <thead class="table-light sticky-top">
+                                                    <tr>
+                                                        <th>Date</th>
+                                                        <th>Details</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="staffPromotionHistoryBody">
+                                                    <tr><td colspan="2" class="text-center p-3">Loading...</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function switchToAdminMode() {
+            // Show admin items
+            document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+            
+            // Hide switch button
+            const switchBtn = document.getElementById('switchToAdminItem');
+            if(switchBtn) switchBtn.classList.add('d-none');
+            
+            // Show Admin Dashboard
+            showView('dashboard');
+        }
 
         function roleLabel(r) {
             if (r === 'super_admin') return 'Super Admin';
@@ -2447,7 +2480,37 @@
             if (office.parent_name) parts.push(office.parent_name);
             if (office.grandparent_name) parts.push(office.grandparent_name);
             
+            // Check if the top-most parent is a Directorate, if so append SHQ
+            const lastPart = parts[parts.length - 1];
+            if (lastPart && lastPart.includes('Directorate')) {
+                parts.push('SHQ');
+            }
+
             return parts.join(' - ');
+        }
+
+        function calculateRetirementDate(dobStr, dofaStr) {
+            if (!dobStr && !dofaStr) return null;
+            
+            let retDateByDob = null;
+            let retDateByDofa = null;
+
+            if (dobStr) {
+                const dob = new Date(dobStr);
+                retDateByDob = new Date(dob);
+                retDateByDob.setFullYear(dob.getFullYear() + 60);
+            }
+
+            if (dofaStr) {
+                const dofa = new Date(dofaStr);
+                retDateByDofa = new Date(dofa);
+                retDateByDofa.setFullYear(dofa.getFullYear() + 35);
+            }
+
+            if (retDateByDob && retDateByDofa) {
+                return retDateByDob < retDateByDofa ? retDateByDob : retDateByDofa;
+            }
+            return retDateByDob || retDateByDofa;
         }
 
         async function loadStaffDashboardInfo() {
@@ -2470,8 +2533,16 @@
                 const doppStr = isoToDmy(s.dopp);
                 const officeEl = document.getElementById('staffDashboardOffice');
                 const doppEl = document.getElementById('staffDashboardDopp');
+                const retEl = document.getElementById('staffDashboardRetirement');
+                
                 if (officeEl) officeEl.textContent = officeHierarchy;
                 if (doppEl) doppEl.textContent = doppStr || '-';
+                
+                // Calculate and display retirement date
+                if (retEl) {
+                    const retDate = calculateRetirementDate(s.dob, s.dofa);
+                    retEl.textContent = retDate ? isoToDmy(retDate.toISOString().split('T')[0]) : '-';
+                }
 
                 // 2. Fetch Posting History
                 const resHist = await fetch(`${API_URL}/staff/${userId}/history`, {
