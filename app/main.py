@@ -263,15 +263,15 @@ def create_formation_endpoint():
             
             elif formation_type == "State Command":
                 if not parent_id:
-                    return jsonify({"detail": "State Command must be under a Zonal Command"}), 400
+                    return jsonify({"detail": "State Command must be under a Zonal Command or SHQ"}), 400
                 
                 parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
                 if not parent:
                     return jsonify({"detail": "Invalid parent formation"}), 400
                 
-                # Allow Zonal Command ONLY
-                if parent.formation_type != "Zonal Command":
-                     return jsonify({"detail": "State Command must be under Zonal Command"}), 400
+                # Allow Zonal Command or SHQ
+                if parent.formation_type != "Zonal Command" and parent.code != "SHQ":
+                     return jsonify({"detail": "State Command must be under Zonal Command or SHQ"}), 400
 
             elif formation_type == "Zonal Command":
                 parent_id = None
