@@ -61,9 +61,8 @@ class Office(Base):
     parent_id = Column(Integer, ForeignKey("offices.id"), nullable=True)
     parent = relationship("Office", remote_side=[id], backref="children")
 
-    __table_args__ = (
-        UniqueConstraint('name', 'formation_id', name='uq_office_name_formation'),
-    )
+    __table_args__ = (UniqueConstraint("formation_id", "name", name="uq_office_formation_name"),)
+
 
 class Staff(Base):
     __tablename__ = "staff"

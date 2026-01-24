@@ -878,6 +878,36 @@ def list_offices_route():
                 
         return jsonify([schemas.to_dict_office(i) for i in items])
 
+@app.get("/stats/office-ranks")
+def get_office_rank_stats():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Unauthorized"}), 401
+    
+    office_name = request.args.get("office")
+    if not office_name: return jsonify({"detail": "Office name required"}), 400
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        stmt = (
+            select(models.Staff.rank, func.count(models.Staff.id))
+            .where(models.Staff.office == office_name)
+        )
+        if formation_id:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
+            
+        stmt = stmt.group_by(models.Staff.rank)
+        results = db.execute(stmt).all()
+        
+        # results is list of (rank, count)
+        data = [{"rank": r[0], "count": r[1]} for r in results if r[0]]
+        
+        # Sort by count desc
+        data.sort(key=lambda x: x["count"], reverse=True)
+        
+        return jsonify(data)
+
 @app.post("/offices")
 def create_office_route():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
@@ -918,9 +948,12 @@ def update_office_route(office_id: int):
              if not office or office.formation_id != user["formation_id"]:
                  return jsonify({"detail": "Permission denied"}), 403
 
-        obj = crud.update_office(db, office_id, name, office_type=office_type, parent_id=parent_id)
-        if not obj: return jsonify({"detail": "Not found"}), 404
-        return jsonify(schemas.to_dict_office(obj))
+        try:
+            obj = crud.update_office(db, office_id, name, office_type=office_type, parent_id=parent_id)
+            if not obj: return jsonify({"detail": "Not found"}), 404
+            return jsonify(schemas.to_dict_office(obj))
+        except ValueError as e:
+            return jsonify({"detail": str(e)}), 400
 
 @app.delete("/offices/<int:office_id>")
 def delete_office_route(office_id: int):

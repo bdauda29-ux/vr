@@ -232,6 +232,15 @@ def get_office(db: Session, office_id: int) -> Optional[models.Office]:
     return db.get(models.Office, office_id)
 
 def create_office(db: Session, name: str, formation_id: Optional[int] = None, office_type: Optional[str] = None, parent_id: Optional[int] = None) -> models.Office:
+    # Check uniqueness within formation
+    stmt = select(models.Office).where(
+        func.lower(models.Office.name) == name.lower(),
+        models.Office.formation_id == formation_id
+    )
+    existing = db.scalar(stmt)
+    if existing:
+        raise ValueError(f"Office '{name}' already exists in this formation")
+
     obj = models.Office(name=name, formation_id=formation_id, office_type=office_type, parent_id=parent_id)
     db.add(obj)
     db.commit()
@@ -241,6 +250,16 @@ def create_office(db: Session, name: str, formation_id: Optional[int] = None, of
 def update_office(db: Session, office_id: int, name: str, office_type: Optional[str] = None, parent_id: Optional[int] = None) -> Optional[models.Office]:
     obj = db.get(models.Office, office_id)
     if obj:
+        # Check uniqueness within formation (excluding self)
+        stmt = select(models.Office).where(
+            func.lower(models.Office.name) == name.lower(),
+            models.Office.formation_id == obj.formation_id,
+            models.Office.id != office_id
+        )
+        existing = db.scalar(stmt)
+        if existing:
+            raise ValueError(f"Office '{name}' already exists in this formation")
+
         obj.name = name
         if office_type is not None:
             obj.office_type = office_type
