@@ -983,18 +983,19 @@ def list_staff_endpoint():
         
         formation_id = user.get("formation_id")
         
-        # Allow special_admin to filter by formation
-        if user["role"] == "special_admin":
+        # Allow special_admin and super_admin/main_admin to filter by formation
+        if user["role"] in ["special_admin", "super_admin", "main_admin"]:
              req_org_id = request.args.get("formation_id", type=int)
              if req_org_id:
                  formation_id = req_org_id
-             else:
-                 # If no specific formation requested, show all (global view)
+             elif user["role"] == "special_admin":
+                 # If no specific formation requested for special_admin, show all (global view)
                  formation_id = None
-        
-        # Formation Admin: Do not display personnel list
-        if user["role"] == "formation_admin":
-            return jsonify({"items": [], "total": 0}), 200
+
+        # Formation Admin: Allow viewing their own personnel (filtered by formation_id above)
+        # Previously restricted from viewing global list, but they are already filtered by formation_id logic.
+        # if user["role"] == "formation_admin":
+        #    return jsonify({"items": [], "total": 0}), 200
         
         with next(get_db()) as db:
             if user["role"] == "office_admin":
