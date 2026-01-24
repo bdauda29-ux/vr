@@ -263,25 +263,21 @@ def create_formation_endpoint():
             
             elif formation_type == "State Command":
                 if not parent_id:
-                    return jsonify({"detail": "State Command must be under a Zonal Command or SHQ"}), 400
+                    return jsonify({"detail": "State Command must be under a Zonal Command"}), 400
                 
                 parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
                 if not parent:
                     return jsonify({"detail": "Invalid parent formation"}), 400
                 
-                # Allow Zonal Command or SHQ
-                if parent.formation_type != "Zonal Command" and parent.code != "SHQ":
-                     return jsonify({"detail": "State Command must be under Zonal Command or SHQ"}), 400
+                # Allow Zonal Command only
+                if parent.formation_type != "Zonal Command":
+                     return jsonify({"detail": "State Command must be under Zonal Command"}), 400
 
             elif formation_type == "Zonal Command":
                 parent_id = None
             
-            elif formation_type in ["FTZ", "Special Command", "Other"] or (formation_type not in ["Directorate", "State Command", "Zonal Command", "Airport"]):
+            elif formation_type in ["FTZ", "Special Command", "Other"] or (formation_type not in ["Directorate", "State Command", "Zonal Command", "Airport", "Border Command"]):
                 # FTZ, Special Command, Other (and any fallback) -> Zonal Command or SHQ
-                # Note: "Other" comes as formation_type if user selected "Other" and typed in description? 
-                # Actually formation_type is passed from frontend. If "Other" selected, frontend sends the typed value as description but formation_type might be "Other"?
-                # Let's check frontend. Frontend sends `formation_type` as the value from select, or "Other".
-                # If "Other" is selected, the typed value goes to `description`.
                 
                 if not parent_id:
                      return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
@@ -293,16 +289,16 @@ def create_formation_endpoint():
                 if parent.code != "SHQ" and parent.formation_type != "Zonal Command":
                      return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
 
-            elif formation_type == "Airport":
+            elif formation_type == "Airport" or formation_type == "Border Command":
                 if not parent_id:
-                    return jsonify({"detail": "Airport must be under a Zonal Command"}), 400
+                    return jsonify({"detail": f"{formation_type} must be under a Zonal Command"}), 400
                 
                 parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
                 if not parent:
                     return jsonify({"detail": "Invalid parent formation"}), 400
                 
                 if parent.formation_type != "Zonal Command":
-                     return jsonify({"detail": "Airport must be under Zonal Command"}), 400
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command"}), 400
 
             # Check if code exists
             existing = db.query(models.Formation).filter(models.Formation.code == code_val).first()
@@ -380,27 +376,27 @@ def update_formation_endpoint(formation_id):
              elif formation_type == "Zonal Command":
                  parent_id = None
 
-             elif formation_type in ["FTZ", "Special Command", "Other"] or (formation_type not in ["Directorate", "State Command", "Zonal Command", "Airport"]):
-                 if not parent_id:
-                      return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
-                 
-                 parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
-                 if not parent:
-                     return jsonify({"detail": "Invalid parent formation"}), 400
-                 
-                 if parent.code != "SHQ" and parent.formation_type != "Zonal Command":
-                      return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
+             elif formation_type in ["FTZ", "Special Command", "Other"] or (formation_type not in ["Directorate", "State Command", "Zonal Command", "Airport", "Border Command"]):
+                if not parent_id:
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
+                
+                parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                if not parent:
+                    return jsonify({"detail": "Invalid parent formation"}), 400
+                
+                if parent.code != "SHQ" and parent.formation_type != "Zonal Command":
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
 
-             elif formation_type == "Airport":
-                 if not parent_id:
-                     return jsonify({"detail": "Airport must be under a Zonal Command"}), 400
-                 
-                 parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
-                 if not parent:
-                     return jsonify({"detail": "Invalid parent formation"}), 400
-                 
-                 if parent.formation_type != "Zonal Command":
-                      return jsonify({"detail": "Airport must be under Zonal Command"}), 400
+            elif formation_type == "Airport" or formation_type == "Border Command":
+                if not parent_id:
+                    return jsonify({"detail": f"{formation_type} must be under a Zonal Command"}), 400
+                
+                parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                if not parent:
+                    return jsonify({"detail": "Invalid parent formation"}), 400
+                
+                if parent.formation_type != "Zonal Command":
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command"}), 400
 
         formation = crud.update_formation(db, formation_id, name, description, formation_type, parent_id)
         if not formation:

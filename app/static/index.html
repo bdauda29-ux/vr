@@ -170,9 +170,29 @@
             letter-spacing: 1px;
             opacity: 0.8;
         }
+
+        /* Top Navbar Layout */
+        .top-navbar {
+            margin-left: 240px;
+            transition: margin-left 0.3s;
+            z-index: 99;
+        }
+        body.sidebar-collapsed .top-navbar {
+            margin-left: 80px;
+        }
+        @media (max-width: 767.98px) {
+            .top-navbar { margin-left: 0; }
+        }
     </style>
 </head>
 <body>
+    <!-- Top Navbar -->
+    <nav class="navbar navbar-dark bg-success fixed-top top-navbar shadow-sm">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">Personnel Formation</span>
+        </div>
+    </nav>
+
     <!-- Global Loader & Debug -->
     <div id="global-loader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);z-index:9999;display:flex;justify-content:center;align-items:center;flex-direction:column;">
         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
@@ -2073,14 +2093,14 @@
                     populateParentOptions(parentSelectId, ['SHQ']);
                     parentDiv.classList.remove('d-none');
                 } else if (selectVal === 'State Command') {
-                    populateParentOptions(parentSelectId, ['Zonal Command', 'SHQ']);
+                    populateParentOptions(parentSelectId, ['Zonal Command']);
                     parentDiv.classList.remove('d-none');
                 } else if (selectVal === 'Zonal Command') {
                     // Do not ask further
-                } else if (selectVal === 'Airport') {
+                } else if (selectVal === 'Airport' || selectVal === 'Border Command') {
                     populateParentOptions(parentSelectId, ['Zonal Command']);
                     parentDiv.classList.remove('d-none');
-                } else if (['FTZ', 'Special Command', 'Other', 'Border Command'].includes(selectVal) || selectVal) {
+                } else if (['FTZ', 'Special Command', 'Other'].includes(selectVal) || selectVal) {
                     // Default for others including FTZ, Special Command
                     populateParentOptions(parentSelectId, ['Zonal Command', 'SHQ']);
                     parentDiv.classList.remove('d-none');
