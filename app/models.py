@@ -107,6 +107,7 @@ class Staff(Base):
     posting_history = relationship("PostingHistory", back_populates="staff", cascade="all, delete-orphan")
     formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True)
     formation = relationship("Formation", back_populates="staff")
+    formation_dopp = Column(Date, nullable=True)
 
 class Leave(Base):
     __tablename__ = "leaves"

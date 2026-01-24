@@ -137,6 +137,13 @@ def run_migrations():
                         conn.execute(text("ALTER TABLE staff ADD COLUMN allow_edit_dopp INTEGER DEFAULT 0 NOT NULL"))
                 print("Column 'allow_edit_dopp' added successfully.")
 
+            if 'formation_dopp' not in columns:
+                print("Column 'formation_dopp' missing in 'staff'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE staff ADD COLUMN formation_dopp DATE"))
+                print("Column 'formation_dopp' added successfully.")
+
         # Check for staff_edit_requests table
         if 'staff_edit_requests' not in table_names:
             print("Table 'staff_edit_requests' missing. Creating it...")

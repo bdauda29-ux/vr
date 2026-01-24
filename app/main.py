@@ -1027,7 +1027,7 @@ def create_staff():
     data = request.get_json(force=True)
     for k in ["nis_no","surname","other_names","rank"]:
         if k not in data or not str(data[k]).strip(): return jsonify({"detail": f"{k} is required"}), 400
-    for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
+    for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
         if k in data:
             parsed = parse_date_value(data.get(k))
             if data.get(k) not in (None, "") and parsed is None: return jsonify({"detail": f"Invalid date for {k}"}), 400
@@ -1070,7 +1070,7 @@ def update_staff(staff_id: int):
     formation_id = user.get("formation_id")
     
     data = request.get_json(force=True)
-    for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
+    for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
         if k in data: data[k] = parse_date_value(data.get(k))
     with next(get_db()) as db:
         existing = crud.get_staff(db, staff_id)

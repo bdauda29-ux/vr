@@ -350,7 +350,7 @@
 
     <!-- Staff Edit Information Modal -->
     <div class="modal fade" id="staffEditModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Personal Information</h5>
@@ -358,25 +358,110 @@
                 </div>
                 <div class="modal-body">
                     <form id="staffEditForm" onsubmit="event.preventDefault(); submitStaffEdit();">
-                        <div class="mb-3">
-                            <label class="form-label">Phone Number</label>
-                            <input type="text" class="form-control" id="staffEditPhone">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">NIS No</label>
+                                <input type="text" class="form-control" id="staffEditNis">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Surname</label>
+                                <input type="text" class="form-control" id="staffEditSurname">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Other Names</label>
+                                <input type="text" class="form-control" id="staffEditOtherNames">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Rank</label>
+                                <select class="form-select" id="staffEditRank">
+                                    <option value="">Select Rank...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Gender</label>
+                                <select class="form-select" id="staffEditGender">
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Date of Birth</label>
+                                <input type="text" class="form-control date-picker" id="staffEditDob" placeholder="yyyy-mm-dd">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Qualification</label>
+                                <input type="text" class="form-control" id="staffEditQualification">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Office</label>
+                                <select class="form-select" id="staffEditOffice">
+                                    <option value="">Select Office...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Phone Number</label>
+                                <input type="text" class="form-control" id="staffEditPhone">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">State of Origin</label>
+                                <select class="form-select" id="staffEditState" onchange="loadLGAsForEditModal(this.value)">
+                                    <option value="">Select State...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">LGA</label>
+                                <select class="form-select" id="staffEditLga">
+                                    <option value="">Select State First...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">DOFA</label>
+                                <input type="text" class="form-control date-picker" id="staffEditDofa" placeholder="yyyy-mm-dd">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">DOPA</label>
+                                <input type="text" class="form-control date-picker" id="staffEditDopa" placeholder="yyyy-mm-dd">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">DOPP</label>
+                                <input type="text" class="form-control date-picker" id="staffEditDopp" placeholder="yyyy-mm-dd">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Formation DOPP</label>
+                                <input type="text" class="form-control date-picker" id="staffEditFormationDopp" placeholder="yyyy-mm-dd">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" id="staffEditEmail">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Home Town</label>
+                                <input type="text" class="form-control" id="staffEditHomeTown">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Next of Kin</label>
+                                <input type="text" class="form-control" id="staffEditNok">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Next of Kin Phone</label>
+                                <input type="text" class="form-control" id="staffEditNokPhone">
+                            </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-control" id="staffEditEmail">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Next of Kin</label>
-                            <input type="text" class="form-control" id="staffEditNok">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Next of Kin Phone</label>
-                            <input type="text" class="form-control" id="staffEditNokPhone">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Home Town</label>
-                            <input type="text" class="form-control" id="staffEditHomeTown">
+                            <label class="form-label">Remark</label>
+                            <textarea class="form-control" id="staffEditRemark" rows="2"></textarea>
                         </div>
                         <div class="d-flex justify-content-end">
                             <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
@@ -2439,6 +2524,32 @@
             }
         }
 
+        async function loadLGAsForEditModal(stateId, selectedLgaId = null) {
+            const lgaSel = document.getElementById('staffEditLga');
+            if (!lgaSel) return;
+            
+            lgaSel.innerHTML = '<option value="">Select LGA...</option>';
+            
+            if (!stateId) {
+                lgaSel.innerHTML = '<option value="">Select State First...</option>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/states/${stateId}/lgas`);
+                if (res.ok) {
+                    const lgas = await res.json();
+                    lgas.forEach(l => {
+                        const opt = document.createElement('option');
+                        opt.value = l.id;
+                        opt.textContent = l.name;
+                        lgaSel.appendChild(opt);
+                    });
+                    if (selectedLgaId) lgaSel.value = selectedLgaId;
+                }
+            } catch(e) { console.error(e); }
+        }
+
         async function openStaffEditModal() {
             if (!userId) return;
             try {
@@ -2448,23 +2559,94 @@
                 if (!res.ok) { alert('Failed to fetch info'); return; }
                 const s = await res.json();
                 
+                // Populate Text Fields
+                document.getElementById('staffEditNis').value = s.nis_no || '';
+                document.getElementById('staffEditSurname').value = s.surname || '';
+                document.getElementById('staffEditOtherNames').value = s.other_names || '';
+                document.getElementById('staffEditDob').value = isoToDmy(s.dob);
+                document.getElementById('staffEditQualification').value = s.qualification || '';
                 document.getElementById('staffEditPhone').value = s.phone_no || '';
                 document.getElementById('staffEditEmail').value = s.email || '';
+                document.getElementById('staffEditHomeTown').value = s.home_town || '';
                 document.getElementById('staffEditNok').value = s.next_of_kin || '';
                 document.getElementById('staffEditNokPhone').value = s.nok_phone || '';
-                document.getElementById('staffEditHomeTown').value = s.home_town || '';
+                document.getElementById('staffEditDofa').value = isoToDmy(s.dofa);
+                document.getElementById('staffEditDopa').value = isoToDmy(s.dopa);
+                document.getElementById('staffEditDopp').value = isoToDmy(s.dopp);
+                document.getElementById('staffEditFormationDopp').value = isoToDmy(s.formation_dopp);
+                document.getElementById('staffEditRemark').value = s.remark || '';
+
+                // Populate Dropdowns
+                // Rank
+                const rankSel = document.getElementById('staffEditRank');
+                rankSel.innerHTML = '<option value="">Select Rank...</option>';
+                RANKS.forEach(r => {
+                    rankSel.add(new Option(r, r));
+                });
+                rankSel.value = s.rank || '';
+
+                // Gender
+                document.getElementById('staffEditGender').value = s.gender || 'Male';
+
+                // Office
+                const officeSel = document.getElementById('staffEditOffice');
+                officeSel.innerHTML = '<option value="">Select Office...</option>';
+                officesList.forEach(o => {
+                    officeSel.add(new Option(o, o));
+                });
+                // If current office not in list (e.g. was deleted or custom), add it
+                if (s.office && !officesList.includes(s.office)) {
+                    officeSel.add(new Option(s.office, s.office));
+                }
+                officeSel.value = s.office || '';
+
+                // State & LGA
+                const stateSel = document.getElementById('staffEditState');
+                stateSel.innerHTML = '<option value="">Select State...</option>';
+                allStates.forEach(st => {
+                    const opt = document.createElement('option');
+                    opt.value = st.id;
+                    opt.textContent = st.name;
+                    stateSel.appendChild(opt);
+                });
                 
+                if (s.state) {
+                    stateSel.value = s.state.id;
+                    await loadLGAsForEditModal(s.state.id, s.lga ? s.lga.id : null);
+                } else {
+                    stateSel.value = "";
+                    document.getElementById('staffEditLga').innerHTML = '<option value="">Select State First...</option>';
+                }
+                
+                // Re-init date pickers for this modal just in case
+                flatpickr("#staffEditModal .date-picker", { dateFormat: "d/m/Y", allowInput: true });
+
                 staffEditModal.show();
             } catch(e) { console.error(e); alert('Error opening edit modal'); }
         }
 
         async function submitStaffEdit() {
             const data = {
+                nis_no: document.getElementById('staffEditNis').value,
+                surname: document.getElementById('staffEditSurname').value,
+                other_names: document.getElementById('staffEditOtherNames').value,
+                rank: document.getElementById('staffEditRank').value,
+                gender: document.getElementById('staffEditGender').value,
+                dob: userDateToIsoOrNull(document.getElementById('staffEditDob').value),
+                qualification: document.getElementById('staffEditQualification').value,
+                office: document.getElementById('staffEditOffice').value,
                 phone_no: document.getElementById('staffEditPhone').value,
+                state_id: document.getElementById('staffEditState').value || null,
+                lga_id: document.getElementById('staffEditLga').value || null,
+                dofa: userDateToIsoOrNull(document.getElementById('staffEditDofa').value),
+                dopa: userDateToIsoOrNull(document.getElementById('staffEditDopa').value),
+                dopp: userDateToIsoOrNull(document.getElementById('staffEditDopp').value),
+                formation_dopp: userDateToIsoOrNull(document.getElementById('staffEditFormationDopp').value),
                 email: document.getElementById('staffEditEmail').value,
+                home_town: document.getElementById('staffEditHomeTown').value,
                 next_of_kin: document.getElementById('staffEditNok').value,
                 nok_phone: document.getElementById('staffEditNokPhone').value,
-                home_town: document.getElementById('staffEditHomeTown').value
+                remark: document.getElementById('staffEditRemark').value
             };
             
             try {
@@ -3480,7 +3662,8 @@
             tbody.innerHTML = '';
             
             // Disable inline edit for special_admin
-            const contentEditableAttr = role === 'special_admin' ? '' : 'contenteditable="true"';
+            const isSpecial = role === 'special_admin';
+            const contentEditableAttr = isSpecial ? '' : 'contenteditable="true"';
             
             data.forEach((s, index) => {
                 const tr = document.createElement('tr');
@@ -3490,17 +3673,20 @@
                 const dofa = isoToDmy(s.dofa);
                 const dopa = isoToDmy(s.dopa);
                 const dopp = isoToDmy(s.dopp);
+                const formationDopp = isoToDmy(s.formation_dopp);
                 const dob = isoToDmy(s.dob);
-                const rankOpts = RANKS.map(r => `<option value="${r}" ${s.rank===r?'selected':''}>${r} - ${RANK_NAMES[r] || ''}</option>`).join('');
-                const genderOpts = ['Male','Female'].map(g => `<option value="${g}" ${s.gender===g?'selected':''}>${g}</option>`).join('');
-                const officeOpts = officesList.map(o => `<option value="${o}" ${s.office===o?'selected':''}>${o}</option>`).join('');
-                const stateOpts = allStates.map(st => `<option value="${st.id}" ${s.state && s.state.id===st.id?'selected':''}>${st.name}</option>`).join('');
+                
+                // Options generation (only if not special_admin)
+                const rankOpts = !isSpecial ? RANKS.map(r => `<option value="${r}" ${s.rank===r?'selected':''}>${r} - ${RANK_NAMES[r] || ''}</option>`).join('') : '';
+                const genderOpts = !isSpecial ? ['Male','Female'].map(g => `<option value="${g}" ${s.gender===g?'selected':''}>${g}</option>`).join('') : '';
+                const officeOpts = !isSpecial ? officesList.map(o => `<option value="${o}" ${s.office===o?'selected':''}>${o}</option>`).join('') : '';
+                const stateOpts = !isSpecial ? allStates.map(st => `<option value="${st.id}" ${s.state && s.state.id===st.id?'selected':''}>${st.name}</option>`).join('') : '';
                 
                 // Format Names
                 const surnameFormatted = formatName(s.surname);
                 const otherNamesFormatted = formatName(s.other_names);
                 
-                const formationCell = (role === 'special_admin') 
+                const formationCell = isSpecial 
                     ? `<td>${s.formation ? (s.formation.code || s.formation.name) : '-'}</td>` 
                     : '';
 
@@ -3551,6 +3737,38 @@
                         </div>
                     `;
                 }
+                
+                // Rank Cell
+                let rankCell = '';
+                if (isSpecial) {
+                     rankCell = `<td><span class="rank-badge">${rankBadge(s.rank)}</span></td>`;
+                } else {
+                     rankCell = `<td data-rank-cell>
+                            <span class="rank-badge">${rankBadge(s.rank)}</span>
+                            <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
+                            <button type="button" class="btn btn-sm btn-outline-info ms-1" title="Edit rank" data-rank-toggle>
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                        </td>`;
+                }
+                
+                // Gender, Office, State, LGA cells
+                let genderCell = isSpecial ? `<td>${s.gender || ''}</td>` : `<td><select class="form-select form-select-sm" data-select-field="gender" data-original="${s.gender || ''}">${genderOpts}</select></td>`;
+                let officeCell = isSpecial ? `<td>${s.office || ''}</td>` : `<td><select class="form-select form-select-sm" data-select-field="office" data-original="${s.office || ''}">${officeOpts}</select></td>`;
+                
+                let stateCell = isSpecial ? `<td>${sName}</td>` : `<td>
+                            <select class="form-select form-select-sm" data-select-field="state_id" data-original="${s.state ? s.state.id : ''}">
+                                <option value="">Select...</option>
+                                ${stateOpts}
+                            </select>
+                        </td>`;
+                        
+                let lgaCell = isSpecial ? `<td>${lName}</td>` : `<td>
+                            <select class="form-select form-select-sm" data-select-field="lga_id" data-original="${s.lga ? s.lga.id : ''}">
+                                <option value="">${s.state ? 'Select LGA...' : 'Select State First'}</option>
+                            </select>
+                        </td>`;
+
                 if (currentStatus === 'exited') {
                     tr.innerHTML = `
                         <td>${index + 1}</td>
@@ -3558,13 +3776,7 @@
                         <td ${contentEditableAttr} data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
                         <td ${contentEditableAttr} data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
                         <td ${contentEditableAttr} data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
-                        <td data-rank-cell>
-                            <span class="rank-badge">${rankBadge(s.rank)}</span>
-                            <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
-                            <button type="button" class="btn btn-sm btn-outline-info ms-1" title="Edit rank" data-rank-toggle>
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                        </td>
+                        ${rankCell}
                         <td ${contentEditableAttr} data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
                         <td>${s.exit_mode || ''}</td>
                         <td>${isoToDmy(s.exit_date) || ''}</td>
@@ -3577,30 +3789,15 @@
                         <td ${contentEditableAttr} data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
                         <td ${contentEditableAttr} data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
                         <td ${contentEditableAttr} data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
-                        <td data-rank-cell>
-                            <span class="rank-badge">${rankBadge(s.rank)}</span>
-                            <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
-                            <button type="button" class="btn btn-sm btn-outline-info ms-1" title="Edit rank" data-rank-toggle>
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                        </td>
-                        <td><select class="form-select form-select-sm" data-select-field="gender" data-original="${s.gender || ''}">${genderOpts}</select></td>
+                        ${rankCell}
+                        ${genderCell}
                         <td ${contentEditableAttr} data-field="dob" data-original="${dob || ''}">${dob || ''}</td>
                         <td ${contentEditableAttr} data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
                         <td ${contentEditableAttr} data-field="email" data-original="${s.email || ''}">${s.email || ''}</td>
                         <td ${contentEditableAttr} data-field="qualification" data-original="${s.qualification || ''}">${s.qualification || ''}</td>
-                        <td><select class="form-select form-select-sm" data-select-field="office" data-original="${s.office || ''}">${officeOpts}</select></td>
-                        <td>
-                            <select class="form-select form-select-sm" data-select-field="state_id" data-original="${s.state ? s.state.id : ''}">
-                                <option value="">Select...</option>
-                                ${stateOpts}
-                            </select>
-                        </td>
-                        <td>
-                            <select class="form-select form-select-sm" data-select-field="lga_id" data-original="${s.lga ? s.lga.id : ''}">
-                                <option value="">${s.state ? 'Select LGA...' : 'Select State First'}</option>
-                            </select>
-                        </td>
+                        ${officeCell}
+                        ${stateCell}
+                        ${lgaCell}
                         <td ${contentEditableAttr} data-field="dofa" data-original="${dofa || ''}">${dofa || ''}</td>
                         <td ${contentEditableAttr} data-field="dopa" data-original="${dopa || ''}">${dopa || ''}</td>
                         <td ${contentEditableAttr} data-field="dopp" data-original="${dopp || ''}">${dopp || ''}</td>
@@ -3613,11 +3810,13 @@
                 }
                 tbody.appendChild(tr);
                 
-                // Populate LGA select per row if state present
-                const lgaSel = tr.querySelector('select[data-select-field="lga_id"]');
-                const stateSel = tr.querySelector('select[data-select-field="state_id"]');
-                if (stateSel && lgaSel && stateSel.value) {
-                    loadLGAsForRow(stateSel.value, lgaSel, s.lga ? s.lga.id : null);
+                // Populate LGA select per row if state present and not special admin
+                if (!isSpecial) {
+                    const lgaSel = tr.querySelector('select[data-select-field="lga_id"]');
+                    const stateSel = tr.querySelector('select[data-select-field="state_id"]');
+                    if (stateSel && lgaSel && stateSel.value) {
+                        loadLGAsForRow(stateSel.value, lgaSel, s.lga ? s.lga.id : null);
+                    }
                 }
             });
         }
@@ -4618,6 +4817,7 @@
                             ${renderField('Date of First Appt', isoToDmy(s.dofa))}
                             ${renderField('Date of Present Appt', isoToDmy(s.dopa))}
                             ${renderField('Date of Present Posting', isoToDmy(s.dopp))}
+                            ${renderField('Formation Date of Present Posting', isoToDmy(s.formation_dopp))}
                             <div class="col-12"><hr></div>
                             ${renderField('State of Origin', s.state ? s.state.name : '')}
                             ${renderField('LGA', s.lga ? s.lga.name : '')}

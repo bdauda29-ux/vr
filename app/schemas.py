@@ -50,6 +50,7 @@ def to_dict_staff(obj) -> Dict[str, Any]:
         "dofa": obj.dofa.isoformat() if obj.dofa else None,
         "dopa": obj.dopa.isoformat() if obj.dopa else None,
         "dopp": obj.dopp.isoformat() if obj.dopp else None,
+        "formation_dopp": obj.formation_dopp.isoformat() if getattr(obj, "formation_dopp", None) else None,
         "dob": obj.dob.isoformat() if obj.dob else None,
         "home_town": obj.home_town,
         "qualification": obj.qualification,
