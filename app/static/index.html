@@ -12,7 +12,7 @@
     <style>
         body { 
             overflow-x: hidden; 
-            padding-top: 60px;
+            padding-top: 70px;
         }
 
         #list-pane .table-responsive { 
@@ -58,88 +58,10 @@
             }
         }
 
-        /* Sidebar & Layout */
-        .sidebar {
-            position: fixed;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            z-index: 100;
-            padding: 48px 0 0;
-            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
-            background-color: #67461e;
-            width: 240px;
-            transition: all 0.3s;
-        }
-        .sidebar-sticky {
-            position: relative;
-            top: 0;
-            height: calc(100vh - 48px);
-            padding-top: .5rem;
-            overflow-x: hidden;
-            overflow-y: auto;
-        }
-        .sidebar .nav-link {
-            font-weight: 500;
-            color: #d1d5db;
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
-        }
-        .sidebar .nav-link:hover {
-            color: #fff;
-            background-color: rgba(255,255,255,0.1);
-        }
-        .sidebar .nav-link.active {
-            color: #fff;
-            background-color: #0d6efd;
-        }
-        .sidebar .nav-link i {
-            margin-right: 10px;
-            font-size: 1.1em;
-        }
-        
         /* Main Content */
         .main-content {
-            margin-left: 240px; /* Width of sidebar */
             padding: 20px;
             transition: all 0.3s;
-        }
-
-        /* Collapsed Sidebar */
-        body.sidebar-collapsed .sidebar {
-            width: 80px;
-        }
-        body.sidebar-collapsed .main-content {
-            margin-left: 80px;
-        }
-        body.sidebar-collapsed .sidebar .nav-text,
-        body.sidebar-collapsed #sidebar-brand-text {
-            display: none;
-        }
-        body.sidebar-collapsed .sidebar .nav-link {
-            justify-content: center;
-            padding: 10px;
-        }
-        body.sidebar-collapsed .sidebar .nav-link i {
-            margin-right: 0;
-            font-size: 1.5em;
-        }
-        body.sidebar-collapsed #sidebar-brand-container {
-            width: 0;
-            overflow: hidden;
-            opacity: 0;
-        }
-        body.sidebar-collapsed #sidebar-header {
-            justify-content: center !important;
-            padding-left: 0 !important;
-            padding-right: 0 !important;
-        }
-        body.sidebar-collapsed #sidebar-toggle {
-            margin-left: 0 !important;
-        }
-        body.sidebar-collapsed .sidebar .dropdown-toggle::after {
-            display: none;
         }
 
         /* Dashboard Widgets */
@@ -171,25 +93,85 @@
             opacity: 0.8;
         }
 
-        /* Top Navbar Layout */
-        .top-navbar {
-            margin-left: 240px;
-            transition: margin-left 0.3s;
-            z-index: 99;
-        }
-        body.sidebar-collapsed .top-navbar {
-            margin-left: 80px;
-        }
-        @media (max-width: 767.98px) {
-            .top-navbar { margin-left: 0; }
-        }
     </style>
 </head>
 <body>
     <!-- Top Navbar -->
-    <nav class="navbar navbar-dark bg-success fixed-top top-navbar shadow-sm">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-success fixed-top shadow-sm">
         <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1" id="navbarBrandText">Personnel Formation</span>
+            <a class="navbar-brand d-flex flex-column" href="#">
+                <span><i class="bi bi-shield-lock-fill me-2"></i><span id="navbarBrandText">Personnel Formation</span></span>
+                <span id="navbarBrandSubtitle" class="small text-white-50" style="font-size: 0.75rem; display: none;"></span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" onclick="showView('dashboard');" title="Dashboard">
+                            <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item d-none" id="switchToAdminItem">
+                        <a class="nav-link" href="#" onclick="switchToAdminMode()" title="Switch to Admin">
+                            <i class="bi bi-shield-lock me-1"></i> Switch to Admin
+                        </a>
+                    </li>
+                    <li class="nav-item" id="personnelNavItem">
+                        <a class="nav-link" href="#" onclick="showPersonnelTab('list-tab'); showView('personnel');" title="Personnel">
+                            <i class="bi bi-people-fill me-1"></i> Personnel
+                        </a>
+                    </li>
+                    <li class="nav-item admin-only">
+                        <a class="nav-link" href="#" onclick="showView('offices');" title="Offices">
+                            <i class="bi bi-building me-1"></i> Offices
+                        </a>
+                    </li>
+                    <li class="nav-item special-only d-none">
+                        <a class="nav-link" href="#" onclick="showView('formations');" title="Formations">
+                            <i class="bi bi-building-fill me-1"></i> Formations
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="showView('leave');" title="Leave">
+                            <i class="bi bi-calendar-check me-1"></i> Leave
+                        </a>
+                    </li>
+                    <li class="nav-item admin-only">
+                        <a class="nav-link" href="#" onclick="showView('audit');" title="Audit Logs">
+                            <i class="bi bi-journal-text me-1"></i> Audit Logs
+                        </a>
+                    </li>
+                    <li class="nav-item admin-only" id="approvalsNavItem">
+                        <a class="nav-link" href="#" onclick="showView('approvals');" title="Authorizations">
+                            <i class="bi bi-check2-square me-1"></i> Authorizations
+                            <span class="badge bg-danger rounded-pill ms-1 d-none" id="approvalsCounterSidebar">0</span>
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownUser" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle me-1"></i> <span id="userDisplaySidebar">User</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="#" onclick="openChangePasswordModal()">Change Password</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Text Size</h6></li>
+                            <li>
+                                <div class="px-3 d-flex justify-content-between align-items-center">
+                                    <button class="btn btn-sm btn-outline-light" onclick="adjustTextSize(-5)" title="Decrease"><i class="bi bi-dash"></i></button>
+                                    <button class="btn btn-sm btn-outline-light" onclick="resetTextSize()" title="Reset"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                    <button class="btn btn-sm btn-outline-light" onclick="adjustTextSize(5)" title="Increase"><i class="bi bi-plus"></i></button>
+                                </div>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="logout()">Sign out</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
         </div>
     </nav>
 
@@ -510,9 +492,7 @@
             return false;
         };
 
-        function toggleSidebar() {
-            document.body.classList.toggle('sidebar-collapsed');
-        }
+
 
         // Early Auth Check
         (function() {
@@ -533,91 +513,6 @@
             }
         })();
     </script>
-    <!-- Sidebar Navigation -->
-    <nav class="sidebar">
-        <div class="position-sticky sidebar-sticky">
-            <div class="px-3 mb-4 d-flex align-items-center justify-content-between text-white border-bottom pb-3" id="sidebar-header">
-                <div class="d-flex align-items-center overflow-hidden" id="sidebar-brand-container" style="transition: all 0.3s;">
-                    <i class="bi bi-shield-lock-fill fs-4 me-2"></i>
-                    <div class="d-flex flex-column">
-                        <span class="fs-4 fw-bold text-nowrap" id="sidebar-brand-text">NIS System</span>
-                        <span class="text-nowrap text-white-50" id="sidebar-brand-subtitle" style="font-size: 0.7rem; line-height: 1; display: none;"></span>
-                    </div>
-                </div>
-                <button id="sidebar-toggle" class="btn btn-link text-white p-0 ms-2" onclick="toggleSidebar()">
-                    <i class="bi bi-list fs-4"></i>
-                </button>
-            </div>
-            
-            <ul class="nav flex-column mb-auto">
-                <li class="nav-item">
-                    <a class="nav-link active" href="#" onclick="showView('dashboard');" title="Dashboard">
-                        <i class="bi bi-speedometer2"></i> <span class="nav-text">Dashboard</span>
-                    </a>
-                </li>
-                <li class="nav-item d-none" id="switchToAdminItem">
-                    <a class="nav-link" href="#" onclick="switchToAdminMode()" title="Switch to Admin">
-                        <i class="bi bi-shield-lock"></i> <span class="nav-text">Switch to Admin</span>
-                    </a>
-                </li>
-                <li class="nav-item" id="personnelNavItem">
-                    <a class="nav-link" href="#" onclick="showPersonnelTab('list-tab'); showView('personnel');" title="Personnel">
-                        <i class="bi bi-people-fill"></i> <span class="nav-text">Personnel</span>
-                    </a>
-                </li>
-                <li class="nav-item admin-only">
-                    <a class="nav-link" href="#" onclick="showView('offices');" title="Offices">
-                        <i class="bi bi-building"></i> <span class="nav-text">Offices</span>
-                    </a>
-                </li>
-                <li class="nav-item special-only d-none">
-                    <a class="nav-link" href="#" onclick="showView('formations');" title="Formations">
-                        <i class="bi bi-building-fill"></i> <span class="nav-text">Formations</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="#" onclick="showView('leave');" title="Leave">
-                        <i class="bi bi-calendar-check"></i> <span class="nav-text">Leave</span>
-                    </a>
-                </li>
-                <li class="nav-item admin-only">
-                    <a class="nav-link" href="#" onclick="showView('audit');" title="Audit Logs">
-                        <i class="bi bi-journal-text"></i> <span class="nav-text">Audit Logs</span>
-                    </a>
-                </li>
-                <li class="nav-item admin-only" id="approvalsNavItem">
-                    <a class="nav-link" href="#" onclick="showView('approvals');" title="Authorizations">
-                        <i class="bi bi-check2-square"></i> <span class="nav-text">Authorizations</span>
-                        <span class="badge bg-danger rounded-pill ms-auto d-none nav-text" id="approvalsCounterSidebar">0</span>
-                    </a>
-                </li>
-            </ul>
-
-            <div class="mt-auto p-3 border-top border-secondary">
-                <div class="dropdown">
-                    <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" id="dropdownUserSidebar" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-person-circle fs-4 me-2"></i>
-                        <strong id="userDisplaySidebar" class="nav-text">User</strong>
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-dark text-small shadow" aria-labelledby="dropdownUserSidebar">
-                        <li><a class="dropdown-item" href="#" onclick="openChangePasswordModal()">Change Password</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><h6 class="dropdown-header">Text Size</h6></li>
-                        <li>
-                            <div class="px-3 d-flex justify-content-between align-items-center">
-                                <button class="btn btn-sm btn-outline-light" onclick="adjustTextSize(-5)" title="Decrease"><i class="bi bi-dash"></i></button>
-                                <button class="btn btn-sm btn-outline-light" onclick="resetTextSize()" title="Reset"><i class="bi bi-arrow-counterclockwise"></i></button>
-                                <button class="btn btn-sm btn-outline-light" onclick="adjustTextSize(5)" title="Increase"><i class="bi bi-plus"></i></button>
-                            </div>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="#" onclick="logout()">Sign out</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
     <!-- Main Content Wrapper -->
     <div class="main-content">
         <div class="container-fluid" id="mainContainer">
@@ -2030,34 +1925,26 @@
                     const userData = await res.json();
                     
                     // Update Navbar Brand
-                    const brandText = document.getElementById('sidebar-brand-text');
-                    const brandSubtitle = document.getElementById('sidebar-brand-subtitle');
                     const navbarBrand = document.getElementById('navbarBrandText');
+                    const navbarSubtitle = document.getElementById('navbarBrandSubtitle');
                     
-                    if (brandText && brandSubtitle) {
-                        // Formation User (has formation code)
-                        if (userData.formation_code) {
-                            const name = userData.formation_name || userData.formation_code;
-                            const desc = userData.formation_description || "";
-                            brandText.textContent = userData.formation_code || "";
-                            brandSubtitle.textContent = desc ? `${name} ${desc}` : name;
-                            brandSubtitle.style.display = "block";
-                            
-                            if (navbarBrand) navbarBrand.textContent = name;
-                        } 
-                        // Fallback (e.g. Super Admin without org, or just org name)
-                        else if (userData.formation_name) {
-                            const name = userData.formation_name;
-                            const desc = userData.formation_description || "";
-                            brandText.textContent = desc ? `${name} ${desc}` : name;
-                            brandSubtitle.style.display = "none";
-                            
-                            if (navbarBrand) navbarBrand.textContent = name;
-                        } 
-                        // Default
-                        else {
-                            brandText.textContent = 'NIS System';
-                            brandSubtitle.style.display = "none";
+                    if (navbarBrand) {
+                        const name = userData.formation_name || userData.formation_code || 'Personnel Formation';
+                        const desc = userData.formation_description || "";
+                        
+                        navbarBrand.textContent = name;
+                        
+                        if (navbarSubtitle) {
+                            if (userData.formation_code) {
+                                // Show extra info in subtitle if code exists
+                                navbarSubtitle.textContent = desc ? `${userData.formation_code} - ${desc}` : userData.formation_code;
+                                navbarSubtitle.style.display = "block";
+                            } else if (userData.formation_name && desc) {
+                                navbarSubtitle.textContent = desc;
+                                navbarSubtitle.style.display = "block";
+                            } else {
+                                navbarSubtitle.style.display = "none";
+                            }
                         }
                     }
                 }
@@ -2162,8 +2049,8 @@
                 return;
             }
 
-            // Update Sidebar Active State
-            document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            // Update Navbar Active State
+            document.querySelectorAll('.navbar-nav .nav-link').forEach(link => {
                 link.classList.remove('active');
                 const onclick = link.getAttribute('onclick');
                 if (onclick) {
