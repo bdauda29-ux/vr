@@ -5,7 +5,7 @@ from . import models
 
 # Rank order mapping (Highest to Lowest)
 RANK_ORDER = [
-    "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI",
+    "CGI", "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI",
     "ASI 1", "ASI 2", "II", "AII", "IA 1", "IA 2", "IA 3"
 ]
 

@@ -1671,6 +1671,7 @@ def export_excel():
                 return "".join([ch for ch in str(value).upper() if ch.isalnum()])
 
             senior_ranks = {
+                "CGI",
                 "DCG",
                 "ACG",
                 "CIS",
@@ -1691,7 +1692,7 @@ def export_excel():
             }
 
             rank_order = {
-                "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
+                "CGI": 0, "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
                 "CSI": 6, "SI": 7, "DSI": 8, "ASI 1": 9, "ASI1": 9,
                 "ASI 2": 10, "ASI2": 10, "II": 11, "AII": 12,
                 "IA 1": 13, "IA1": 13, "IA 2": 14, "IA2": 14, "IA 3": 15, "IA3": 15
@@ -1738,7 +1739,7 @@ def export_excel():
                 return other_initials
 
             rank_order = {
-                "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
+                "CGI": 0, "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
                 "CSI": 6, "SI": 7, "DSI": 8, "ASI 1": 9, "ASI1": 9,
                 "ASI 2": 10, "ASI2": 10, "II": 11, "AII": 12,
                 "IA 1": 13, "IA1": 13, "IA 2": 14, "IA2": 14, "IA 3": 15, "IA3": 15

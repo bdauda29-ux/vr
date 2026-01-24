@@ -2494,11 +2494,34 @@
             
             // Check if the top-most parent is a Directorate, if so append SHQ
             const lastPart = parts[parts.length - 1];
-            if (lastPart && lastPart.includes('Directorate')) {
+            if (lastPart && (lastPart.includes('Directorate') || lastPart.includes('Division') || lastPart.includes('DCG'))) {
                 parts.push('SHQ');
             }
 
             return parts.join(' - ');
+        }
+
+        function formatStaffName(rank, surname, otherNames) {
+            const seniorRanks = ["CGI", "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI", "ASI 1", "ASI 2", "ASI1", "ASI2"];
+            
+            const normalizeRank = (r) => (r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const rankCode = normalizeRank(rank);
+            const seniors = seniorRanks.map(normalizeRank);
+            
+            const surnameFull = (surname || '').trim().toUpperCase();
+            const otherWords = (otherNames || '').trim().split(/\s+/).filter(w => w);
+            const initialsFromWords = (words) => words.map(w => w[0].toUpperCase()).join(' ');
+            
+            if (seniors.includes(rankCode)) {
+                // Logic: Other Initials Surname
+                const otherInitials = initialsFromWords(otherWords);
+                if (otherInitials && surnameFull) {
+                    return `${otherInitials} ${surnameFull}`;
+                }
+                return surnameFull || otherInitials;
+            }
+            
+            return `${surnameFull} ${otherWords.join(' ').toUpperCase()}`;
         }
 
         function calculateRetirementDate(dobStr, dofaStr) {
@@ -2537,7 +2560,10 @@
                 
                 // Update Name
                 const nameEl = document.getElementById('staffDashboardName');
-                if (nameEl) nameEl.innerHTML = `${s.rank ? '<b>' + s.rank + '</b> ' : ''}${s.surname} ${s.other_names}`;
+                if (nameEl) {
+                    const formattedName = formatStaffName(s.rank, s.surname, s.other_names);
+                    nameEl.innerHTML = `${s.rank ? '<b>' + s.rank + '</b> ' : ''}${formattedName}`;
+                }
                 
                 // Update Office
                 const office = s.office || 'Not assigned';
