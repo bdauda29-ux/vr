@@ -40,26 +40,9 @@ NIGERIA_STATES_LGAS = {
 
 def seed_default_admin(db):
     """
-    Creates a default Super Admin user if no users exist.
-    Credentials: admin / admin123
+    Skipped default admin creation.
     """
-    from . import models, auth
-    
-    # Check if any user exists
-    user = db.query(models.User).first()
-    if not user:
-        print("Seeding default admin user...")
-        hashed_password = auth.get_password_hash("admin123")
-        admin_user = models.User(
-            username="admin",
-            password_hash=hashed_password,
-            role="super_admin"
-        )
-        db.add(admin_user)
-        db.commit()
-        print("Default admin created: admin / admin123")
-    else:
-        print("Users already exist, skipping seed.")
+    pass
 
 def seed_special_admin(db):
     """

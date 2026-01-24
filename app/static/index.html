@@ -189,7 +189,7 @@
     <!-- Top Navbar -->
     <nav class="navbar navbar-dark bg-success fixed-top top-navbar shadow-sm">
         <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">Personnel Formation</span>
+            <span class="navbar-brand mb-0 h1" id="navbarBrandText">Personnel Formation</span>
         </div>
     </nav>
 
@@ -2346,20 +2346,12 @@
                         return;
                     } 
                     
-                    // Admins: Default to Staff Dashboard, but allow switch
+                    // Admins: Go straight to Admin Dashboard
                     
-                    // 1. Hide admin items initially
-                    document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+                    // 1. Show admin items
+                    document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
                     
-                    // 2. Show Switch Button
-                    const switchBtn = document.getElementById('switchToAdminItem');
-                    if(switchBtn) switchBtn.classList.remove('d-none');
-                    
-                    // 3. Load Staff Dashboard Data
-                    await loadStaffDashboardInfo();
-                    showView('staff-dashboard');
-                    
-                    // 4. Background Admin Init
+                    // 2. Background Admin Init
                     if (role === 'office_admin') {
                         await fetchUserOffice();
                     } else if (role === 'main_admin') {
@@ -2373,6 +2365,7 @@
                     }
                     
                     loadStaff();
+                    showView('dashboard');
                     
                     const params = new URLSearchParams(window.location.search);
                     const officeChart = params.get('officeChart');
