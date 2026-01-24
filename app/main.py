@@ -387,16 +387,16 @@ def update_formation_endpoint(formation_id):
                 if parent.code != "SHQ" and parent.formation_type != "Zonal Command":
                      return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
 
-            elif formation_type == "Airport" or formation_type == "Border Command":
-                if not parent_id:
-                    return jsonify({"detail": f"{formation_type} must be under a Zonal Command"}), 400
-                
-                parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
-                if not parent:
-                    return jsonify({"detail": "Invalid parent formation"}), 400
-                
-                if parent.formation_type != "Zonal Command":
-                     return jsonify({"detail": f"{formation_type} must be under Zonal Command"}), 400
+             elif formation_type == "Airport" or formation_type == "Border Command":
+                 if not parent_id:
+                     return jsonify({"detail": f"{formation_type} must be under a Zonal Command"}), 400
+                 
+                 parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                 if not parent:
+                     return jsonify({"detail": "Invalid parent formation"}), 400
+                 
+                 if parent.formation_type != "Zonal Command":
+                      return jsonify({"detail": f"{formation_type} must be under Zonal Command"}), 400
 
         formation = crud.update_formation(db, formation_id, name, description, formation_type, parent_id)
         if not formation:
