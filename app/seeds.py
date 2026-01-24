@@ -105,3 +105,14 @@ def seed_vr_formation(db):
              print(f"Updating Formation name from '{org.name}' to '{org_name}'")
              org.name = org_name
              db.commit()
+
+    # Seed Service Headquarters (SHQ)
+    shq_code = "SHQ"
+    shq_name = "Service Headquarters"
+    shq = db.query(models.Formation).filter(models.Formation.code == shq_code).first()
+    if not shq:
+        print(f"Seeding Formation: {shq_name} ({shq_code})...")
+        shq = models.Formation(name=shq_name, code=shq_code, description="Service Headquarters", formation_type="Directorate")
+        db.add(shq)
+        db.commit()
+        print(f"Formation '{shq_name}' created.")

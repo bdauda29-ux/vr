@@ -12,12 +12,23 @@ def to_dict_lga(obj) -> Dict[str, Any]:
     return {"id": obj.id, "name": obj.name, "state_id": obj.state_id}
 
 def to_dict_office(obj) -> Dict[str, Any]:
+    parent = getattr(obj, "parent", None)
+    parent_name = parent.name if parent else None
+    
+    # Get grandparent
+    grandparent_name = None
+    if parent:
+        grandparent = getattr(parent, "parent", None)
+        if grandparent:
+            grandparent_name = grandparent.name
+
     return {
         "id": obj.id,
         "name": obj.name,
         "office_type": getattr(obj, "office_type", None),
         "parent_id": getattr(obj, "parent_id", None),
-        "parent_name": obj.parent.name if getattr(obj, "parent", None) else None
+        "parent_name": parent_name,
+        "grandparent_name": grandparent_name
     }
 
 def to_dict_formation_simple(obj) -> Dict[str, Any]:

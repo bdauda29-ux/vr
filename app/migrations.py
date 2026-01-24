@@ -38,6 +38,22 @@ def run_migrations():
                         conn.execute(text("ALTER TABLE formations ADD COLUMN description VARCHAR(256)"))
                 print("Column 'description' added to 'formations' successfully.")
 
+            # Check for formation_type and parent_id
+            columns = [c['name'] for c in inspector.get_columns('formations')]
+            if 'formation_type' not in columns:
+                print("Column 'formation_type' missing in 'formations'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE formations ADD COLUMN formation_type VARCHAR(32)"))
+                print("Column 'formation_type' added to 'formations' successfully.")
+            
+            if 'parent_id' not in columns:
+                print("Column 'parent_id' missing in 'formations'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE formations ADD COLUMN parent_id INTEGER"))
+                print("Column 'parent_id' added to 'formations' successfully.")
+
         # 3. Rename/Add formation_id to existing tables
         tables_to_update = ['users', 'staff', 'offices', 'audit_logs']
         

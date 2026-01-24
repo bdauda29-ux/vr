@@ -257,19 +257,23 @@ def delete_office(db: Session, office_id: int) -> bool:
     return False
 
 # Formation CRUD
-def create_formation(db: Session, name: str, code: str, description: Optional[str] = None) -> models.Formation:
-    obj = models.Formation(name=name, code=code, description=description)
+def create_formation(db: Session, name: str, code: str, description: Optional[str] = None, formation_type: Optional[str] = None, parent_id: Optional[int] = None) -> models.Formation:
+    obj = models.Formation(name=name, code=code, description=description, formation_type=formation_type, parent_id=parent_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
-def update_formation(db: Session, formation_id: int, name: str, description: Optional[str] = None) -> Optional[models.Formation]:
+def update_formation(db: Session, formation_id: int, name: str, description: Optional[str] = None, formation_type: Optional[str] = None, parent_id: Optional[int] = None) -> Optional[models.Formation]:
     obj = db.get(models.Formation, formation_id)
     if obj:
         obj.name = name
         if description is not None:
             obj.description = description
+        if formation_type is not None:
+            obj.formation_type = formation_type
+        if parent_id is not None:
+            obj.parent_id = parent_id
         db.add(obj)
         db.commit()
         db.refresh(obj)

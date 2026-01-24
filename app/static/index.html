@@ -204,7 +204,7 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Description</label>
-                            <select class="form-select" id="formationDescriptionSelect" onchange="toggleFormationDescriptionOther('create')">
+                            <select class="form-select" id="formationDescriptionSelect" onchange="handleFormationTypeChange('create')">
                                 <option value="">Select Description...</option>
                                 <option value="Directorate">Directorate</option>
                                 <option value="Zonal Command">Zonal Command</option>
@@ -216,6 +216,12 @@
                                 <option value="Other">Other</option>
                             </select>
                             <input type="text" class="form-control mt-2 d-none" id="formationDescriptionOther" placeholder="Enter description">
+                        </div>
+                        <div class="mb-3 d-none" id="createParentFormationDiv">
+                            <label class="form-label required">Under Formation</label>
+                            <select class="form-select" id="createParentFormationSelect">
+                                <option value="">Select Parent...</option>
+                            </select>
                         </div>
                     </form>
                 </div>
@@ -281,7 +287,7 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Description</label>
-                            <select class="form-select" id="updateFormationDescriptionSelect" onchange="toggleFormationDescriptionOther('update')">
+                            <select class="form-select" id="updateFormationDescriptionSelect" onchange="handleFormationTypeChange('update')">
                                 <option value="">Select Description...</option>
                                 <option value="Directorate">Directorate</option>
                                 <option value="Zonal Command">Zonal Command</option>
@@ -293,6 +299,12 @@
                                 <option value="Other">Other</option>
                             </select>
                             <input type="text" class="form-control mt-2 d-none" id="updateFormationDescriptionOther" placeholder="Enter description">
+                        </div>
+                        <div class="mb-3 d-none" id="updateParentFormationDiv">
+                            <label class="form-label required">Under Formation</label>
+                            <select class="form-select" id="updateParentFormationSelect">
+                                <option value="">Select Parent...</option>
+                            </select>
                         </div>
                     </form>
                 </div>
@@ -1897,12 +1909,17 @@
 
         // --- Formation Management UI Functions ---
 
-        function toggleFormationDescriptionOther(mode) {
+        function handleFormationTypeChange(mode) {
             const selectId = mode === 'create' ? 'formationDescriptionSelect' : 'updateFormationDescriptionSelect';
             const inputId = mode === 'create' ? 'formationDescriptionOther' : 'updateFormationDescriptionOther';
+            const parentDivId = mode === 'create' ? 'createParentFormationDiv' : 'updateParentFormationDiv';
+            const parentSelectId = mode === 'create' ? 'createParentFormationSelect' : 'updateParentFormationSelect';
+            
             const selectVal = document.getElementById(selectId).value;
             const inputEl = document.getElementById(inputId);
+            const parentDiv = document.getElementById(parentDivId);
             
+            // Handle "Other"
             if (selectVal === 'Other') {
                 inputEl.classList.remove('d-none');
                 inputEl.required = true;
@@ -1910,6 +1927,60 @@
                 inputEl.classList.add('d-none');
                 inputEl.required = false;
                 inputEl.value = '';
+            }
+            
+            // Handle Hierarchy
+            if (parentDiv) {
+                parentDiv.classList.add('d-none');
+                
+                if (selectVal === 'Directorate') {
+                    populateParentOptions(parentSelectId, ['SHQ']);
+                    parentDiv.classList.remove('d-none');
+                } else if (selectVal === 'State Command') {
+                    populateParentOptions(parentSelectId, ['Zonal Command']);
+                    parentDiv.classList.remove('d-none');
+                } else if (selectVal === 'Zonal Command') {
+                    // Do not ask further
+                } else if (selectVal === 'Airport') {
+                    populateParentOptions(parentSelectId, ['Zonal Command']);
+                    parentDiv.classList.remove('d-none');
+                } else if (['FTZ', 'Special Command', 'Other', 'Border Command'].includes(selectVal) || selectVal) {
+                    // Default for others including FTZ, Special Command
+                    populateParentOptions(parentSelectId, ['Zonal Command', 'SHQ']);
+                    parentDiv.classList.remove('d-none');
+                }
+            }
+        }
+
+        function populateParentOptions(selectId, allowedTypes) {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+            select.innerHTML = '<option value="">Select Parent...</option>';
+            
+            if (!window.currentFormations) return;
+            
+            window.currentFormations.forEach(f => {
+                let isMatch = false;
+                if (allowedTypes.includes('SHQ')) {
+                    if (f.code === 'SHQ' || (f.name && f.name.toLowerCase().includes('service headquarters'))) isMatch = true;
+                }
+                
+                if (!isMatch) {
+                    const type = f.formation_type || f.description;
+                    if (allowedTypes.includes(type)) isMatch = true;
+                }
+                
+                if (isMatch) {
+                    const opt = document.createElement('option');
+                    opt.value = f.id;
+                    opt.textContent = `${f.name} (${f.code})`;
+                    select.appendChild(opt);
+                }
+            });
+            
+            // Auto-select if only 1 option (index 1)
+            if (select.options.length === 2) {
+                select.selectedIndex = 1;
             }
         }
 
@@ -2407,11 +2478,24 @@
                         const safeParentId = off.parent_id || '';
                         
                         const urlName = encodeURIComponent(off.name || '');
+                        
+                        let hierarchyHtml = '';
+                        if (off.parent_name) {
+                            let hText = `(parent: ${off.parent_name}`;
+                            if (off.grandparent_name) {
+                                hText += ` &rarr; ${off.grandparent_name}`;
+                            }
+                            hText += ')';
+                            hierarchyHtml = `<span class="text-muted fst-italic ms-5">${hText}</span>`;
+                        }
+                        
                         tr.innerHTML = `
                             <td class="text-primary" style="cursor:pointer;" onclick="openOfficeChartPage('${urlName}')">
-                                ${off.name}
-                                ${off.office_type ? `<br><small class="text-muted">${off.office_type}</small>` : ''}
-                                ${off.parent_name ? `<br><small class="text-muted">Under: ${off.parent_name}</small>` : ''}
+                                <div class="fw-bold text-dark">${off.name}</div>
+                                <div>
+                                    ${off.office_type || ''}
+                                    ${hierarchyHtml}
+                                </div>
                             </td>
                             <td>
                                 <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, '${safeName}', '${safeType}', '${safeParentId}')">Edit</button>
@@ -4454,6 +4538,7 @@
                 });
                 if (res.ok) {
                     const formations = await res.json();
+                    window.currentFormations = formations;
                     tbody.innerHTML = '';
                     if (formations.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="4" class="text-center">No formations found</td></tr>';
@@ -4467,7 +4552,7 @@
                             <td>${o.code}</td>
                             <td>${o.description || ''}</td>
                             <td>
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateFormationModal(${o.id}, '${o.name.replace(/'/g, "\\'")}', '${o.code}', '${(o.description || '').replace(/'/g, "\\'")}')">Edit</button>
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateFormationModal(${o.id})">Edit</button>
                                 <button class="btn btn-sm btn-outline-success me-1" onclick="openCreateFormationAdminModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">Add Admin</button>
                                 <button class="btn btn-sm btn-outline-info" onclick="openViewFormationAdminsModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">View Admins</button>
                             </td>
@@ -4494,9 +4579,14 @@
             
             const descSelect = document.getElementById('formationDescriptionSelect').value;
             let description = descSelect;
+            let formation_type = descSelect;
+            
             if (descSelect === 'Other') {
                 description = document.getElementById('formationDescriptionOther').value;
+                formation_type = 'Other';
             }
+            
+            const parentId = document.getElementById('createParentFormationSelect').value || null;
 
             if (!name || !code) {
                 alert("Name and Code are required");
@@ -4510,14 +4600,14 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}` 
                     },
-                    body: JSON.stringify({ name, code, description })
+                    body: JSON.stringify({ name, code, description, formation_type, parent_id: parentId })
                 });
                 
                 if (res.ok) {
                     alert("Formation created successfully");
                     bootstrap.Modal.getInstance(document.getElementById('createFormationModal')).hide();
                     loadFormations();
-                    populateFormationFilter(); // Refresh filter too
+                    if (typeof populateFormationFilter === 'function') populateFormationFilter();
                 } else {
                     const err = await res.json();
                     alert("Error: " + (err.detail || "Failed to create formation"));
@@ -4569,36 +4659,51 @@
             }
         }
         
-        function openUpdateFormationModal(id, name, code, description) {
-            document.getElementById('updateFormationId').value = id;
-            document.getElementById('updateFormationName').value = name;
-            document.getElementById('updateFormationCode').value = code;
+        function openUpdateFormationModal(id) {
+            const formation = window.currentFormations.find(f => f.id === id);
+            if (!formation) return;
+
+            document.getElementById('updateFormationId').value = formation.id;
+            document.getElementById('updateFormationName').value = formation.name;
+            document.getElementById('updateFormationCode').value = formation.code;
             
             const select = document.getElementById('updateFormationDescriptionSelect');
             const otherInput = document.getElementById('updateFormationDescriptionOther');
+            const parentSelect = document.getElementById('updateParentFormationSelect');
             
-            // Reset state
+            // Determine type
+            const type = formation.formation_type || formation.description;
+            
+            // Reset
             select.value = "";
             otherInput.value = "";
             otherInput.classList.add('d-none');
             otherInput.required = false;
-
-            if (description) {
-                let found = false;
+            
+            let found = false;
+            if (type) {
                 for(let i=0; i<select.options.length; i++) {
-                    if(select.options[i].value === description) {
-                        select.value = description;
+                    if(select.options[i].value === type) {
+                        select.value = type;
                         found = true;
                         break;
                     }
                 }
-                
-                if (!found) {
-                    select.value = 'Other';
-                    otherInput.value = description;
-                    otherInput.classList.remove('d-none');
-                    otherInput.required = true;
-                }
+            }
+            
+            if (!found && type) {
+                select.value = 'Other';
+                otherInput.value = type;
+                otherInput.classList.remove('d-none');
+                otherInput.required = true;
+            }
+            
+            // Trigger hierarchy logic
+            handleFormationTypeChange('update');
+            
+            // Set Parent
+            if (formation.parent_id) {
+                parentSelect.value = formation.parent_id;
             }
             
             new bootstrap.Modal(document.getElementById('updateFormationModal')).show();
@@ -4610,9 +4715,14 @@
             
             const descSelect = document.getElementById('updateFormationDescriptionSelect').value;
             let description = descSelect;
+            let formation_type = descSelect;
+            
             if (descSelect === 'Other') {
                 description = document.getElementById('updateFormationDescriptionOther').value;
+                formation_type = 'Other';
             }
+            
+            const parentId = document.getElementById('updateParentFormationSelect').value || null;
             
             if (!name) {
                 alert("Name is required");
@@ -4626,14 +4736,14 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}` 
                     },
-                    body: JSON.stringify({ name, description })
+                    body: JSON.stringify({ name, description, formation_type, parent_id: parentId })
                 });
                 
                 if (res.ok) {
                     alert("Formation updated successfully");
                     bootstrap.Modal.getInstance(document.getElementById('updateFormationModal')).hide();
                     loadFormations();
-                    populateFormationFilter(); // Refresh filter too
+                    if (typeof populateFormationFilter === 'function') populateFormationFilter();
                 } else {
                     const err = await res.json();
                     alert("Error: " + (err.detail || "Failed to update formation"));
