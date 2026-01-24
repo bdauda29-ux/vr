@@ -33,7 +33,10 @@ def to_dict_office(obj) -> Dict[str, Any]:
 
 def to_dict_formation_simple(obj) -> Dict[str, Any]:
     if not obj: return None
-    return {"id": obj.id, "name": obj.name, "code": obj.code}
+    name = obj.name
+    if getattr(obj, "formation_type", None) == "Directorate":
+        name = f"SHQ ({obj.code})"
+    return {"id": obj.id, "name": name, "code": obj.code}
 
 def to_dict_staff(obj) -> Dict[str, Any]:
     return {

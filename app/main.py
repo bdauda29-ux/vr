@@ -1301,15 +1301,16 @@ def move_staff(staff_id: int):
 @app.get("/staff/<int:staff_id>/history")
 def get_staff_history(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "special_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "staff", "office_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
+        # Check permission for staff role
+        if user["role"] == "staff" and user["id"] != staff_id:
+             return jsonify({"detail": "Permission denied"}), 403
+
         stmt = select(models.PostingHistory).where(models.PostingHistory.staff_id == staff_id)
         
-        # If special_admin, maybe filter? For now, showing all history is safer unless requested otherwise.
-        # But user said "posting history". 
-        # I'll add support for filtering by action_type if provided in query
         action_type = request.args.get("action_type")
         if action_type:
              stmt = stmt.where(models.PostingHistory.action_type == action_type)
@@ -1318,6 +1319,25 @@ def get_staff_history(staff_id: int):
         history = db.scalars(stmt).all()
         
         res = []
+        
+        # Add current posting as the first item if not filtered or if looking for POSTING/MOVE
+        if not action_type or action_type in ["POSTING", "MOVE"]:
+            staff = crud.get_staff(db, staff_id)
+            if staff and staff.formation:
+                fmt_name = staff.formation.name
+                if staff.formation.formation_type == "Directorate":
+                    fmt_name = f"SHQ ({staff.formation.code})"
+                
+                res.append({
+                    "id": "current",
+                    "action_type": "CURRENT",
+                    "from_office": "-",
+                    "to_office": f"{fmt_name} - {staff.office}",
+                    "action_date": staff.dopp.isoformat() if staff.dopp else None,
+                    "remarks": "Current Posting",
+                    "created_at": None
+                })
+
         for h in history:
             res.append({
                 "id": h.id,
@@ -1328,6 +1348,43 @@ def get_staff_history(staff_id: int):
                 "remarks": h.remarks,
                 "created_at": h.created_at.isoformat() if h.created_at else None
             })
+        return jsonify(res)
+
+@app.get("/staff/<int:staff_id>/promotions")
+def get_staff_promotions(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "staff", "office_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        if user["role"] == "staff" and user["id"] != staff_id:
+             return jsonify({"detail": "Permission denied"}), 403
+             
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        # Query Audit Logs for updates to this staff that involve rank
+        # We look for action="UPDATE" and target=f"Staff: {staff.nis_no}" (or similar)
+        # And details containing "rank"
+        
+        # Note: target format in update_staff is f"Staff: {staff.nis_no}"
+        target_str = f"Staff: {staff.nis_no}"
+        
+        stmt = select(models.AuditLog).where(
+            models.AuditLog.target == target_str,
+            models.AuditLog.details.ilike("%rank%")
+        ).order_by(models.AuditLog.timestamp.desc())
+        
+        logs = db.scalars(stmt).all()
+        
+        res = []
+        for log in logs:
+            res.append({
+                "id": log.id,
+                "date": log.timestamp.isoformat() if log.timestamp else None,
+                "details": log.details
+            })
+            
         return jsonify(res)
 
 @app.post("/staff/<int:staff_id>/posting")
@@ -1353,6 +1410,20 @@ def posting_staff(staff_id: int):
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
         
+        # Permission Check for Special Admin (Zonal/Formation Admin)
+        user_fmt_id = user.get("formation_id")
+        if user_fmt_id:
+            # Check if staff belongs to user's formation or a child formation (e.g. State under Zonal)
+            staff_fmt = staff.formation
+            allowed = False
+            if staff.formation_id == user_fmt_id:
+                allowed = True
+            elif staff_fmt and staff_fmt.parent_id == user_fmt_id:
+                allowed = True
+            
+            if not allowed:
+                return jsonify({"detail": "Permission denied: You can only post staff from your formation or sub-formations."}), 403
+
         old_formation_id = staff.formation_id
         old_office = staff.office
         
@@ -1364,7 +1435,12 @@ def posting_staff(staff_id: int):
         if not new_fmt: return jsonify({"detail": "Target formation not found"}), 404
         
         old_fmt_name = old_fmt.name if old_fmt else "None"
+        if old_fmt and old_fmt.formation_type == "Directorate":
+            old_fmt_name = f"SHQ ({old_fmt.code})"
+            
         new_fmt_name = new_fmt.name
+        if new_fmt.formation_type == "Directorate":
+            new_fmt_name = f"SHQ ({new_fmt.code})"
         
         full_remarks = f"Posted from {old_fmt_name} to {new_fmt_name}. {remarks}"
         

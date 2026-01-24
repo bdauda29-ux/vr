@@ -348,6 +348,46 @@
         </div>
     </div>
 
+    <!-- Staff Edit Information Modal -->
+    <div class="modal fade" id="staffEditModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Personal Information</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="staffEditForm" onsubmit="event.preventDefault(); submitStaffEdit();">
+                        <div class="mb-3">
+                            <label class="form-label">Phone Number</label>
+                            <input type="text" class="form-control" id="staffEditPhone">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" id="staffEditEmail">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Next of Kin</label>
+                            <input type="text" class="form-control" id="staffEditNok">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Next of Kin Phone</label>
+                            <input type="text" class="form-control" id="staffEditNokPhone">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Home Town</label>
+                            <input type="text" class="form-control" id="staffEditHomeTown">
+                        </div>
+                        <div class="d-flex justify-content-end">
+                            <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global Error Handler
         window.onerror = function(msg, url, line, col, error) {
@@ -1822,6 +1862,7 @@
         let leaveModal;
         let exportModal;
         let changePasswordModal;
+        let staffEditModal;
         let currentStatusFilter = 'completed'; // Default to completed
         let currentStatus = 'active'; // 'active' or 'exited'
         let userId = localStorage.getItem('userId');
@@ -2171,32 +2212,103 @@
                         const dashView = document.getElementById('view-dashboard');
                         if (dashView) {
                             dashView.innerHTML = `
-                                <div class="row justify-content-center mt-5">
-                                    <div class="col-md-6 text-center">
-                                        <div class="card shadow">
-                                            <div class="card-body p-5">
-                                                <h3 class="card-title mb-4">Welcome, ${localStorage.getItem('username') || 'Staff'}</h3>
-                                                <p class="mb-1"><strong>Current Office:</strong> <span id="staffDashboardOffice">Loading...</span></p>
-                                                <p class="mb-3"><strong>DOPP:</strong> <span id="staffDashboardDopp">Loading...</span></p>
-                                                <div id="staffMoveNotification" class="alert alert-info d-none mb-4"></div>
-                                                <div class="d-grid gap-3">
-                                                    <button class="btn btn-primary btn-lg" onclick="openChangePasswordModal()">
-                                                        <i class="bi bi-key me-2"></i>Change Password
-                                                    </button>
-                                                    <button class="btn btn-danger btn-lg" onclick="logout()">
-                                                        <i class="bi bi-box-arrow-right me-2"></i>Logout
-                                                    </button>
+                                <div class="container mt-4">
+                                    <div class="row">
+                                        <div class="col-md-12 mb-4">
+                                            <div class="card shadow-sm">
+                                                <div class="card-body">
+                                                    <h2 class="card-title">Welcome, <span id="staffDashboardName">Loading...</span></h2>
+                                                    <div class="row mt-3">
+                                                        <div class="col-md-6">
+                                                            <p><strong>Current Office:</strong> <span id="staffDashboardOffice">Loading...</span></p>
+                                                            <p><strong>Date of Present Posting (DOPP):</strong> <span id="staffDashboardDopp">Loading...</span></p>
+                                                        </div>
+                                                        <div class="col-md-6 text-md-end">
+                                                            <button class="btn btn-primary" onclick="openStaffEditModal()">
+                                                                <i class="bi bi-pencil me-2"></i>Edit Information
+                                                            </button>
+                                                            <button class="btn btn-outline-secondary ms-2" onclick="openChangePasswordModal()">
+                                                                <i class="bi bi-key me-2"></i>Change Password
+                                                            </button>
+                                                            <button class="btn btn-outline-danger ms-2" onclick="logout()">
+                                                                <i class="bi bi-box-arrow-right me-2"></i>Logout
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <!-- Posting History -->
+                                        <div class="col-md-6 mb-4">
+                                            <div class="card shadow-sm h-100">
+                                                <div class="card-header bg-light">
+                                                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Posting History</h5>
+                                                </div>
+                                                <div class="card-body p-0">
+                                                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                                        <table class="table table-hover table-striped mb-0">
+                                                            <thead class="table-light sticky-top">
+                                                                <tr>
+                                                                    <th>Date</th>
+                                                                    <th>From</th>
+                                                                    <th>To</th>
+                                                                    <th>Remark</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody id="staffPostingHistoryBody">
+                                                                <tr><td colspan="4" class="text-center p-3">Loading...</td></tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Promotion History -->
+                                        <div class="col-md-6 mb-4">
+                                            <div class="card shadow-sm h-100">
+                                                <div class="card-header bg-light">
+                                                    <h5 class="mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Promotion History</h5>
+                                                </div>
+                                                <div class="card-body p-0">
+                                                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                                        <table class="table table-hover table-striped mb-0">
+                                                            <thead class="table-light sticky-top">
+                                                                <tr>
+                                                                    <th>Date</th>
+                                                                    <th>Details</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody id="staffPromotionHistoryBody">
+                                                                <tr><td colspan="2" class="text-center p-3">Loading...</td></tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             `;
+                            
+                            // We need the staff ID. It should be stored in localStorage or decoded from token.
+                            // Assuming we can get it or the backend /me endpoint helps. 
+                            // Actually loadStaffDashboardInfo uses /auth/me or similar? 
+                            // We'll use the ID stored in localStorage if available, or fetch user profile first.
                             await loadStaffDashboardInfo();
                         }
 
-                    // Show form view directly
-                    showView('personnel');
+                        // Show dashboard view directly
+                        showView('dashboard');
+                        
+                        // Hide loader
+                        const loader = document.getElementById('global-loader');
+                        if (loader) loader.style.display = 'none';
+                        return;
+                    }
                     
                     // Show form tab
                     const formTabBtn = document.getElementById('form-tab');
@@ -2275,17 +2387,68 @@
         async function loadStaffDashboardInfo() {
             if (!userId) return;
             try {
+                // 1. Fetch Basic Info
                 const res = await fetch(`${API_URL}/staff/${userId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) return;
                 const s = await res.json();
+                
+                // Update Name
+                const nameEl = document.getElementById('staffDashboardName');
+                if (nameEl) nameEl.textContent = `${s.rank ? s.rank + ' ' : ''}${s.surname} ${s.other_names}`;
+                
+                // Update Office
                 const office = s.office || 'Not assigned';
                 const doppStr = isoToDmy(s.dopp);
                 const officeEl = document.getElementById('staffDashboardOffice');
                 const doppEl = document.getElementById('staffDashboardDopp');
                 if (officeEl) officeEl.textContent = office;
                 if (doppEl) doppEl.textContent = doppStr || '-';
+
+                // 2. Fetch Posting History
+                const resHist = await fetch(`${API_URL}/staff/${userId}/history`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (resHist.ok) {
+                    const histData = await resHist.json();
+                    const tbody = document.getElementById('staffPostingHistoryBody');
+                    if (tbody) {
+                        if (histData.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="4" class="text-center p-3">No posting history found.</td></tr>';
+                        } else {
+                            tbody.innerHTML = histData.map(h => `
+                                <tr>
+                                    <td>${isoToDmy(h.action_date)}</td>
+                                    <td>${h.from_office || '-'}</td>
+                                    <td>${h.to_office || '-'}</td>
+                                    <td>${h.remarks || h.action_type}</td>
+                                </tr>
+                            `).join('');
+                        }
+                    }
+                }
+
+                // 3. Fetch Promotion History
+                const resPromo = await fetch(`${API_URL}/staff/${userId}/promotions`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (resPromo.ok) {
+                    const promoData = await resPromo.json();
+                    const tbody = document.getElementById('staffPromotionHistoryBody');
+                    if (tbody) {
+                        if (promoData.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="2" class="text-center p-3">No promotion history found.</td></tr>';
+                        } else {
+                            tbody.innerHTML = promoData.map(p => `
+                                <tr>
+                                    <td>${isoToDmy(p.date)}</td>
+                                    <td>${p.details}</td>
+                                </tr>
+                            `).join('');
+                        }
+                    }
+                }
 
                 const lastOfficeKey = `staff_${userId}_last_office`;
                 const lastDoppKey = `staff_${userId}_last_dopp`;
@@ -2304,6 +2467,58 @@
                 localStorage.setItem(lastDoppKey, s.dopp || '');
             } catch (e) {
                 console.error('Failed to load staff dashboard info', e);
+            }
+        }
+
+        async function openStaffEditModal() {
+            if (!userId) return;
+            try {
+                const res = await fetch(`${API_URL}/staff/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) { alert('Failed to fetch info'); return; }
+                const s = await res.json();
+                
+                document.getElementById('staffEditPhone').value = s.phone_no || '';
+                document.getElementById('staffEditEmail').value = s.email || '';
+                document.getElementById('staffEditNok').value = s.next_of_kin || '';
+                document.getElementById('staffEditNokPhone').value = s.nok_phone || '';
+                document.getElementById('staffEditHomeTown').value = s.home_town || '';
+                
+                staffEditModal.show();
+            } catch(e) { console.error(e); alert('Error opening edit modal'); }
+        }
+
+        async function submitStaffEdit() {
+            const data = {
+                phone_no: document.getElementById('staffEditPhone').value,
+                email: document.getElementById('staffEditEmail').value,
+                next_of_kin: document.getElementById('staffEditNok').value,
+                nok_phone: document.getElementById('staffEditNokPhone').value,
+                home_town: document.getElementById('staffEditHomeTown').value
+            };
+            
+            try {
+                const res = await fetch(`${API_URL}/staff/${userId}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (res.ok) {
+                    alert('Information updated successfully');
+                    staffEditModal.hide();
+                    loadStaffDashboardInfo(); // Refresh info if needed
+                } else {
+                    const err = await res.json();
+                    alert('Update failed: ' + (err.detail || res.status));
+                }
+            } catch(e) {
+                console.error(e);
+                alert('Update failed');
             }
         }
 
@@ -3294,6 +3509,10 @@
         function renderTableSuperAdmin(data) {
             const tbody = document.getElementById('staffTableBody');
             tbody.innerHTML = '';
+            
+            // Disable inline edit for special_admin
+            const contentEditableAttr = role === 'special_admin' ? '' : 'contenteditable="true"';
+            
             data.forEach((s, index) => {
                 const tr = document.createElement('tr');
                 tr.dataset.staffId = s.id;
@@ -3367,9 +3586,9 @@
                     tr.innerHTML = `
                         <td>${index + 1}</td>
                         ${formationCell}
-                        <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
-                        <td contenteditable="true" data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
-                        <td contenteditable="true" data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
+                        <td ${contentEditableAttr} data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
+                        <td ${contentEditableAttr} data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
+                        <td ${contentEditableAttr} data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
                         <td data-rank-cell>
                             <span class="rank-badge">${rankBadge(s.rank)}</span>
                             <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
@@ -3377,7 +3596,7 @@
                                 <i class="bi bi-pencil"></i>
                             </button>
                         </td>
-                        <td contenteditable="true" data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
+                        <td ${contentEditableAttr} data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
                         <td>${s.exit_mode || ''}</td>
                         <td>${isoToDmy(s.exit_date) || ''}</td>
                         <td>${actionBtns}</td>
@@ -3386,9 +3605,9 @@
                     tr.innerHTML = `
                         <td>${index + 1}</td>
                         ${formationCell}
-                        <td contenteditable="true" data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
-                        <td contenteditable="true" data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
-                        <td contenteditable="true" data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
+                        <td ${contentEditableAttr} data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
+                        <td ${contentEditableAttr} data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
+                        <td ${contentEditableAttr} data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
                         <td data-rank-cell>
                             <span class="rank-badge">${rankBadge(s.rank)}</span>
                             <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
@@ -3397,10 +3616,10 @@
                             </button>
                         </td>
                         <td><select class="form-select form-select-sm" data-select-field="gender" data-original="${s.gender || ''}">${genderOpts}</select></td>
-                        <td contenteditable="true" data-field="dob" data-original="${dob || ''}">${dob || ''}</td>
-                        <td contenteditable="true" data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
-                        <td contenteditable="true" data-field="email" data-original="${s.email || ''}">${s.email || ''}</td>
-                        <td contenteditable="true" data-field="qualification" data-original="${s.qualification || ''}">${s.qualification || ''}</td>
+                        <td ${contentEditableAttr} data-field="dob" data-original="${dob || ''}">${dob || ''}</td>
+                        <td ${contentEditableAttr} data-field="phone_no" data-original="${s.phone_no || ''}">${s.phone_no || ''}</td>
+                        <td ${contentEditableAttr} data-field="email" data-original="${s.email || ''}">${s.email || ''}</td>
+                        <td ${contentEditableAttr} data-field="qualification" data-original="${s.qualification || ''}">${s.qualification || ''}</td>
                         <td><select class="form-select form-select-sm" data-select-field="office" data-original="${s.office || ''}">${officeOpts}</select></td>
                         <td>
                             <select class="form-select form-select-sm" data-select-field="state_id" data-original="${s.state ? s.state.id : ''}">
@@ -3413,13 +3632,13 @@
                                 <option value="">${s.state ? 'Select LGA...' : 'Select State First'}</option>
                             </select>
                         </td>
-                        <td contenteditable="true" data-field="dofa" data-original="${dofa || ''}">${dofa || ''}</td>
-                        <td contenteditable="true" data-field="dopa" data-original="${dopa || ''}">${dopa || ''}</td>
-                        <td contenteditable="true" data-field="dopp" data-original="${dopp || ''}">${dopp || ''}</td>
-                        <td contenteditable="true" data-field="home_town" data-original="${s.home_town || ''}">${s.home_town || ''}</td>
-                        <td contenteditable="true" data-field="next_of_kin" data-original="${s.next_of_kin || ''}">${s.next_of_kin || ''}</td>
-                        <td contenteditable="true" data-field="nok_phone" data-original="${s.nok_phone || ''}">${s.nok_phone || ''}</td>
-                        <td contenteditable="true" data-field="remark" data-original="${s.remark || ''}">${s.remark || ''}</td>
+                        <td ${contentEditableAttr} data-field="dofa" data-original="${dofa || ''}">${dofa || ''}</td>
+                        <td ${contentEditableAttr} data-field="dopa" data-original="${dopa || ''}">${dopa || ''}</td>
+                        <td ${contentEditableAttr} data-field="dopp" data-original="${dopp || ''}">${dopp || ''}</td>
+                        <td ${contentEditableAttr} data-field="home_town" data-original="${s.home_town || ''}">${s.home_town || ''}</td>
+                        <td ${contentEditableAttr} data-field="next_of_kin" data-original="${s.next_of_kin || ''}">${s.next_of_kin || ''}</td>
+                        <td ${contentEditableAttr} data-field="nok_phone" data-original="${s.nok_phone || ''}">${s.nok_phone || ''}</td>
+                        <td ${contentEditableAttr} data-field="remark" data-original="${s.remark || ''}">${s.remark || ''}</td>
                         <td>${actionBtns}</td>
                     `;
                 }
@@ -5914,6 +6133,9 @@
             
             const adminModalEl = document.getElementById('createFormationAdminModal');
             if (adminModalEl) createFormationAdminModalInstance = new bootstrap.Modal(adminModalEl);
+
+            const staffEditModalEl = document.getElementById('staffEditModal');
+            if (staffEditModalEl) staffEditModal = new bootstrap.Modal(staffEditModalEl);
         });
 
 
