@@ -431,11 +431,11 @@
                                 <input type="text" class="form-control date-picker" id="staffEditDopa" placeholder="yyyy-mm-dd">
                             </div>
                             <div class="col-md-3 mb-3">
-                                <label class="form-label">DOPP</label>
+                                <label class="form-label">Office DOPP</label>
                                 <input type="text" class="form-control date-picker" id="staffEditDopp" placeholder="yyyy-mm-dd">
                             </div>
                             <div class="col-md-3 mb-3">
-                                <label class="form-label">Formation DOPP</label>
+                                <label class="form-label">DOPP to Formation</label>
                                 <input type="text" class="form-control date-picker" id="staffEditFormationDopp" placeholder="yyyy-mm-dd">
                             </div>
                         </div>
@@ -2306,7 +2306,7 @@
                                                     <div class="row mt-3">
                                                         <div class="col-md-6">
                                                             <p><strong>Current Office:</strong> <span id="staffDashboardOffice">Loading...</span></p>
-                                                            <p><strong>Date of Present Posting (DOPP):</strong> <span id="staffDashboardDopp">Loading...</span></p>
+                                                            <p><strong>Office DOPP:</strong> <span id="staffDashboardDopp">Loading...</span></p>
                                                         </div>
                                                         <div class="col-md-6 text-md-end">
                                                             <button class="btn btn-primary" onclick="openStaffEditModal()">
@@ -2438,6 +2438,18 @@
             return r || '';
         }
 
+        function getOfficeHierarchy(officeName) {
+            if (!officeName || !window.allOffices) return officeName;
+            const office = window.allOffices.find(o => o.name === officeName);
+            if (!office) return officeName;
+            
+            let parts = [office.name];
+            if (office.parent_name) parts.push(office.parent_name);
+            if (office.grandparent_name) parts.push(office.grandparent_name);
+            
+            return parts.join(' - ');
+        }
+
         async function loadStaffDashboardInfo() {
             if (!userId) return;
             try {
@@ -2450,14 +2462,15 @@
                 
                 // Update Name
                 const nameEl = document.getElementById('staffDashboardName');
-                if (nameEl) nameEl.textContent = `${s.rank ? s.rank + ' ' : ''}${s.surname} ${s.other_names}`;
+                if (nameEl) nameEl.innerHTML = `${s.rank ? '<b>' + s.rank + '</b> ' : ''}${s.surname} ${s.other_names}`;
                 
                 // Update Office
                 const office = s.office || 'Not assigned';
+                const officeHierarchy = getOfficeHierarchy(office);
                 const doppStr = isoToDmy(s.dopp);
                 const officeEl = document.getElementById('staffDashboardOffice');
                 const doppEl = document.getElementById('staffDashboardDopp');
-                if (officeEl) officeEl.textContent = office;
+                if (officeEl) officeEl.textContent = officeHierarchy;
                 if (doppEl) doppEl.textContent = doppStr || '-';
 
                 // 2. Fetch Posting History
@@ -3161,6 +3174,7 @@
                     if(filterContainer) filterContainer.innerHTML = '';
                     
                     officesList = offices.map(o => o.name);
+                    window.allOffices = offices;
                     officesList.forEach((name, idx) => {
                          if(formSel) formSel.add(new Option(name, name));
                          
@@ -4812,12 +4826,12 @@
                             ${renderField('Phone Number', s.phone_no)}
                             ${renderField('Email', s.email)}
                             ${renderField('Qualification', s.qualification)}
-                            ${renderField('Current Office', s.office)}
+                            ${renderField('Current Office', getOfficeHierarchy(s.office))}
                             <div class="col-12"><hr></div>
                             ${renderField('Date of First Appt', isoToDmy(s.dofa))}
                             ${renderField('Date of Present Appt', isoToDmy(s.dopa))}
-                            ${renderField('Date of Present Posting', isoToDmy(s.dopp))}
-                            ${renderField('Formation Date of Present Posting', isoToDmy(s.formation_dopp))}
+                            ${renderField('Office DOPP', isoToDmy(s.dopp))}
+                            ${renderField('DOPP to Formation', isoToDmy(s.formation_dopp))}
                             <div class="col-12"><hr></div>
                             ${renderField('State of Origin', s.state ? s.state.name : '')}
                             ${renderField('LGA', s.lga ? s.lga.name : '')}
@@ -5717,7 +5731,8 @@
                     remark: "Remarks",
                     dofa: "Date of First Appt",
                     dopa: "Date of Present Appt",
-                    dopp: "Date of Present Posting",
+                    dopp: "Office DOPP",
+                    formation_dopp: "DOPP to Formation",
                     exit_date: "Exit Date",
                     out_request_date: "Exit Request Date",
                     exit_mode: "Exit Mode",
