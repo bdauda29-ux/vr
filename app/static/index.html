@@ -3013,6 +3013,7 @@
             
             const labels = data.map(d => d.rank);
             const counts = data.map(d => d.count);
+            const colors = data.map(d => d.color);
             
             officeRankChartInstance = new Chart(ctx, {
                 type: 'bar',
@@ -3021,8 +3022,8 @@
                     datasets: [{
                         label: 'Staff Count',
                         data: counts,
-                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: colors,
+                        borderColor: colors,
                         borderWidth: 1
                     }]
                 },

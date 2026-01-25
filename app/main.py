@@ -889,6 +889,52 @@ def get_office_rank_stats():
     
     formation_id = user.get("formation_id")
     
+    # Define Rank Metadata (Priority and Colors)
+    # Priority 0 is highest
+    # Colors updated based on Cadre:
+    # Comptroller Cadre (CGI-ACI): Red
+    # Superintendent Cadre (CSI-ASI 2): Blue
+    # Inspectorate Cadre (II-AII): Yellow
+    # Assistant Cadre (IA 1-IA 3): Grey
+    
+    COLOR_COMPTROLLER = "#d32f2f" # Red
+    COLOR_SUPERINTENDENT = "#1976d2" # Blue
+    COLOR_INSPECTORATE = "#fbc02d" # Yellow
+    COLOR_ASSISTANT = "#757575" # Grey
+
+    RANK_META = {
+        # Comptroller Cadre
+        "CGI":   {"p": 0, "c": COLOR_COMPTROLLER},
+        "DCG":   {"p": 1, "c": COLOR_COMPTROLLER},
+        "ACG":   {"p": 2, "c": COLOR_COMPTROLLER},
+        "CIS":   {"p": 3, "c": COLOR_COMPTROLLER},
+        "DCI":   {"p": 4, "c": COLOR_COMPTROLLER},
+        "ACI":   {"p": 5, "c": COLOR_COMPTROLLER},
+        
+        # Superintendent Cadre
+        "CSI":   {"p": 6, "c": COLOR_SUPERINTENDENT},
+        "SI":    {"p": 7, "c": COLOR_SUPERINTENDENT},
+        "DSI":   {"p": 8, "c": COLOR_SUPERINTENDENT},
+        "ASI 1": {"p": 9, "c": COLOR_SUPERINTENDENT},
+        "ASI1":  {"p": 9, "c": COLOR_SUPERINTENDENT},
+        "ASI 2": {"p": 10, "c": COLOR_SUPERINTENDENT},
+        "ASI2":  {"p": 10, "c": COLOR_SUPERINTENDENT},
+        
+        # Inspectorate Cadre
+        "II":    {"p": 11, "c": COLOR_INSPECTORATE},
+        "AII":   {"p": 12, "c": COLOR_INSPECTORATE},
+        
+        # Assistant Cadre
+        "IA 1":  {"p": 13, "c": COLOR_ASSISTANT},
+        "IA1":   {"p": 13, "c": COLOR_ASSISTANT},
+        "IA 2":  {"p": 14, "c": COLOR_ASSISTANT},
+        "IA2":   {"p": 14, "c": COLOR_ASSISTANT},
+        "IA 3":  {"p": 15, "c": COLOR_ASSISTANT},
+        "IA3":   {"p": 15, "c": COLOR_ASSISTANT},
+    }
+    DEFAULT_COLOR = "#95a5a6" # Concrete Grey
+    DEFAULT_PRIORITY = 999
+
     with next(get_db()) as db:
         stmt = (
             select(models.Staff.rank, func.count(models.Staff.id))
@@ -900,11 +946,35 @@ def get_office_rank_stats():
         stmt = stmt.group_by(models.Staff.rank)
         results = db.execute(stmt).all()
         
-        # results is list of (rank, count)
-        data = [{"rank": r[0], "count": r[1]} for r in results if r[0]]
+        # Process results
+        data = []
+        for r in results:
+            rank_name = r[0]
+            if not rank_name: continue
+            
+            count = r[1]
+            meta = RANK_META.get(rank_name.upper(), {})
+            # Try normalizing if not found (e.g. adding/removing spaces)
+            if not meta:
+                 # Minimal normalization attempt
+                 norm = rank_name.upper().replace(" ", "")
+                 if "ASI" in norm: norm = norm.replace("ASI", "ASI ")
+                 elif "IA" in norm and not "I" in norm[2:]: norm = norm.replace("IA", "IA ") # IA1 -> IA 1
+                 meta = RANK_META.get(norm, {})
+            
+            priority = meta.get("p", DEFAULT_PRIORITY)
+            color = meta.get("c", DEFAULT_COLOR)
+            
+            data.append({
+                "rank": rank_name,
+                "count": count,
+                "color": color,
+                "priority": priority
+            })
         
-        # Sort by count desc
-        data.sort(key=lambda x: x["count"], reverse=True)
+        # Sort by priority (asc), then by count (desc) as tiebreaker? 
+        # Usually purely by seniority is best.
+        data.sort(key=lambda x: x["priority"])
         
         return jsonify(data)
 
