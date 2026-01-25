@@ -565,7 +565,7 @@ def dashboard_stats():
 @app.get("/admin/exit-requests")
 def list_exit_requests():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -1299,7 +1299,7 @@ def delete_staff(staff_id: int):
 @app.post("/staff/<int:staff_id>/reset-login")
 def reset_login_count(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -1320,7 +1320,7 @@ def reset_login_count(staff_id: int):
 @app.post("/staff/<int:staff_id>/reset-password")
 def reset_staff_password(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -2442,12 +2442,18 @@ def request_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/exit-approve")
 def approve_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
     if err: return err, code
+    
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        # Formation Admin Check
+        if formation_id and staff.formation_id != formation_id:
+             return jsonify({"detail": "Permission denied"}), 403
         
         if not staff.out_request_status:
             return jsonify({"detail": "No pending request"}), 400
@@ -2477,12 +2483,18 @@ def approve_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/exit-reject")
 def reject_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
     if err: return err, code
+    
+    formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        # Formation Admin Check
+        if formation_id and staff.formation_id != formation_id:
+             return jsonify({"detail": "Permission denied"}), 403
         
         staff.out_request_status = None
         staff.out_request_date = None
@@ -2530,7 +2542,7 @@ def undo_exit(staff_id: int):
 @app.get("/admin/edit-requests")
 def list_edit_requests():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -2558,7 +2570,7 @@ def list_edit_requests():
 @app.post("/admin/edit-requests/<int:req_id>/approve")
 def approve_edit_request(req_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -2605,7 +2617,7 @@ def approve_edit_request(req_id):
 @app.post("/admin/edit-requests/<int:req_id>/reject")
 def reject_edit_request(req_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")

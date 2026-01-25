@@ -52,11 +52,7 @@
 
         /* Custom Width for Personnel View on Large Screens */
         @media (min-width: 992px) {
-            .view-narrow {
-                max-width: 66% !important;
-                margin-left: auto !important;
-                margin-right: auto !important;
-            }
+            /* Full width allowed */
         }
 
         /* Main Content */
@@ -750,14 +746,10 @@
                                         </div>
                                     </div>
 
-                                    <ul class="nav nav-tabs mb-3" id="statusTabs">
-                                        <li class="nav-item">
-                                            <a class="nav-link active" href="#" onclick="setStatusFilter('completed', this)">Completed</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a class="nav-link" href="#" onclick="setStatusFilter('incomplete', this)">Incomplete</a>
-                                        </li>
-                                    </ul>
+                                    <div class="btn-group mb-3 w-100" role="group" aria-label="Status Filter">
+                                        <button type="button" class="btn btn-outline-primary active" onclick="setStatusFilter('completed', this)">Completed</button>
+                                        <button type="button" class="btn btn-outline-primary" onclick="setStatusFilter('incomplete', this)">Incomplete</button>
+                                    </div>
 
                                     <div class="table-responsive">
                                         <table id="staffTable" class="table table-hover align-middle" style="width:max-content;min-width:100%">
@@ -2145,12 +2137,16 @@
             if(viewId === 'dashboard') loadDashboardStats();
             if(viewId === 'offices') loadOfficesView();
             if(viewId === 'audit') loadAuditLogs();
-            if(viewId === 'approvals') loadApprovalsView();
+            if(viewId === 'approvals') {
+                loadEditRequests();
+                loadExitRequests();
+            }
             if(viewId === 'leave') loadLeaveRequests();
             if(viewId === 'formations') loadFormations();
             if(viewId === 'personnel') {
-                // If coming to personnel, maybe refresh list?
-                loadStaff(); // Optional
+                // If coming to personnel, refresh list
+                currentOffset = 0;
+                loadStaff();
             }
         }
 
@@ -2164,7 +2160,7 @@
         }
 
         function showPrivileges() {
-            if (role !== 'super_admin') return;
+            if (role !== 'super_admin' && role !== 'formation_admin') return;
             showPersonnelTab('privileges-tab');
         }
 
@@ -2292,19 +2288,22 @@
                     
                     // Formation Admin specific
                     if (role === 'formation_admin') {
-                         document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
-                         const personnelNav = document.getElementById('personnelNavItem');
-                         if (personnelNav) personnelNav.classList.add('d-none');
-                         
-                         const approvalsNav = document.getElementById('approvalsNavItem');
-                         if (approvalsNav) approvalsNav.classList.add('d-none');
-                         
-                         loadDashboardStats();
-                         showView('dashboard');
-                         
-                         const loader = document.getElementById('global-loader');
-                         if (loader) loader.style.display = 'none';
-                         return;
+                        document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+                        
+                        // Explicitly SHOW Personnel and Approvals for Formation Admin as requested
+                        const personnelNav = document.getElementById('personnelNavItem');
+                        if (personnelNav) personnelNav.classList.remove('d-none');
+                        
+                        const approvalsNav = document.getElementById('approvalsNavItem');
+                        if (approvalsNav) approvalsNav.classList.remove('d-none');
+                        
+                        await fetchApprovalCounts();
+                        loadDashboardStats();
+                        showView('dashboard');
+                        
+                        const loader = document.getElementById('global-loader');
+                        if (loader) loader.style.display = 'none';
+                        return;
                     }
                     
                     // Admins: Go straight to Admin Dashboard
@@ -3517,9 +3516,12 @@
                 const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }});
                 if (!res.ok) throw new Error("Failed");
                 const data = await res.json();
-                renderResetTable(data);
+                // Handle pagination wrapper
+                const items = Array.isArray(data) ? data : (data.items || []);
+                renderResetTable(items);
             } catch (err) { console.error(err); }
         }
+
 
         function renderResetTable(data) {
              const tbody = document.getElementById('resetTableBody');
@@ -3684,7 +3686,18 @@
         function setStatusFilter(status, el) {
             currentStatusFilter = status;
             currentOffset = 0;
-            document.querySelectorAll('#statusTabs .nav-link').forEach(a => a.classList.remove('active'));
+            
+            // Remove active from siblings
+            const container = el.parentElement.parentElement.id === 'statusTabs' ? el.parentElement.parentElement : el.parentElement;
+            // Handle Nav Tabs structure (li > a) vs Button Group (button)
+            if (container.id === 'statusTabs') {
+                document.querySelectorAll('#statusTabs .nav-link').forEach(a => a.classList.remove('active'));
+            } else {
+                // Assume button group
+                const group = el.closest('.btn-group');
+                if (group) group.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+            }
+            
             el.classList.add('active');
             loadStaff();
         }
@@ -4131,6 +4144,19 @@
                 }
             } catch(e) { console.error(e); }
         }
+
+        function updateTotalBadge() {
+            const editCount = parseInt(document.getElementById('editRequestsCounter')?.textContent || '0');
+            const exitCount = parseInt(document.getElementById('exitRequestsCounter')?.textContent || '0');
+            const total = editCount + exitCount;
+            const badge = document.getElementById('approvalsCounterSidebar');
+            if (badge) {
+                badge.textContent = total;
+                if (total > 0) badge.classList.remove('d-none');
+                else badge.classList.add('d-none');
+            }
+        }
+
 
         function renderTable(data) {
             const tbody = document.getElementById('staffTableBody');
