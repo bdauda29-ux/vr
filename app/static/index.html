@@ -329,6 +329,7 @@
                 </div>
                 <div class="modal-body">
                     <canvas id="officeRankChart"></canvas>
+                    <div id="officeChartTotal" class="text-center fw-bold mt-3 fs-5"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -2764,24 +2765,8 @@
             }
         }
 
-        function rankBadge(rank) {
-            const text = rank || '';
-            if (!text) return '';
-            
-            // Define groups
-            const red = ['DCG'];
-            const green = ['ACG', 'CIS', 'DCI', 'ACI'];
-            const blue = ['CSI', 'SI', 'DSI', 'ASI1', 'ASI 1', 'ASI2', 'ASI 2'];
-            const yellow = ['II', 'AII', 'IA1', 'IA 1', 'IA2', 'IA 2', 'IA3', 'IA 3'];
-            
-            let color = 'bg-secondary'; // Default
-            if (red.includes(text)) color = 'bg-danger';
-            else if (green.includes(text)) color = 'bg-success';
-            else if (blue.includes(text)) color = 'bg-primary';
-            else if (yellow.includes(text)) color = 'bg-warning text-dark';
-            
-            return `<span class="badge ${color} rounded-pill">${text}</span>`;
-        }
+        // Legacy function removed/merged
+        // function rankBadge(rank) { ... }
 
         // Dashboard Logic
         async function fetchUserOffice() {
@@ -3014,6 +2999,11 @@
             const labels = data.map(d => d.rank);
             const counts = data.map(d => d.count);
             const colors = data.map(d => d.color);
+            
+            // Calculate Total
+            const total = counts.reduce((a, b) => a + b, 0);
+            const totalEl = document.getElementById('officeChartTotal');
+            if(totalEl) totalEl.textContent = `Total Personnel: ${total}`;
             
             officeRankChartInstance = new Chart(ctx, {
                 type: 'bar',
@@ -4591,11 +4581,27 @@
         
         function rankBadge(rank) {
             if (!rank) return '';
-            const full = RANK_NAMES[rank];
+            const r = rank.trim();
+            
+            // Define groups for colors
+            // Red: Comptroller Cadre (CGI - ACI)
+            const red = ['CGI', 'DCG', 'ACG', 'CIS', 'DCI', 'ACI'];
+            // Blue: Superintendent Cadre (CSI - ASI 2)
+            const blue = ['CSI', 'SI', 'DSI', 'ASI 1', 'ASI1', 'ASI 2', 'ASI2'];
+            // Yellow: Inspectorate Cadre (II - AII)
+            const yellow = ['II', 'AII'];
+            // Grey: Assistant Cadre (IA 1 - IA 3) - Default to secondary
+            
+            let colorClass = 'bg-secondary';
+            if (red.includes(r)) colorClass = 'bg-danger';
+            else if (blue.includes(r)) colorClass = 'bg-primary';
+            else if (yellow.includes(r)) colorClass = 'bg-warning text-dark';
+            
+            const full = RANK_NAMES[r];
             if (full) {
-                return `<span class="badge bg-secondary" title="${full}">${rank}</span><div class="small text-muted" style="font-size: 0.7em;">${full}</div>`;
+                return `<span class="badge ${colorClass}" title="${full}">${r}</span><div class="small text-muted" style="font-size: 0.7em;">${full}</div>`;
             }
-            return `<span class="badge bg-secondary">${rank}</span>`;
+            return `<span class="badge ${colorClass}">${r}</span>`;
         }
 
         // --- Move / History / View Modals Logic ---
