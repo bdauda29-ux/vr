@@ -662,81 +662,90 @@
                                             <a class="nav-link" href="#" onclick="setMainStatus('exited', this)">Posted Out / Exited</a>
                                         </li>
                                     </ul>
-                                    <div class="row mb-3 g-2">
-                                        <div class="col-12 col-md-3">
-                                            <input type="text" id="searchInput" class="form-control" placeholder="Search surname, NIS...">
-                                        </div>
-                                        <div class="col-6 col-md-2">
-                                            <div class="dropdown" id="filterRankDropdown">
-                                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterRankBtn">
-                                                    All Ranks
-                                                </button>
-                                                <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
-                                                    <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
-                                                    <li><hr class="dropdown-divider"></li>
-                                                    <div id="filterRankContainer">
-                                                        <!-- Checkboxes go here -->
-                                                    </div>
-                                                </ul>
+
+                                    <div class="mb-3">
+                                        <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false" aria-controls="filterCollapse">
+                                            <i class="bi bi-funnel"></i> Show/Hide Filters
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="collapse" id="filterCollapse">
+                                        <div class="row mb-3 g-2">
+                                            <div class="col-12 col-md-3">
+                                                <input type="text" id="searchInput" class="form-control" placeholder="Search surname, NIS...">
                                             </div>
-                                        </div>
-                                        <div class="col-6 col-md-2">
-                                            <div class="dropdown" id="filterOfficeDropdown">
-                                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterOfficeBtn">
-                                                    All Offices
-                                                </button>
-                                                <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
-                                                     <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
-                                                     <li><hr class="dropdown-divider"></li>
-                                                     <div id="filterOfficeContainer">
-                                                        <!-- Checkboxes go here -->
-                                                     </div>
-                                                </ul>
+                                            <div class="col-6 col-md-2">
+                                                <div class="dropdown" id="filterRankDropdown">
+                                                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterRankBtn">
+                                                        All Ranks
+                                                    </button>
+                                                    <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
+                                                        <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                        <div id="filterRankContainer">
+                                                            <!-- Checkboxes go here -->
+                                                        </div>
+                                                    </ul>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div class="col-6 col-md-2" id="formationFilterContainer" style="display:none;">
-                                            <div class="dropdown" id="filterFormationDropdown">
-                                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterFormationBtn">
-                                                    All Formations
-                                                </button>
-                                                <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
-                                                     <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
-                                                     <li><hr class="dropdown-divider"></li>
-                                                     <div id="filterFormationListContainer">
-                                                        <!-- Checkboxes go here -->
-                                                     </div>
-                                                </ul>
+                                            <div class="col-6 col-md-2">
+                                                <div class="dropdown" id="filterOfficeDropdown">
+                                                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterOfficeBtn">
+                                                        All Offices
+                                                    </button>
+                                                    <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
+                                                         <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
+                                                         <li><hr class="dropdown-divider"></li>
+                                                         <div id="filterOfficeContainer">
+                                                            <!-- Checkboxes go here -->
+                                                         </div>
+                                                    </ul>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div class="col-6 col-md-2">
-                                            <select id="sortDopp" class="form-select" onchange="loadStaff()">
-                                                <option value="">Sort by DOPP</option>
-                                                <option value="asc">DOPP Ascending</option>
-                                                <option value="desc">DOPP Descending</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-6 col-md-3">
-                                            <input type="text" id="dopaRange" class="form-control" placeholder="DOPA Range (From to To)">
-                                        </div>
-                                        <div class="col-6 col-md-2 exited-only d-none">
-                                            <input type="text" id="exitFrom" class="form-control date-picker" placeholder="Eff. Date From">
-                                        </div>
-                                        <div class="col-6 col-md-2 exited-only d-none">
-                                            <input type="text" id="exitTo" class="form-control date-picker" placeholder="Eff. Date To">
-                                        </div>
-                                        <div class="col-12 col-md-1">
-                                            <button class="btn btn-primary w-100" onclick="loadStaff()"><i class="bi bi-search"></i></button>
-                                        </div>
-                                        <div class="col-12 col-md-2">
-                                            <button class="btn btn-outline-secondary w-100" onclick="clearFilters()"><i class="bi bi-x-circle"></i> Clear Filters</button>
-                                        </div>
-                                        <div class="col-6 col-md-2 text-md-end">
-                                            <button class="btn btn-success w-100" onclick="showAddForm()"><i class="bi bi-plus-lg"></i> Add</button>
-                                        </div>
-                                        <div class="col-6 col-md-2 text-md-end">
-                                            <div class="btn-group w-100">
-                                                <button class="btn btn-success btn-sm w-50" onclick="openExportModal('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
-                                                <button class="btn btn-danger btn-sm w-50" onclick="openExportModal('pdf')"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                                            <div class="col-6 col-md-2" id="formationFilterContainer" style="display:none;">
+                                                <div class="dropdown" id="filterFormationDropdown">
+                                                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterFormationBtn">
+                                                        All Formations
+                                                    </button>
+                                                    <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
+                                                         <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
+                                                         <li><hr class="dropdown-divider"></li>
+                                                         <div id="filterFormationListContainer">
+                                                            <!-- Checkboxes go here -->
+                                                         </div>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <select id="sortDopp" class="form-select" onchange="loadStaff()">
+                                                    <option value="">Sort by DOPP</option>
+                                                    <option value="asc">DOPP Ascending</option>
+                                                    <option value="desc">DOPP Descending</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-6 col-md-3">
+                                                <input type="text" id="dopaRange" class="form-control" placeholder="DOPA Range (From to To)">
+                                            </div>
+                                            <div class="col-6 col-md-2 exited-only d-none">
+                                                <input type="text" id="exitFrom" class="form-control date-picker" placeholder="Eff. Date From">
+                                            </div>
+                                            <div class="col-6 col-md-2 exited-only d-none">
+                                                <input type="text" id="exitTo" class="form-control date-picker" placeholder="Eff. Date To">
+                                            </div>
+                                            <div class="col-12 col-md-1">
+                                                <button class="btn btn-primary w-100" onclick="loadStaff()"><i class="bi bi-search"></i></button>
+                                            </div>
+                                            <div class="col-12 col-md-2">
+                                                <button class="btn btn-outline-secondary w-100" onclick="clearFilters()"><i class="bi bi-x-circle"></i> Clear Filters</button>
+                                            </div>
+                                            <div class="col-6 col-md-2 text-md-end">
+                                                <button class="btn btn-success w-100" onclick="showAddForm()"><i class="bi bi-plus-lg"></i> Add</button>
+                                            </div>
+                                            <div class="col-6 col-md-2 text-md-end">
+                                                <div class="btn-group w-100">
+                                                    <button class="btn btn-success btn-sm w-50" onclick="openExportModal('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
+                                                    <button class="btn btn-danger btn-sm w-50" onclick="openExportModal('pdf')"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -995,6 +1004,17 @@
                                     <h5 class="card-title mb-0">Manage User Privileges</h5>
                                 </div>
                                 <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-4">
+                                            <input type="text" id="privilegeSearchInput" class="form-control" placeholder="Search surname, NIS...">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <button class="btn btn-primary w-100" onclick="loadPrivileges()"><i class="bi bi-search"></i> Search</button>
+                                        </div>
+                                        <div class="col-md-2">
+                                             <button class="btn btn-outline-secondary w-100" onclick="document.getElementById('privilegeSearchInput').value=''; loadPrivileges()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                                        </div>
+                                    </div>
                                     <div class="table-responsive">
                                         <table class="table table-hover">
                                             <thead>
@@ -1025,6 +1045,9 @@
                                         </div>
                                         <div class="col-md-2">
                                             <button class="btn btn-primary w-100" onclick="loadResetList()"><i class="bi bi-search"></i> Search</button>
+                                        </div>
+                                        <div class="col-md-2">
+                                             <button class="btn btn-outline-secondary w-100" onclick="document.getElementById('resetSearchInput').value=''; loadResetList()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
                                         </div>
                                     </div>
                                     <div class="table-responsive">
@@ -2091,11 +2114,11 @@
                 mainContainer.classList.add('container-fluid');
                 mainContainer.style.maxWidth = ''; // Remove any inline style
                 
-                if (viewId === 'personnel') {
-                    mainContainer.classList.add('view-narrow');
-                } else {
-                    mainContainer.classList.remove('view-narrow');
-                }
+                // if (viewId === 'personnel') {
+                //    mainContainer.classList.add('view-narrow');
+                // } else {
+                //    mainContainer.classList.remove('view-narrow');
+                // }
             }
 
             // Hide all views
@@ -2127,7 +2150,7 @@
             if(viewId === 'formations') loadFormations();
             if(viewId === 'personnel') {
                 // If coming to personnel, maybe refresh list?
-                // loadStaff(); // Optional
+                loadStaff(); // Optional
             }
         }
 
@@ -2850,17 +2873,18 @@
                     if (ctx) {
                         const labels = Object.keys(groupCounts);
                         const values = labels.map(l => groupCounts[l]);
+                        // Colors: Red (Comptroller), Blue (Superintendent), Yellow (Inspectorate), Grey (Assistant)
                         const colors = [
-                            'rgba(220,53,69,0.85)',
-                            'rgba(25,135,84,0.85)',
-                            'rgba(13,110,253,0.85)',
-                            'rgba(255,193,7,0.85)'
+                            'rgba(211, 47, 47, 0.85)',   // Red
+                            'rgba(25, 118, 210, 0.85)',  // Blue
+                            'rgba(251, 192, 45, 0.85)',  // Yellow
+                            'rgba(117, 117, 117, 0.85)'  // Grey
                         ];
                         const borderColors = [
-                            'rgba(220,53,69,1)',
-                            'rgba(25,135,84,1)',
-                            'rgba(13,110,253,1)',
-                            'rgba(255,193,7,1)'
+                            'rgba(211, 47, 47, 1)',
+                            'rgba(25, 118, 210, 1)',
+                            'rgba(251, 192, 45, 1)',
+                            'rgba(117, 117, 117, 1)'
                         ];
                         if (rankSummaryChart) {
                             rankSummaryChart.data.labels = labels;
@@ -6129,7 +6153,13 @@
             try {
                 await loadStaffEditSettings();
 
-                const res = await fetch(`${API_URL}/staff?limit=1000`, {
+                let url = `${API_URL}/staff?limit=1000`;
+                const search = document.getElementById('privilegeSearchInput')?.value?.trim();
+                if (search) {
+                    url += `&q=${encodeURIComponent(search)}`;
+                }
+
+                const res = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) throw new Error("Failed to fetch staff");
