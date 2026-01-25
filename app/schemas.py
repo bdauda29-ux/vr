@@ -22,13 +22,18 @@ def to_dict_office(obj) -> Dict[str, Any]:
         if grandparent:
             grandparent_name = grandparent.name
 
+    formation = getattr(obj, "formation", None)
+    formation_name = formation.name if formation else None
+
     return {
         "id": obj.id,
         "name": obj.name,
         "office_type": getattr(obj, "office_type", None),
         "parent_id": getattr(obj, "parent_id", None),
         "parent_name": parent_name,
-        "grandparent_name": grandparent_name
+        "grandparent_name": grandparent_name,
+        "formation_id": getattr(obj, "formation_id", None),
+        "formation_name": formation_name
     }
 
 def to_dict_formation_simple(obj) -> Dict[str, Any]:

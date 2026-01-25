@@ -2924,6 +2924,11 @@
              if (officeEl) officeModal = new bootstrap.Modal(officeEl);
         });
 
+        // Tree View State
+        window.officeChildrenMap = {};
+        window.officesByFormation = {};
+        window.expandedOfficeIds = null; // Initialize on first load
+
         async function loadOfficesView() {
             try {
                 const res = await fetch(`${API_URL}/offices`, {
@@ -2932,54 +2937,144 @@
                 if(res.ok) {
                     const offices = await res.json();
                     window.currentOffices = offices; // Store for modal usage
-                    const tbody = document.getElementById('officesTableBody');
-                    tbody.innerHTML = '';
-                    offices.forEach(off => {
-                        const tr = document.createElement('tr');
-                        // Escape single quotes for the function call
-                        const safeName = String(off.name || '').replace(/'/g, "\\'");
-                        // Also pass the full object properties needed for edit
-                        const safeType = String(off.office_type || '');
-                        const safeParentId = off.parent_id || '';
-                        
-                        const urlName = encodeURIComponent(off.name || '');
-                        
-                        let hierarchyHtml = '';
-                        if (off.parent_name) {
-                            let hText = `(parent: ${off.parent_name}`;
-                            if (off.grandparent_name) {
-                                hText += ` &rarr; ${off.grandparent_name}`;
-                            }
-                            hText += ')';
-                            hierarchyHtml = `<span class="text-muted fst-italic ms-5">${hText}</span>`;
-                        }
-                        
-                        tr.innerHTML = `
-                            <td class="text-primary" style="cursor:pointer;" onclick="openOfficeChartPage('${urlName}')">
-                                <div class="fw-bold text-dark">${off.name}</div>
-                                <div>
-                                    ${off.office_type || ''}
-                                    ${hierarchyHtml}
-                                </div>
-                            </td>
-                            <td>
-                                <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${off.id}, '${safeName}', '${safeType}', '${safeParentId}')">Edit</button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteOffice(${off.id})">Remove</button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
+                    
+                    // Build Tree
+                    window.officeChildrenMap = {};
+                    window.officesByFormation = {};
+                    
+                    // Initialize children arrays
+                    offices.forEach(o => {
+                        window.officeChildrenMap[o.id] = [];
                     });
-                    if (offices.length === 0) {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `<td colspan="2" class="text-muted text-center">No offices found</td>`;
-                        tbody.appendChild(tr);
+                    
+                    const allIds = new Set(offices.map(o => o.id));
+                    const roots = [];
+                    
+                    // Populate children and find roots
+                    offices.forEach(o => {
+                        if (o.parent_id && allIds.has(o.parent_id)) {
+                            if (!window.officeChildrenMap[o.parent_id]) window.officeChildrenMap[o.parent_id] = [];
+                            window.officeChildrenMap[o.parent_id].push(o);
+                        } else {
+                            roots.push(o);
+                        }
+                    });
+                    
+                    // Sort children by name
+                    Object.values(window.officeChildrenMap).forEach(list => {
+                        list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                    });
+                    
+                    // Group roots by Formation
+                    roots.forEach(r => {
+                        const fName = r.formation_name || 'General';
+                        if (!window.officesByFormation[fName]) window.officesByFormation[fName] = [];
+                        window.officesByFormation[fName].push(r);
+                    });
+                    
+                    // Initialize expansion if null (first load)
+                    if (window.expandedOfficeIds === null) {
+                        window.expandedOfficeIds = new Set(roots.map(r => r.id));
                     }
+                    
+                    renderOfficesTable();
+                    
                 } else {
                     const tbody = document.getElementById('officesTableBody');
                     const data = await res.json().catch(() => ({}));
                     tbody.innerHTML = `<tr><td colspan="2" class="text-danger text-center">${data.detail || 'Failed to load offices'}</td></tr>`;
                 }
             } catch(e) { console.error(e); }
+        }
+
+        function renderOfficesTable() {
+            const tbody = document.getElementById('officesTableBody');
+            tbody.innerHTML = '';
+            
+            const formations = Object.keys(window.officesByFormation).sort();
+            
+            if (formations.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="2" class="text-muted text-center">No offices found</td></tr>`;
+                return;
+            }
+            
+            formations.forEach(fName => {
+                // Header if multiple formations (or just always nice to have if Formation is distinct)
+                if (formations.length > 1 || (fName !== 'General' && fName !== null)) {
+                    const tr = document.createElement('tr');
+                    tr.className = 'table-light';
+                    tr.innerHTML = `<td colspan="2" class="fw-bold text-uppercase small text-muted ps-3">${fName}</td>`;
+                    tbody.appendChild(tr);
+                }
+                
+                const roots = window.officesByFormation[fName];
+                roots.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                
+                roots.forEach(root => {
+                    renderOfficeRow(root, 0, tbody);
+                });
+            });
+        }
+
+        function renderOfficeRow(office, depth, tbody) {
+            const hasChildren = window.officeChildrenMap[office.id] && window.officeChildrenMap[office.id].length > 0;
+            const isExpanded = window.expandedOfficeIds.has(office.id);
+            
+            const tr = document.createElement('tr');
+            
+            // Indentation
+            const paddingLeft = 10 + (depth * 25); // 10px base + 25px per level
+            
+            // Toggle Icon
+            let iconHtml = '';
+            if (hasChildren) {
+                const iconClass = isExpanded ? 'bi-dash-square' : 'bi-plus-square';
+                iconHtml = `<i class="bi ${iconClass} me-2 text-primary" style="cursor:pointer;" onclick="toggleOfficeNode(event, ${office.id})"></i>`;
+            } else {
+                iconHtml = `<span class="d-inline-block me-2" style="width:1rem;"></span>`; // Spacer
+            }
+            
+            // Prepare data for Edit
+            const safeName = String(office.name || '').replace(/'/g, "\\'");
+            const safeType = String(office.office_type || '');
+            const safeParentId = office.parent_id || '';
+            const urlName = encodeURIComponent(office.name || '');
+            
+            tr.innerHTML = `
+                <td>
+                    <div style="padding-left: ${paddingLeft}px; display: flex; align-items: center;">
+                        ${iconHtml}
+                        <div class="d-flex flex-column">
+                            <span class="fw-bold text-dark" style="cursor:pointer;" onclick="openOfficeChartPage('${urlName}')">
+                                ${office.name}
+                            </span>
+                            ${office.office_type ? `<small class="text-muted">${office.office_type}</small>` : ''}
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${office.id}, '${safeName}', '${safeType}', '${safeParentId}')">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteOffice(${office.id})">Remove</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+            
+            if (hasChildren && isExpanded) {
+                const children = window.officeChildrenMap[office.id];
+                children.forEach(child => {
+                    renderOfficeRow(child, depth + 1, tbody);
+                });
+            }
+        }
+
+        function toggleOfficeNode(event, id) {
+            event.stopPropagation();
+            if (window.expandedOfficeIds.has(id)) {
+                window.expandedOfficeIds.delete(id);
+            } else {
+                window.expandedOfficeIds.add(id);
+            }
+            renderOfficesTable();
         }
 
         let officeRankChartInstance = null;
