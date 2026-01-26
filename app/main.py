@@ -1602,7 +1602,7 @@ def posting_staff(staff_id: int):
 @app.get("/settings/staff-edit")
 def get_staff_edit_settings():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -1641,7 +1641,7 @@ def get_staff_edit_settings():
 @app.put("/settings/staff-edit")
 def update_staff_edit_settings():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")

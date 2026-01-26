@@ -137,9 +137,14 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <li class="nav-item">
+                    <li class="nav-item" id="navItemAdminDashboard">
                         <a class="nav-link active" href="#" onclick="showView('dashboard');" title="Dashboard">
                             <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item d-none" id="navItemStaffDashboard">
+                        <a class="nav-link" href="#" onclick="showView('staff-dashboard');" title="My Dashboard">
+                            <i class="bi bi-person-badge me-1"></i> My Dashboard
                         </a>
                     </li>
 
@@ -721,7 +726,7 @@
                                             <div class="col-12 col-md-3">
                                                 <input type="text" id="searchInput" class="form-control" placeholder="Search surname, NIS...">
                                             </div>
-                                            <div class="col-6 col-md-2">
+                                            <div class="col-6 col-md-2 d-none">
                                                 <div class="dropdown" id="filterRankDropdown">
                                                     <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterRankBtn">
                                                         All Ranks
@@ -2528,6 +2533,12 @@
             // Hide admin items
             document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
             
+            // Toggle Dashboard Links
+            const adminDash = document.getElementById('navItemAdminDashboard');
+            const staffDash = document.getElementById('navItemStaffDashboard');
+            if(adminDash) adminDash.classList.add('d-none');
+            if(staffDash) staffDash.classList.remove('d-none');
+            
             // Show switch to admin button (Only if NOT formation/special admin)
             const switchAdminBtn = document.getElementById('switchToAdminItem');
             if(switchAdminBtn && role !== 'formation_admin' && role !== 'special_admin') {
@@ -4220,6 +4231,7 @@
         }
 
         function renderTableSuperAdmin(data) {
+            const isSpecial = role === 'special_admin';
             const tbody = document.getElementById('staffTableBody');
             tbody.innerHTML = '';
             
