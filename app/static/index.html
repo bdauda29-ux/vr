@@ -2598,6 +2598,10 @@
 
             // Show Personal Dashboard
             showView('staff-dashboard');
+            
+            // UPDATE: Change Title
+            const titleEl = document.getElementById('pageTitle');
+            if(titleEl) titleEl.textContent = 'Dashboard';
         }
 
         function roleLabel(r) {
@@ -5738,7 +5742,14 @@
                         return 'rgba(108,117,125,0.85)';
                     });
 
-                     window.formationRankChartInstance = new Chart(ctx, {
+                    // Resize chart canvas container
+            const chartContainer = canvas.parentElement;
+            if(chartContainer) {
+                chartContainer.style.height = '300px';
+                chartContainer.style.overflow = 'hidden';
+            }
+            
+             window.formationRankChartInstance = new Chart(ctx, {
                         type: 'bar',
                         data: {
                             labels: labels,

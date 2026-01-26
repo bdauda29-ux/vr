@@ -1794,7 +1794,7 @@ def posting_staff(staff_id: int):
             staff_id=staff.id,
             action_type="POSTING",
             from_office=f"{old_fmt_name} - {old_office}",
-            to_office=f"{new_fmt_name} - {new_office}",
+            to_office=new_fmt_name, # Display only Formation Name as requested
             action_date=effective_date,
             remarks=full_remarks
         )
