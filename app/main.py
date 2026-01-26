@@ -338,8 +338,61 @@ def list_formations_endpoint():
     
     with next(get_db()) as db:
         formations = crud.list_formations(db)
-        # Filter out NIS from the list
-        filtered_formations = [o for o in formations if o.code != "NIS"]
+        
+        # Get personnel counts
+        count_rows = db.query(models.Staff.formation_id, func.count(models.Staff.id))\
+            .filter(models.Staff.exit_date.is_(None))\
+            .group_by(models.Staff.formation_id).all()
+        counts = {row[0]: row[1] for row in count_rows}
+
+        # Filter out NIS
+        filtered = [o for o in formations if o.code != "NIS"]
+        
+        # Build Hierarchy for Sorting
+        # Goal: SHQ -> Directorates (children of SHQ) -> Zonal Commands -> Others
+        # Note: Zonal Commands have parent_id=None usually.
+        
+        # 1. Identify Roots and Map ID to Children
+        children_map = {}
+        roots = []
+        
+        # Helper to find SHQ
+        shq = next((f for f in filtered if f.code == "SHQ"), None)
+        
+        for f in filtered:
+            if f.parent_id:
+                if f.parent_id not in children_map: children_map[f.parent_id] = []
+                children_map[f.parent_id].append(f)
+            else:
+                if f.code != "SHQ": # Treat SHQ separately to ensure it's first
+                    roots.append(f)
+        
+        # Sort roots: Zonal Commands first among non-SHQ roots? 
+        # User: "Service headquarters first, directorates should be listed under it... then zonal commands"
+        # Since Directorates are under SHQ, SHQ comes first.
+        # Then Zonal Commands.
+        
+        roots.sort(key=lambda x: (0 if x.formation_type == "Zonal Command" else 1, x.name))
+        
+        sorted_formations = []
+        
+        def add_node(node):
+            # Add node
+            node.personnel_count = counts.get(node.id, 0)
+            sorted_formations.append(node)
+            # Add children
+            kids = children_map.get(node.id, [])
+            # Sort children: Directorates first?
+            kids.sort(key=lambda x: (0 if x.formation_type == "Directorate" else 1, x.name))
+            for k in kids:
+                add_node(k)
+        
+        if shq:
+            add_node(shq)
+            
+        for r in roots:
+            add_node(r)
+            
         return jsonify([{
             "id": o.id, 
             "name": o.name, 
@@ -347,8 +400,9 @@ def list_formations_endpoint():
             "description": o.description,
             "formation_type": o.formation_type,
             "parent_id": o.parent_id,
-            "parent_name": o.parent.name if o.parent else None
-        } for o in filtered_formations])
+            "parent_name": o.parent.name if o.parent else None,
+            "personnel_count": getattr(o, "personnel_count", 0)
+        } for o in sorted_formations])
 
 @app.put("/formations/<int:formation_id>")
 def update_formation_endpoint(formation_id):
@@ -526,6 +580,24 @@ def delete_user_endpoint(user_id):
             return jsonify({"detail": "Failed to delete user"}), 500
             
         return jsonify({"detail": "User deleted successfully"})
+
+@app.get("/formations/<int:formation_id>/stats")
+def get_formation_rank_stats(formation_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        formation = crud.get_formation(db, formation_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
+            
+        stats = crud.get_dashboard_stats(db, formation_id=formation_id)
+        # Ensure we have rank_counts even if empty
+        if "rank_counts" not in stats:
+            stats["rank_counts"] = {}
+            
+        return jsonify(stats)
 
 @app.get("/dashboard/stats")
 def dashboard_stats():
@@ -1498,7 +1570,17 @@ def move_staff(staff_id: int):
         # Determine Action Type
         action_type = "MOVE"
         to_office_val = new_office
+        from_office_val = old_office
         
+        # Get Current Formation Name for History
+        current_fmt = staff.formation
+        current_fmt_name = current_fmt.name if current_fmt else "Unknown"
+        if current_fmt and current_fmt.formation_type == "Directorate":
+            current_fmt_name = f"SHQ ({current_fmt.code})"
+            
+        from_office_val = f"{current_fmt_name} - {old_office}"
+        
+        # Check if Formation Change
         if target_fmt_id != current_fmt_id:
             action_type = "POSTING"
             # If posting, include Formation Name
@@ -1508,15 +1590,24 @@ def move_staff(staff_id: int):
                  if target_fmt.formation_type == "Directorate":
                      fmt_name = f"SHQ ({target_fmt.code})"
                  to_office_val = f"{fmt_name} - {new_office}"
+        else:
+            # Intra-formation move
+            to_office_val = f"{current_fmt_name} - {new_office}"
+
+        # Prepare Remarks with History Info
+        history_remarks = remarks
+        if action_type == "POSTING":
+             prev_dopp_str = staff.formation_dopp.isoformat() if staff.formation_dopp else "N/A"
+             history_remarks = f"{remarks} | Prev Formation DOPP: {prev_dopp_str}".strip(" |")
 
         # Create History Record
         history = models.PostingHistory(
             staff_id=staff.id,
             action_type=action_type,
-            from_office=old_office,
+            from_office=from_office_val,
             to_office=to_office_val,
             action_date=effective_date,
-            remarks=remarks
+            remarks=history_remarks
         )
         db.add(history)
         
@@ -1695,6 +1786,10 @@ def posting_staff(staff_id: int):
         
         full_remarks = f"Posted from {old_fmt_name} to {new_fmt_name}. {remarks}"
         
+        # Add Prev Formation DOPP to remarks
+        prev_dopp_str = staff.formation_dopp.isoformat() if staff.formation_dopp else "N/A"
+        full_remarks = f"{full_remarks} | Prev Formation DOPP: {prev_dopp_str}"
+        
         history = models.PostingHistory(
             staff_id=staff.id,
             action_type="POSTING",
@@ -1708,6 +1803,7 @@ def posting_staff(staff_id: int):
         staff.formation_id = new_formation_id
         staff.office = new_office
         staff.dopp = effective_date
+        staff.formation_dopp = effective_date
         
         db.commit()
         crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id)

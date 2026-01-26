@@ -662,10 +662,11 @@
                                 <table class="table table-hover table-bordered" id="formationTable">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
+                                            <th>S/N</th>
                                             <th>Name</th>
                                             <th>Code</th>
                                             <th>Description</th>
+                                            <th>Personnel</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -1169,7 +1170,7 @@
                              <hr>
                             <div class="mt-3">
                                 <h6 id="officeSummaryTitle" class="mb-2 d-none"></h6>
-                                <canvas id="officeSummaryChart" style="max-height: 130px; width: 100%;"></canvas>
+                                <canvas id="officeSummaryChart" style="max-height: 100px; width: 100%;"></canvas>
                             </div>
                          </div>
                     </div>
@@ -2382,6 +2383,7 @@
                     
                     // 1. Show admin items
                     document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+                    populateFormationFilter();
 
                     // Show switch to personal button
                     const switchPersonalBtn = document.getElementById('switchToPersonalItem');
@@ -4863,7 +4865,7 @@
                             }]
                         },
                         options: {
-                            aspectRatio: 4,
+                            aspectRatio: 6,
                             plugins: {
                                 legend: {
                                     display: false
@@ -5566,7 +5568,8 @@
         // --- Formation Management (Special Admin) ---
         
         async function populateFormationFilter() {
-            if (role !== 'special_admin') return;
+            // Remove role check to allow all admins to see formation filter if container exists
+            // if (role !== 'special_admin') return;
             
             const container = document.getElementById('filterFormationListContainer');
             const wrapper = document.getElementById('formationFilterContainer');
@@ -5623,7 +5626,7 @@
 
         async function loadFormations() {
             const tbody = document.getElementById('formationTableBody');
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">Loading...</td></tr>';
             
             try {
                 const res = await fetch(`${API_URL}/formations`, {
@@ -5634,32 +5637,136 @@
                     window.currentFormations = formations;
                     tbody.innerHTML = '';
                     if (formations.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No formations found</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center">No formations found</td></tr>';
                         return;
                     }
-                    formations.forEach(o => {
+                    formations.forEach((o, index) => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
-                            <td>${o.id}</td>
+                            <td>${index + 1}</td>
                             <td>${o.name}</td>
                             <td>${o.code}</td>
                             <td>${o.description || ''}</td>
+                            <td>${o.personnel_count || 0}</td>
                             <td>
                                 <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateFormationModal(${o.id})">Edit</button>
                                 <button class="btn btn-sm btn-outline-success me-1" onclick="openCreateFormationAdminModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">Add Admin</button>
-                                <button class="btn btn-sm btn-outline-info" onclick="openViewFormationAdminsModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">View Admins</button>
+                                <button class="btn btn-sm btn-outline-info me-1" onclick="openViewFormationAdminsModal(${o.id}, '${o.name.replace(/'/g, "\\'")}')">View Admins</button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="openFormationRankChart(${o.id}, '${o.name.replace(/'/g, "\\'")}')"><i class="bi bi-bar-chart"></i> Rank Chart</button>
                             </td>
                         `;
                         tbody.appendChild(tr);
                     });
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Failed to load formations</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Failed to load formations</td></tr>';
                 }
             } catch (e) {
                 console.error(e);
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading formations</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading formations</td></tr>';
             }
         }
+
+        async function openFormationRankChart(formationId, formationName) {
+             const titleEl = document.getElementById('officeChartTitle');
+             const canvas = document.getElementById('officeRankChart');
+             const totalEl = document.getElementById('officeChartTotal');
+             
+             if(titleEl) titleEl.textContent = formationName;
+             if(totalEl) totalEl.textContent = "Loading...";
+             
+             new bootstrap.Modal(document.getElementById('officeChartModal')).show();
+             
+             try {
+                 const res = await fetch(`${API_URL}/formations/${formationId}/stats`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                 });
+                 
+                 if(res.ok) {
+                     const data = await res.json();
+                     const rankCounts = data.rank_counts || {};
+                     const total = data.total_staff || 0; // The endpoint might return total_staff inside
+                     
+                     // If endpoint structure differs (it returns dashboard stats structure):
+                     // { total_staff: ..., rank_counts: {...}, ... }
+                     
+                     if(totalEl) totalEl.textContent = `Total Personnel: ${data.total_staff || 0}`;
+                     
+                     const labels = [];
+                     const values = [];
+                     
+                     // Use predefined rank order if available, or just keys
+                     // We can reuse RANKS global if available, or extract from response
+                     // Assuming RANKS is available globally (it usually is in this app)
+                     
+                     if (typeof RANKS !== 'undefined') {
+                         RANKS.forEach(r => {
+                             if(rankCounts[r]) {
+                                 labels.push(r);
+                                 values.push(rankCounts[r]);
+                             }
+                         });
+                         // Add others
+                         Object.keys(rankCounts).forEach(r => {
+                             if(!labels.includes(r) && rankCounts[r] > 0) {
+                                 labels.push(r);
+                                 values.push(rankCounts[r]);
+                             }
+                         });
+                     } else {
+                         Object.entries(rankCounts).forEach(([k,v]) => {
+                             labels.push(k);
+                             values.push(v);
+                         });
+                     }
+                     
+                     const ctx = canvas.getContext('2d');
+                     
+                     // Destroy existing if any (need to track chart instance)
+                     if(window.formationRankChartInstance) {
+                         window.formationRankChartInstance.destroy();
+                     }
+                     
+                     const colors = labels.map(label => {
+                        const text = label || '';
+                        const red = ['DCG', 'ACG', 'CIS', 'DCI', 'ACI']; // Comptroller Cadre (except CGI usually)
+                        const blue = ['CSI', 'SI', 'DSI', 'ASI1', 'ASI 1', 'ASI2', 'ASI 2'];
+                        const yellow = ['II', 'AII', 'IA1', 'IA 1', 'IA2', 'IA 2', 'IA3', 'IA 3'];
+                        if (text === 'CGI') return 'rgba(220,53,69,0.85)'; // Red
+                        if (red.includes(text)) return 'rgba(220,53,69,0.85)';
+                        if (blue.includes(text)) return 'rgba(13,110,253,0.85)';
+                        if (yellow.includes(text)) return 'rgba(255,193,7,0.85)';
+                        return 'rgba(108,117,125,0.85)';
+                    });
+
+                     window.formationRankChartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Count',
+                                data: values,
+                                backgroundColor: colors
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false, // Let it fill modal body height
+                            scales: {
+                                y: { beginAtZero: true, ticks: { precision: 0 } }
+                            },
+                            plugins: { legend: { display: false } }
+                        }
+                     });
+                     
+                 } else {
+                     if(totalEl) totalEl.textContent = "Failed to load data";
+                 }
+             } catch(e) {
+                 console.error(e);
+                 if(totalEl) totalEl.textContent = "Error loading data";
+             }
+        }
+
 
         function openCreateFormationModal() {
             document.getElementById('createFormationForm').reset();
