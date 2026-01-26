@@ -691,7 +691,7 @@
                             <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import-pane" type="button">Bulk Import</button>
                         </li>
                         <li class="nav-item admin-only super-only d-none" role="presentation">
-                            <button class="nav-link" id="privileges-tab" data-bs-toggle="tab" data-bs-target="#privileges-pane" type="button">Privileges</button>
+                            <button class="nav-link" id="privileges-tab" data-bs-toggle="tab" data-bs-target="#privileges-pane" type="button" onclick="loadPrivileges()">Privileges</button>
                         </li>
                         <li class="nav-item admin-only d-none" role="presentation">
                             <button class="nav-link" id="password-reset-tab" data-bs-toggle="tab" data-bs-target="#password-reset-pane" type="button">Password Reset</button>
@@ -2468,7 +2468,6 @@
                                                 <thead class="table-light sticky-top">
                                                     <tr>
                                                         <th>Date</th>
-                                                        <th>From</th>
                                                         <th>To</th>
                                                         <th>Remark</th>
                                                     </tr>
@@ -2736,7 +2735,6 @@
                             tbody.innerHTML = histData.map(h => `
                                 <tr>
                                     <td>${isoToDmy(h.action_date)}</td>
-                                    <td>${h.from_office || '-'}</td>
                                     <td>${h.to_office || '-'}</td>
                                     <td>${h.remarks || h.action_type}</td>
                                 </tr>
