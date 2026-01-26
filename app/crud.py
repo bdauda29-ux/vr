@@ -264,6 +264,9 @@ def list_offices_model(db: Session, formation_id: Optional[int] = None) -> List[
 def get_office(db: Session, office_id: int) -> Optional[models.Office]:
     return db.get(models.Office, office_id)
 
+def get_office_by_name(db: Session, name: str) -> Optional[models.Office]:
+    return db.scalar(select(models.Office).where(func.lower(models.Office.name) == name.lower()))
+
 def create_office(db: Session, name: str, formation_id: Optional[int] = None, office_type: Optional[str] = None, parent_id: Optional[int] = None) -> models.Office:
     # Check uniqueness within formation
     stmt = select(models.Office).where(
@@ -339,6 +342,26 @@ def list_formations(db: Session) -> List[models.Formation]:
 
 def get_formation(db: Session, formation_id: int) -> Optional[models.Formation]:
     return db.get(models.Formation, formation_id)
+
+def get_pending_edit_requests(db: Session, formation_id: Optional[int] = None) -> List[models.StaffEditRequest]:
+    stmt = select(models.StaffEditRequest).join(models.Staff).where(models.StaffEditRequest.status == "review_pending")
+    if formation_id:
+        stmt = stmt.where(models.Staff.formation_id == formation_id)
+    return list(db.scalars(stmt.order_by(models.StaffEditRequest.created_at.asc())))
+
+def get_edit_request(db: Session, request_id: int) -> Optional[models.StaffEditRequest]:
+    return db.get(models.StaffEditRequest, request_id)
+
+def resolve_edit_request(db: Session, request_id: int, status: str, reviewer: str) -> Optional[models.StaffEditRequest]:
+    req = db.get(models.StaffEditRequest, request_id)
+    if req:
+        req.status = status
+        req.reviewed_at = func.now()
+        req.reviewed_by = reviewer
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+    return req
 
 def get_users_by_formation(db: Session, formation_id: int) -> List[models.User]:
     return list(db.scalars(select(models.User).where(models.User.formation_id == formation_id)))

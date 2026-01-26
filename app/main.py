@@ -1248,64 +1248,53 @@ def update_staff(staff_id: int):
                 if "dopp" in data and data["dopp"] != existing.dopp and not getattr(existing, "allow_edit_dopp", 0):
                     return jsonify({"detail": "Permission denied: Cannot change dopp"}), 403
             
-            # Create or Update Edit Request instead of direct update
-            json_data = {}
+            # Post-moderation: Update Immediately, but Log for Review
+            # Calculate changes
+            changes = {}
+            original_values = {}
             for k, v in data.items():
-                if isinstance(v, (date, datetime)):
-                    json_data[k] = v.isoformat()
+                if k in ["dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"]:
+                     # Date handling
+                     old_val = getattr(existing, k)
+                     if old_val != v:
+                         changes[k] = v.isoformat() if v else None
+                         original_values[k] = old_val.isoformat() if old_val else None
                 else:
-                    json_data[k] = v
+                     old_val = getattr(existing, k)
+                     if old_val != v:
+                         changes[k] = v
+                         original_values[k] = old_val
             
-            # Check for existing pending request
-            stmt = select(models.StaffEditRequest).where(
-                models.StaffEditRequest.staff_id == existing.id,
-                models.StaffEditRequest.status == "pending"
-            )
-            existing_req = db.scalar(stmt)
+            if not changes:
+                 return jsonify({"detail": "No changes detected"}), 200
 
-            if existing_req:
-                # Merge new changes into existing request
-                current_data = json.loads(existing_req.data)
-                current_data.update(json_data)
-                existing_req.data = json.dumps(current_data)
-                # Update timestamp to show latest activity
-                existing_req.created_at = func.now()
-                
-                db.commit()
-                crud.create_audit_log(
-                    db,
-                    "UPDATE_REQUEST_APPEND",
-                    f"Staff: {existing.nis_no}",
-                    f"Appended to EDIT_REQUEST_ID={existing_req.id}",
-                    formation_id=formation_id
-                )
-                return jsonify({"detail": "Update appended to pending request", "status": "pending_approval"}), 202
-            else:
-                req = models.StaffEditRequest(
-                    staff_id=existing.id,
-                    data=json.dumps(json_data),
-                    status="pending"
-                )
-                db.add(req)
-                db.commit()
-                crud.create_audit_log(
-                    db,
-                    "UPDATE_REQUEST",
-                    f"Staff: {existing.nis_no}",
-                    f"EDIT_REQUEST_ID={req.id}",
-                    formation_id=formation_id
-                )
-                return jsonify({"detail": "Update submitted for approval", "status": "pending_approval"}), 202
-        
-
-        try:
-            obj = crud.update_staff(db, existing, data)
-            if obj:
-                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details", formation_id=formation_id)
-                return jsonify(schemas.to_dict_staff(obj))
-            return jsonify({"detail": "Not found"}), 404
-        except ValueError as e:
-            return jsonify({"detail": str(e)}), 400
+            # Apply changes to Staff object
+            try:
+                obj = crud.update_staff(db, existing, data)
+                if obj:
+                    # Create Edit Request (Log) with status "review_pending"
+                    # We store the *ORIGINAL* values in 'data' field so we can revert if rejected
+                    # Or we store 'changes' and 'original' both?
+                    # Let's store a structured object: { "changes": {...}, "original": {...} }
+                    log_payload = {
+                        "changes": changes,
+                        "original": original_values
+                    }
+                    
+                    req = models.StaffEditRequest(
+                        staff_id=existing.id,
+                        data=json.dumps(log_payload),
+                        status="review_pending"
+                    )
+                    db.add(req)
+                    
+                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=formation_id)
+                    db.commit()
+                    
+                    return jsonify(schemas.to_dict_staff(obj))
+                return jsonify({"detail": "Not found"}), 404
+            except ValueError as e:
+                return jsonify({"detail": str(e)}), 400
 
 @app.delete("/staff/<int:staff_id>")
 def delete_staff(staff_id: int):
@@ -2579,7 +2568,8 @@ def list_edit_requests():
     formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
-        stmt = select(models.StaffEditRequest).join(models.Staff).where(models.StaffEditRequest.status == "pending")
+        # Use crud helper or direct query
+        stmt = select(models.StaffEditRequest).join(models.Staff).where(models.StaffEditRequest.status == "review_pending")
         if formation_id:
             stmt = stmt.where(models.Staff.formation_id == formation_id)
         stmt = stmt.order_by(models.StaffEditRequest.created_at.desc())
@@ -2588,12 +2578,14 @@ def list_edit_requests():
         
         res = []
         for r in reqs:
+            payload = json.loads(r.data)
             res.append({
                 "id": r.id,
                 "staff_id": r.staff_id,
                 "staff_name": f"{r.staff.surname} {r.staff.other_names}",
                 "staff_nis": r.staff.nis_no,
-                "data": json.loads(r.data),
+                "changes": payload.get("changes"),
+                "original": payload.get("original"),
                 "created_at": r.created_at.isoformat(),
             })
         return jsonify(res)
@@ -2611,39 +2603,26 @@ def approve_edit_request(req_id):
             req = db.get(models.StaffEditRequest, req_id)
             if not req:
                 return jsonify({"detail": "Not found"}), 404
-            if req.status != "pending":
-                return jsonify({"detail": "Request not pending"}), 400
             
-            staff = db.get(models.Staff, req.staff_id)
-            if not staff:
-                return jsonify({"detail": "Staff not found"}), 404
-                
-            if formation_id and staff.formation_id != formation_id:
-                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            # Formation check
+            if formation_id and req.staff.formation_id != formation_id:
+                 return jsonify({"detail": "Permission denied"}), 403
+
+            if req.status != "review_pending":
+                return jsonify({"detail": "Request not pending review"}), 400
             
-            data = json.loads(req.data)
-            for k in ("dofa", "dopa", "dopp", "dob", "exit_date"):
-                if k in data and data[k]:
-                    parsed = parse_date_value(data[k])
-                    if parsed is None and data[k] not in (None, "", 0):
-                        return jsonify({"detail": f"Invalid date for {k}"}), 400
-                    data[k] = parsed
-            
-            crud.update_staff(db, staff, data)
-            
+            # For post-moderation, "approve" means "keep changes" (do nothing to staff data)
             req.status = "approved"
             req.reviewed_by = user.get("sub")
             req.reviewed_at = func.now()
             
-            crud.create_audit_log(db, "APPROVE_EDIT", f"Staff: {staff.nis_no}", f"Approved edit request {req_id}", formation_id=formation_id)
+            crud.create_audit_log(db, "REVIEW_KEEP", f"Staff: {req.staff.nis_no}", f"Kept updates (Request {req_id})", formation_id=formation_id)
             db.commit()
-            return jsonify({"detail": "Request approved and applied"})
+            return jsonify({"detail": "Updates kept (Approved)"})
         except Exception as e:
-            import traceback
             db.rollback()
             print("Approve edit request error:", e)
-            print(traceback.format_exc())
-            return jsonify({"detail": f"Approve edit failed: {str(e)}"}), 500
+            return jsonify({"detail": f"Approve failed: {str(e)}"}), 500
 
 @app.post("/admin/edit-requests/<int:req_id>/reject")
 def reject_edit_request(req_id):
@@ -2652,20 +2631,50 @@ def reject_edit_request(req_id):
     if err: return err, code
     
     formation_id = user.get("formation_id")
-    
+
     with next(get_db()) as db:
-        req = db.get(models.StaffEditRequest, req_id)
-        if not req: return jsonify({"detail": "Not found"}), 404
-        if req.status != "pending": return jsonify({"detail": "Request not pending"}), 400
-        
-        staff = db.get(models.Staff, req.staff_id)
-        if staff and formation_id and staff.formation_id != formation_id:
-             return jsonify({"detail": "Permission denied: Different Formation"}), 403
-        
-        req.status = "rejected"
-        req.reviewed_by = user.get("sub")
-        req.reviewed_at = func.now()
-        
-        crud.create_audit_log(db, "REJECT_EDIT", f"Request {req_id}", "Rejected edit request", formation_id=formation_id)
-        db.commit()
+        try:
+            req = db.get(models.StaffEditRequest, req_id)
+            if not req:
+                return jsonify({"detail": "Not found"}), 404
+
+            # Formation check
+            if formation_id and req.staff.formation_id != formation_id:
+                 return jsonify({"detail": "Permission denied"}), 403
+            
+            if req.status != "review_pending":
+                return jsonify({"detail": "Request not pending review"}), 400
+
+            # Revert changes using 'original' data
+            payload = json.loads(req.data)
+            original = payload.get("original")
+            
+            if original:
+                # Need to convert date strings back to objects if needed, 
+                # but crud.update_staff handles strings for dates usually? 
+                # Let's check crud.update_staff or parse them.
+                # update_staff expects dict with values.
+                # Dates in 'original' are ISO strings.
+                
+                # We need to parse dates
+                data_to_revert = {}
+                for k, v in original.items():
+                    if k in ["dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"]:
+                        data_to_revert[k] = parse_date_value(v)
+                    else:
+                        data_to_revert[k] = v
+                
+                crud.update_staff(db, req.staff, data_to_revert)
+
+            req.status = "rejected"
+            req.reviewed_by = user.get("sub")
+            req.reviewed_at = func.now()
+            
+            crud.create_audit_log(db, "REVIEW_REVERT", f"Staff: {req.staff.nis_no}", f"Reverted updates (Request {req_id})", formation_id=formation_id)
+            db.commit()
+            return jsonify({"detail": "Updates reverted (Rejected)"})
+        except Exception as e:
+            db.rollback()
+            print("Reject edit request error:", e)
+            return jsonify({"detail": f"Reject failed: {str(e)}"}), 500
         return jsonify({"detail": "Request rejected"})

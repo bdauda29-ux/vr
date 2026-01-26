@@ -2227,10 +2227,9 @@
                      const sp = document.getElementById('switchToPersonalItem');
                      if(sp) sp.classList.add('d-none');
                 } else {
-                    // Admin/Super/Formation/Office: Default to Personal Mode (Staff Dashboard)
-                    // This means admin items hidden, Switch to Admin visible
-                    // We call switchToPersonalMode to ensure consistent state
-                    if (typeof switchToPersonalMode === 'function') {
+                    // Admin/Super/Office: Default to Personal Mode (Staff Dashboard)
+                    // Formation Admin: Defaults to Admin Mode (no personal record)
+                    if (role !== 'formation_admin' && typeof switchToPersonalMode === 'function') {
                         switchToPersonalMode();
                     }
                 }
@@ -2515,9 +2514,11 @@
             const switchAdminBtn = document.getElementById('switchToAdminItem');
             if(switchAdminBtn) switchAdminBtn.classList.add('d-none');
             
-            // Show switch to personal button
+            // Show switch to personal button (Only if NOT formation/special admin)
             const switchPersonalBtn = document.getElementById('switchToPersonalItem');
-            if(switchPersonalBtn) switchPersonalBtn.classList.remove('d-none');
+            if(switchPersonalBtn && role !== 'formation_admin' && role !== 'special_admin') {
+                switchPersonalBtn.classList.remove('d-none');
+            }
             
             // Show Admin Dashboard
             showView('dashboard');
@@ -2527,9 +2528,11 @@
             // Hide admin items
             document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
             
-            // Show switch to admin button
+            // Show switch to admin button (Only if NOT formation/special admin)
             const switchAdminBtn = document.getElementById('switchToAdminItem');
-            if(switchAdminBtn) switchAdminBtn.classList.remove('d-none');
+            if(switchAdminBtn && role !== 'formation_admin' && role !== 'special_admin') {
+                switchAdminBtn.classList.remove('d-none');
+            }
             
             // Hide switch to personal button
             const switchPersonalBtn = document.getElementById('switchToPersonalItem');
@@ -4220,9 +4223,8 @@
             const tbody = document.getElementById('staffTableBody');
             tbody.innerHTML = '';
             
-            // Disable inline edit for special_admin
-            const isSpecial = role === 'special_admin';
-            const contentEditableAttr = isSpecial ? '' : 'contenteditable="true"';
+            // Disable inline edit for all admins as requested
+            const contentEditableAttr = '';
             
             data.forEach((s, index) => {
                 const tr = document.createElement('tr');
@@ -4235,17 +4237,11 @@
                 const formationDopp = isoToDmy(s.formation_dopp);
                 const dob = isoToDmy(s.dob);
                 
-                // Options generation (only if not special_admin)
-                const rankOpts = !isSpecial ? RANKS.map(r => `<option value="${r}" ${s.rank===r?'selected':''}>${r} - ${RANK_NAMES[r] || ''}</option>`).join('') : '';
-                const genderOpts = !isSpecial ? ['Male','Female'].map(g => `<option value="${g}" ${s.gender===g?'selected':''}>${g}</option>`).join('') : '';
-                const officeOpts = !isSpecial ? officesList.map(o => `<option value="${o}" ${s.office===o?'selected':''}>${o}</option>`).join('') : '';
-                const stateOpts = !isSpecial ? allStates.map(st => `<option value="${st.id}" ${s.state && s.state.id===st.id?'selected':''}>${st.name}</option>`).join('') : '';
-                
                 // Format Names
                 const surnameFormatted = formatName(s.surname);
                 const otherNamesFormatted = formatName(s.other_names);
                 
-                const formationCell = isSpecial 
+                const formationCell = (role === 'special_admin') 
                     ? `<td>${s.formation ? (s.formation.code || s.formation.name) : '-'}</td>` 
                     : '';
 
@@ -4289,44 +4285,21 @@
                     } else {
                         actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Exit/Out</a></li>`;
                     }
+                    // Delete option removed as requested
                     actionBtns += `
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-danger" href="#" onclick="deleteStaff(${s.id}); return false;"><i class="bi bi-trash me-2"></i>Delete</a></li>
                             </ul>
                         </div>
                     `;
                 }
                 
-                // Rank Cell
-                let rankCell = '';
-                if (isSpecial) {
-                     rankCell = `<td><span class="rank-badge">${rankBadge(s.rank)}</span></td>`;
-                } else {
-                     rankCell = `<td data-rank-cell>
-                            <span class="rank-badge">${rankBadge(s.rank)}</span>
-                            <select class="form-select form-select-sm d-none" data-select-field="rank" data-original="${s.rank || ''}">${rankOpts}</select>
-                            <button type="button" class="btn btn-sm btn-outline-info ms-1" title="Edit rank" data-rank-toggle>
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                        </td>`;
-                }
+                // Rank Cell (Always Badge)
+                let rankCell = `<td><span class="rank-badge">${rankBadge(s.rank)}</span></td>`;
                 
-                // Gender, Office, State, LGA cells
-                let genderCell = isSpecial ? `<td>${s.gender || ''}</td>` : `<td><select class="form-select form-select-sm" data-select-field="gender" data-original="${s.gender || ''}">${genderOpts}</select></td>`;
-                let officeCell = isSpecial ? `<td>${s.office || ''}</td>` : `<td><select class="form-select form-select-sm" data-select-field="office" data-original="${s.office || ''}">${officeOpts}</select></td>`;
-                
-                let stateCell = isSpecial ? `<td>${sName}</td>` : `<td>
-                            <select class="form-select form-select-sm" data-select-field="state_id" data-original="${s.state ? s.state.id : ''}">
-                                <option value="">Select...</option>
-                                ${stateOpts}
-                            </select>
-                        </td>`;
-                        
-                let lgaCell = isSpecial ? `<td>${lName}</td>` : `<td>
-                            <select class="form-select form-select-sm" data-select-field="lga_id" data-original="${s.lga ? s.lga.id : ''}">
-                                <option value="">${s.state ? 'Select LGA...' : 'Select State First'}</option>
-                            </select>
-                        </td>`;
+                // Gender, Office, State, LGA cells (Always Text)
+                let genderCell = `<td>${s.gender || ''}</td>`;
+                let officeCell = `<td>${s.office || ''}</td>`;
+                let stateCell = `<td>${sName}</td>`;
+                let lgaCell = `<td>${lName}</td>`;
 
                 if (currentStatus === 'exited') {
                     tr.innerHTML = `
