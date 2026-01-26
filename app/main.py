@@ -1187,7 +1187,7 @@ def list_staff_endpoint():
 @app.post("/staff")
 def create_staff():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, error_response, code = require_role(["office_admin", "super_admin"])
+    user, error_response, code = require_role(["office_admin", "super_admin", "formation_admin"])
     if error_response: return error_response, code
 
     data = request.get_json(force=True)
@@ -1486,7 +1486,10 @@ def move_staff(staff_id: int):
         
         # Update Staff
         staff.office = new_office
-        staff.formation_id = target_fmt_id # Update formation if changed
+        if action_type == "POSTING":
+             staff.formation_id = target_fmt_id
+             staff.formation_dopp = effective_date
+             
         # Usually a move implies updating DOPP (Date of Present Posting)
         staff.dopp = effective_date
         
