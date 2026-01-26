@@ -1997,6 +1997,7 @@
         const role = localStorage.getItem('role');
         const username = localStorage.getItem('username');
         const token = localStorage.getItem('token');
+        const formationType = localStorage.getItem('formation_type');
 
         if (!token || token === 'null' || token === 'undefined') {
             localStorage.clear();
@@ -3360,6 +3361,27 @@
             });
         }
 
+        function updateOfficeTypeOptions() {
+            const formationType = localStorage.getItem('formation_type');
+            const select = document.getElementById('officeType');
+            if (!select) return;
+            
+            for (let i = 0; i < select.options.length; i++) {
+                const opt = select.options[i];
+                if (opt.value === 'Directorate') {
+                    if (formationType !== 'Directorate') {
+                        opt.disabled = true;
+                        opt.hidden = true; 
+                        opt.style.display = 'none'; // Ensure hidden
+                    } else {
+                        opt.disabled = false;
+                        opt.hidden = false;
+                        opt.style.display = '';
+                    }
+                }
+            }
+        }
+
         function openOfficeModal() {
             document.getElementById('officeId').value = '';
             document.getElementById('officeName').value = '';
@@ -3367,6 +3389,9 @@
             document.getElementById('parentOfficeId').value = '';
             document.getElementById('parentOfficeDiv').classList.add('d-none');
             document.getElementById('officeModalTitle').textContent = 'Add Office';
+            
+            updateOfficeTypeOptions();
+            
             officeModal.show();
         }
 
@@ -3375,6 +3400,9 @@
             document.getElementById('officeName').value = name;
             
             const typeSelect = document.getElementById('officeType');
+            
+            updateOfficeTypeOptions();
+            
             typeSelect.value = (type && type !== 'null') ? type : '';
             
             // Trigger change to populate parent dropdown, then set value
@@ -4686,7 +4714,10 @@
                             actionBtns += `<li><span class="dropdown-item-text text-warning"><i class="bi bi-hourglass me-2"></i>Exit Pending</span></li>`;
                         }
                     } else {
-                         actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Exit/Out</a></li>`;
+                        const restrictedTypes = ['State Command', 'Airport', 'Border Command', 'Directorate'];
+                        if (!restrictedTypes.includes(formationType)) {
+                             actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Exit/Out</a></li>`;
+                        }
                     }
 
                     if (role === 'super_admin' || role === 'main_admin') {
@@ -6620,8 +6651,16 @@
         
         async function loadPrivileges() {
             if (role !== 'super_admin' && role !== 'formation_admin') return;
+            
+            const tbody = document.getElementById('privilegesTableBody');
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center">Loading personnel...</td></tr>';
+            
             try {
-                await loadStaffEditSettings();
+                try {
+                    await loadStaffEditSettings();
+                } catch(e) {
+                    console.warn("Failed to load settings", e);
+                }
 
                 let url = `${API_URL}/staff?limit=1000`;
                 const search = document.getElementById('privilegeSearchInput')?.value?.trim();
@@ -6633,10 +6672,15 @@
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) throw new Error("Failed to fetch staff");
-                const items = await res.json();
+                const data = await res.json();
+                const items = data.items || data;
                 
-                const tbody = document.getElementById('privilegesTableBody');
                 tbody.innerHTML = '';
+                
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center">No personnel found in your formation.</td></tr>';
+                    return;
+                }
                 
                 items.forEach(s => {
                     const tr = document.createElement('tr');
@@ -6658,7 +6702,10 @@
                     `;
                     tbody.appendChild(tr);
                 });
-            } catch(e) { console.error(e); }
+            } catch(e) { 
+                console.error(e);
+                tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Error loading personnel: ${e.message}</td></tr>`;
+            }
         }
         
         async function updateRole(id, newRole) {

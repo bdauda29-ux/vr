@@ -127,6 +127,11 @@ def login():
                                 verification_success = True
                     
                     if verification_success:
+                        formation_type = None
+                        if user.formation_id:
+                             fmt = crud.get_formation(db, user.formation_id)
+                             if fmt: formation_type = fmt.formation_type
+
                         token = auth.create_access_token(data={
                             "sub": user.username, 
                             "role": user.role, 
@@ -139,7 +144,8 @@ def login():
                             "role": user.role, 
                             "username": user.username, 
                             "id": user.id,
-                            "formation_id": user.formation_id
+                            "formation_id": user.formation_id,
+                            "formation_type": formation_type
                         })
                 
                 staff = crud.get_staff_by_nis(db, username)
@@ -167,6 +173,11 @@ def login():
                         staff.login_count += 1
                         db.commit()
                         
+                        formation_type = None
+                        if staff.formation_id:
+                             fmt = crud.get_formation(db, staff.formation_id)
+                             if fmt: formation_type = fmt.formation_type
+
                         token = auth.create_access_token(data={
                             "sub": staff.nis_no, 
                             "role": staff.role, 
@@ -180,6 +191,7 @@ def login():
                             "username": staff.nis_no, 
                             "id": staff.id,
                             "formation_id": staff.formation_id,
+                            "formation_type": formation_type,
                             "is_staff": True
                         })
                 
