@@ -1013,14 +1013,37 @@ def update_office_route(office_id: int):
     
     with next(get_db()) as db:
         # Check permissions for formation_admin
+        current_office = crud.get_office(db, office_id)
+        if not current_office:
+             return jsonify({"detail": "Not found"}), 404
+             
         if user["role"] == "formation_admin":
-             office = crud.get_office(db, office_id)
-             if not office or office.formation_id != user["formation_id"]:
+             if current_office.formation_id != user["formation_id"]:
                  return jsonify({"detail": "Permission denied"}), 403
 
+        old_name = current_office.name
+        
         try:
             obj = crud.update_office(db, office_id, name, office_type=office_type, parent_id=parent_id)
             if not obj: return jsonify({"detail": "Not found"}), 404
+            
+            # If name changed, update all staff records with old office name
+            if old_name and name and old_name != name:
+                from sqlalchemy import update
+                stmt = (
+                    update(models.Staff)
+                    .where(models.Staff.office == old_name)
+                    .values(office=name)
+                )
+                if user["role"] == "formation_admin":
+                    # Restrict update to staff in same formation (though office name should be unique enough usually)
+                    stmt = stmt.where(models.Staff.formation_id == user["formation_id"])
+                elif user.get("formation_id"):
+                     stmt = stmt.where(models.Staff.formation_id == user["formation_id"])
+                     
+                db.execute(stmt)
+                db.commit()
+            
             return jsonify(schemas.to_dict_office(obj))
         except ValueError as e:
             return jsonify({"detail": str(e)}), 400
@@ -1060,8 +1083,15 @@ def list_staff_endpoint():
         if not user: return jsonify({"detail": "Not authenticated"}), 401
         
         q = request.args.get("q")
-        state_id = request.args.get("state_id", type=int)
-        lga_id = request.args.get("lga_id", type=int)
+        
+        state_id = [int(x) for x in request.args.getlist("state_id") if x.strip().isdigit()]
+        if not state_id: state_id = None
+        
+        lga_id = [int(x) for x in request.args.getlist("lga_id") if x.strip().isdigit()]
+        if not lga_id: lga_id = None
+        
+        gender = [g for g in request.args.getlist("gender") if g.strip()]
+        if not gender: gender = None
         
         # Handle multi-select for rank and office
         rank = [r for r in request.args.getlist("rank") if r.strip()]
@@ -1088,9 +1118,9 @@ def list_staff_endpoint():
         
         # Allow special_admin and super_admin/main_admin to filter by formation
         if user["role"] in ["special_admin", "super_admin", "main_admin"]:
-             req_org_id = request.args.get("formation_id", type=int)
-             if req_org_id:
-                 formation_id = req_org_id
+             req_org_ids = [int(x) for x in request.args.getlist("formation_id") if x.strip().isdigit()]
+             if req_org_ids:
+                 formation_id = req_org_ids
              elif user["role"] == "special_admin":
                  # If no specific formation requested for special_admin, show all (global view)
                  formation_id = None
@@ -1122,7 +1152,8 @@ def list_staff_endpoint():
                 dopa_from=dopa_from,
                 dopa_to=dopa_to,
                 formation_id=formation_id,
-                include_count=True
+                include_count=True,
+                gender=gender
             )
             return jsonify({
                 "items": [schemas.to_dict_staff(item) for item in items],
@@ -1341,7 +1372,7 @@ def reset_staff_password(staff_id: int):
 @app.put("/staff/<int:staff_id>/role")
 def update_staff_role(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["super_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")

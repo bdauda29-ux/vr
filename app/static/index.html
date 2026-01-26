@@ -90,6 +90,38 @@
             opacity: 0.8;
         }
 
+        /* Modern Column Filters */
+        .th-filter-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        .th-filter-icon {
+            font-size: 0.8em;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+        .th-filter-icon:hover, .th-filter-icon.active {
+            opacity: 1;
+            background-color: rgba(0,0,0,0.1);
+            color: var(--bs-primary);
+        }
+        .filter-dropdown-menu {
+            min-width: 250px;
+            padding: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        .filter-options-container {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 5px;
+            margin-bottom: 5px;
+        }
+
     </style>
 </head>
 <body>
@@ -110,12 +142,8 @@
                             <i class="bi bi-speedometer2 me-1"></i> Dashboard
                         </a>
                     </li>
-                    <li class="nav-item d-none" id="switchToAdminItem">
-                        <a class="nav-link" href="#" onclick="switchToAdminMode()" title="Switch to Admin">
-                            <i class="bi bi-shield-lock me-1"></i> Switch to Admin
-                        </a>
-                    </li>
-                    <li class="nav-item" id="personnelNavItem">
+
+                    <li class="nav-item admin-only" id="personnelNavItem">
                         <a class="nav-link" href="#" onclick="showPersonnelTab('list-tab'); showView('personnel');" title="Personnel">
                             <i class="bi bi-people-fill me-1"></i> Personnel
                         </a>
@@ -133,6 +161,16 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#" onclick="showView('leave');" title="Leave">
                             <i class="bi bi-calendar-check me-1"></i> Leave
+                        </a>
+                    </li>
+                    <li class="nav-item d-none" id="switchToAdminItem">
+                        <a class="nav-link" href="#" onclick="switchToAdminMode()" title="Switch to Admin">
+                            <i class="bi bi-shield-lock me-1"></i> Switch to Admin
+                        </a>
+                    </li>
+                    <li class="nav-item d-none" id="switchToPersonalItem">
+                        <a class="nav-link" href="#" onclick="switchToPersonalMode()" title="Switch to Personal">
+                            <i class="bi bi-person me-1"></i> Switch to Personal
                         </a>
                     </li>
                     <li class="nav-item admin-only">
@@ -543,6 +581,19 @@
 
                 <!-- Dashboard View -->
                 <div id="view-dashboard" class="view-section">
+                    <!-- Notification Pane for Empty Fields -->
+                    <div class="row mb-4 d-none" id="dashboard-notifications-row">
+                        <div class="col-12">
+                            <div class="alert alert-warning border-warning shadow-sm">
+                                <h5 class="alert-heading"><i class="bi bi-exclamation-triangle-fill me-2"></i> Incomplete Profile Information</h5>
+                                <p class="mb-0">The following fields are missing from your profile. Please contact an admin to update them:</p>
+                                <ul class="mt-2 mb-0" id="dashboard-missing-fields-list">
+                                    <!-- Populated by JS -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row g-4 mb-4">
                         <div class="col-md-6 col-xl-3">
                             <div class="card stats-card bg-primary text-white h-100" onclick="showView('personnel')" style="cursor: pointer;">
@@ -654,7 +705,7 @@
                                         <li class="nav-item">
                                             <a class="nav-link active" href="#" onclick="setMainStatus('active', this)">Active Personnel</a>
                                         </li>
-                                        <li class="nav-item">
+                                        <li class="nav-item ms-auto">
                                             <a class="nav-link" href="#" onclick="setMainStatus('exited', this)">Posted Out / Exited</a>
                                         </li>
                                     </ul>
@@ -1841,7 +1892,6 @@
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>From</th>
                                     <th>To</th>
                                     <th>Remarks</th>
                                 </tr>
@@ -2168,6 +2218,23 @@
             try {
                 console.log("DOM Loaded, starting initialization...");
                 
+                // Initial UI State based on Role
+                if (role === 'staff') {
+                     // Staff: Hide admin items
+                     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+                     const sa = document.getElementById('switchToAdminItem');
+                     if(sa) sa.classList.add('d-none');
+                     const sp = document.getElementById('switchToPersonalItem');
+                     if(sp) sp.classList.add('d-none');
+                } else {
+                    // Admin/Super/Formation/Office: Default to Personal Mode (Staff Dashboard)
+                    // This means admin items hidden, Switch to Admin visible
+                    // We call switchToPersonalMode to ensure consistent state
+                    if (typeof switchToPersonalMode === 'function') {
+                        switchToPersonalMode();
+                    }
+                }
+                
                 // 1. Init Form Listener (Highest Priority)
                 const staffForm = document.getElementById('staffForm');
                 if (staffForm) {
@@ -2310,6 +2377,10 @@
                     
                     // 1. Show admin items
                     document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+
+                    // Show switch to personal button
+                    const switchPersonalBtn = document.getElementById('switchToPersonalItem');
+                    if(switchPersonalBtn) switchPersonalBtn.classList.remove('d-none');
                     
                     // 2. Background Admin Init
                     if (role === 'office_admin') {
@@ -2440,12 +2511,32 @@
             // Show admin items
             document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
             
-            // Hide switch button
-            const switchBtn = document.getElementById('switchToAdminItem');
-            if(switchBtn) switchBtn.classList.add('d-none');
+            // Hide switch to admin button
+            const switchAdminBtn = document.getElementById('switchToAdminItem');
+            if(switchAdminBtn) switchAdminBtn.classList.add('d-none');
+            
+            // Show switch to personal button
+            const switchPersonalBtn = document.getElementById('switchToPersonalItem');
+            if(switchPersonalBtn) switchPersonalBtn.classList.remove('d-none');
             
             // Show Admin Dashboard
             showView('dashboard');
+        }
+
+        function switchToPersonalMode() {
+            // Hide admin items
+            document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+            
+            // Show switch to admin button
+            const switchAdminBtn = document.getElementById('switchToAdminItem');
+            if(switchAdminBtn) switchAdminBtn.classList.remove('d-none');
+            
+            // Hide switch to personal button
+            const switchPersonalBtn = document.getElementById('switchToPersonalItem');
+            if(switchPersonalBtn) switchPersonalBtn.classList.add('d-none');
+            
+            // Show Personal Dashboard
+            showView('staff-dashboard');
         }
 
         function roleLabel(r) {
@@ -2549,6 +2640,33 @@
                 });
                 if (!res.ok) return;
                 const s = await res.json();
+
+                // Check for missing fields
+                const missingFields = [];
+                if (!s.surname) missingFields.push("Surname");
+                if (!s.other_names) missingFields.push("Other Names");
+                if (!s.rank) missingFields.push("Rank");
+                if (!s.gender) missingFields.push("Gender");
+                if (!s.dob) missingFields.push("Date of Birth");
+                if (!s.phone_no) missingFields.push("Phone Number");
+                if (!s.state) missingFields.push("State of Origin");
+                if (!s.lga) missingFields.push("LGA");
+                if (!s.office) missingFields.push("Office");
+                if (!s.dofa) missingFields.push("Date of First Appointment (DOFA)");
+                if (!s.dopa) missingFields.push("Date of Present Appointment (DOPA)");
+                if (!s.dopp) missingFields.push("Date of Present Posting (DOPP)");
+
+                const notifRow = document.getElementById('dashboard-notifications-row');
+                const notifList = document.getElementById('dashboard-missing-fields-list');
+                
+                if (notifRow && notifList) {
+                    if (missingFields.length > 0) {
+                        notifList.innerHTML = missingFields.map(f => `<li>${f}</li>`).join('');
+                        notifRow.classList.remove('d-none');
+                    } else {
+                        notifRow.classList.add('d-none');
+                    }
+                }
                 
                 // Update Name
                 const nameEl = document.getElementById('staffDashboardName');
@@ -3703,13 +3821,25 @@
              if (currentStatus) params.append('status', currentStatus);
              
              // Multi-select Ranks
-             document.querySelectorAll('.filter-rank-cb:checked').forEach(cb => params.append('rank', cb.value));
+             if (window.activeColumnFilters && window.activeColumnFilters.rank.length > 0) {
+                 window.activeColumnFilters.rank.forEach(r => params.append('rank', r));
+             } else {
+                 document.querySelectorAll('.filter-rank-cb:checked').forEach(cb => params.append('rank', cb.value));
+             }
              
             // Multi-select Offices
-            document.querySelectorAll('.filter-office-cb:checked').forEach(cb => params.append('office', cb.value));
+            if (window.activeColumnFilters && window.activeColumnFilters.office.length > 0) {
+                 window.activeColumnFilters.office.forEach(o => params.append('office', o));
+            } else {
+                document.querySelectorAll('.filter-office-cb:checked').forEach(cb => params.append('office', cb.value));
+            }
             
             // Multi-select Formations (Special Admin)
-            document.querySelectorAll('.filter-formation-cb:checked').forEach(cb => params.append('formation_id', cb.value));
+            if (window.activeColumnFilters && window.activeColumnFilters.formation.length > 0) {
+                 window.activeColumnFilters.formation.forEach(f => params.append('formation_id', f));
+            } else {
+                document.querySelectorAll('.filter-formation-cb:checked').forEach(cb => params.append('formation_id', cb.value));
+            }
 
             try {
                 const res = await fetch(`${API_URL}/staff?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` }});
@@ -3841,6 +3971,160 @@
             loadStaff();
         }
 
+        // --- Modern Column Filters Logic ---
+        const activeColumnFilters = {
+            rank: [],
+            office: [],
+            formation: [],
+            gender: [],
+            state_id: [],
+            lga_id: []
+        };
+
+        function renderThFilter(title, field) {
+            // Support rank, office, formation, gender, state, lga
+            if (!['rank', 'office', 'formation', 'gender', 'state_id', 'lga_id'].includes(field)) {
+                return `<th>${title}</th>`;
+            }
+            const isActive = activeColumnFilters[field].length > 0;
+            return `
+                <th style="position: relative;">
+                    <div class="th-filter-wrapper" onclick="openColumnFilter(event, '${field}')">
+                        <span>${title}</span>
+                        <i class="bi bi-funnel-fill th-filter-icon ${isActive ? 'active' : ''}" id="filter-icon-${field}"></i>
+                    </div>
+                    <div class="dropdown-menu filter-dropdown-menu" id="filter-dropdown-${field}">
+                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onclick="event.stopPropagation()" onkeyup="filterDropdownSearch(this)">
+                        <div class="d-flex justify-content-between mb-2">
+                            <a href="#" class="small text-decoration-none" onclick="event.stopPropagation(); toggleAllFilterOptions('${field}', true)">Select All</a>
+                            <a href="#" class="small text-decoration-none text-danger" onclick="event.stopPropagation(); toggleAllFilterOptions('${field}', false)">Clear</a>
+                        </div>
+                        <div class="filter-options-container" id="filter-options-${field}">
+                            <!-- Options loaded dynamically -->
+                        </div>
+                        <div class="d-flex justify-content-end mt-2 pt-2 border-top">
+                            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); applyColumnFilter('${field}')">Apply</button>
+                        </div>
+                    </div>
+                </th>
+            `;
+        }
+
+        function openColumnFilter(event, field) {
+            event.stopPropagation();
+            // Close other dropdowns
+            document.querySelectorAll('.filter-dropdown-menu.show').forEach(el => {
+                if (el.id !== `filter-dropdown-${field}`) el.classList.remove('show');
+            });
+
+            const dropdown = document.getElementById(`filter-dropdown-${field}`);
+            if (!dropdown) return;
+
+            // Toggle
+            if (dropdown.classList.contains('show')) {
+                dropdown.classList.remove('show');
+                return;
+            }
+
+            // Populate options if empty
+            const container = document.getElementById(`filter-options-${field}`);
+            if (container.innerHTML.trim() === '') {
+                let options = [];
+                let isObject = false; // For State/LGA where option is {id, name}
+                
+                if (field === 'rank') options = RANKS;
+                else if (field === 'office') options = officesList;
+                else if (field === 'gender') options = ['Male', 'Female'];
+                else if (field === 'state_id') {
+                    options = allStates || [];
+                    isObject = true;
+                }
+                else if (field === 'lga_id') {
+                    // Collect all LGAs from all states
+                    options = [];
+                    if (allStates) {
+                        allStates.forEach(s => {
+                            if (s.lgas) options.push(...s.lgas);
+                        });
+                    }
+                    // Sort by name
+                    options.sort((a, b) => a.name.localeCompare(b.name));
+                    isObject = true;
+                }
+                
+                if (options.length > 0) {
+                    container.innerHTML = options.map(opt => {
+                        const val = isObject ? opt.id : opt;
+                        const label = isObject ? opt.name : opt;
+                        const checked = activeColumnFilters[field].includes(String(val)) ? 'checked' : '';
+                        // Sanitized ID for HTML
+                        const safeId = String(val).replace(/[^a-zA-Z0-9]/g, '');
+                        return `
+                            <div class="form-check">
+                                <input class="form-check-input filter-cb-${field}" type="checkbox" value="${val}" id="cb-${field}-${safeId}" ${checked} onclick="event.stopPropagation()">
+                                <label class="form-check-label small" for="cb-${field}-${safeId}">${label}</label>
+                            </div>
+                        `;
+                    }).join('');
+                } else if (field === 'formation') {
+                     // Try to fetch formations if not loaded
+                     // This is a placeholder for formation support
+                     container.innerHTML = '<div class="text-muted small">Loading...</div>';
+                     // fetch logic here if needed
+                     // Quick fix: populate if window.formationsList exists (it might not be global yet)
+                     // If special admin, formations might be fetched.
+                }
+            }
+
+            dropdown.classList.add('show');
+
+            // Close on click outside
+            document.addEventListener('click', function closeMenu(e) {
+                if (!dropdown.contains(e.target) && !event.target.contains(e.target)) {
+                    dropdown.classList.remove('show');
+                    document.removeEventListener('click', closeMenu);
+                }
+            });
+        }
+
+        function filterDropdownSearch(input) {
+            const filter = input.value.toLowerCase();
+            const container = input.nextElementSibling.nextElementSibling; // skip links div
+            const items = container.getElementsByClassName('form-check');
+            Array.from(items).forEach(item => {
+                const text = item.textContent || item.innerText;
+                if (text.toLowerCase().indexOf(filter) > -1) {
+                    item.style.display = "";
+                } else {
+                    item.style.display = "none";
+                }
+            });
+        }
+
+        function toggleAllFilterOptions(field, select) {
+            const container = document.getElementById(`filter-options-${field}`);
+            const cbs = container.querySelectorAll(`input[type="checkbox"]`);
+            cbs.forEach(cb => cb.checked = select);
+        }
+
+        function applyColumnFilter(field) {
+            const container = document.getElementById(`filter-options-${field}`);
+            const cbs = container.querySelectorAll(`input.filter-cb-${field}:checked`);
+            activeColumnFilters[field] = Array.from(cbs).map(cb => cb.value);
+            
+            // Update Icon
+            const icon = document.getElementById(`filter-icon-${field}`);
+            if (activeColumnFilters[field].length > 0) icon.classList.add('active');
+            else icon.classList.remove('active');
+
+            // Close Dropdown
+            document.getElementById(`filter-dropdown-${field}`).classList.remove('show');
+
+            // Trigger Load
+            loadStaff();
+        }
+        // --- End Modern Column Filters Logic ---
+
         function buildSuperAdminTableHeader() {
             const thead = document.getElementById('staffTableHead');
             if (!thead) return;
@@ -3849,11 +4133,11 @@
                 html = `
                     <tr>
                         <th>S/N</th>
-                        ${role === 'special_admin' ? '<th>Formation</th>' : ''}
+                        ${role === 'special_admin' ? renderThFilter('Formation', 'formation') : ''}
                         <th>NIS/No</th>
                         <th>Surname</th>
                         <th>Other Names</th>
-                        <th>Rank</th>
+                        ${renderThFilter('Rank', 'rank')}
                         <th>Phone No</th>
                         <th>Reason for Exit</th>
                         <th>Effective Date</th>
@@ -3864,17 +4148,17 @@
                 html = `
                     <tr>
                         <th>S/N</th>
-                        ${role === 'special_admin' ? '<th>Formation</th>' : ''}
+                        ${role === 'special_admin' ? renderThFilter('Formation', 'formation') : ''}
                         <th>NIS/No</th>
                         <th>Surname</th>
                         <th>Other Names</th>
-                        <th>Rank</th>
+                        ${renderThFilter('Rank', 'rank')}
                         <th>Gender</th>
                         <th>DOB</th>
                         <th>Phone</th>
                         <th>Email</th>
                         <th>Qual</th>
-                        <th>Office</th>
+                        ${renderThFilter('Office', 'office')}
                         <th>State</th>
                         <th>LGA</th>
                         <th>DOFA</th>
@@ -3902,7 +4186,7 @@
                         <th>NIS/No</th>
                         <th>Surname</th>
                         <th>Other Names</th>
-                        <th>Rank</th>
+                        ${renderThFilter('Rank', 'rank')}
                         <th>Phone No</th>
                         <th>Reason for Exit</th>
                         <th>Effective Date</th>
@@ -3915,9 +4199,9 @@
                         <th>S/N</th>
                         <th>NIS/No</th>
                         <th>Name</th>
-                        <th>Rank</th>
+                        ${renderThFilter('Rank', 'rank')}
                         <th>DOFA / DOPA</th>
-                        <th>Office</th>
+                        ${renderThFilter('Office', 'office')}
                         <th>State/LGA</th>
                         <th>Phone</th>
                         <th>Actions</th>
@@ -5010,7 +5294,6 @@
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td>${isoToDmy(h.action_date) || '-'}</td>
-                            <td>${h.from_office || '-'}</td>
                             <td>${h.to_office || '-'}</td>
                             <td>${h.remarks || '-'}</td>
                         `;
@@ -6270,7 +6553,7 @@
         }
         
         async function loadPrivileges() {
-            if (role !== 'super_admin') return;
+            if (role !== 'super_admin' && role !== 'formation_admin') return;
             try {
                 await loadStaffEditSettings();
 

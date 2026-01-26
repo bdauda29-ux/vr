@@ -24,10 +24,10 @@ def get_staff_by_nis(db: Session, nis_no: str) -> Optional[models.Staff]:
 def list_staff(
     db: Session,
     q: Optional[str] = None,
-    state_id: Optional[int] = None,
-    lga_id: Optional[int] = None,
-    rank: Optional[str] = None,
-    office: Optional[str] = None,
+    state_id: Optional[Union[int, List[int]]] = None,
+    lga_id: Optional[Union[int, List[int]]] = None,
+    rank: Optional[Union[str, List[str]]] = None,
+    office: Optional[Union[str, List[str]]] = None,
     completeness: Optional[str] = None,
     status: Optional[str] = "active",
     dopp_order: Optional[str] = None,
@@ -37,8 +37,9 @@ def list_staff(
     exit_to=None,
     dopa_from=None,
     dopa_to=None,
-    formation_id: Optional[int] = None,
-    include_count: bool = False
+    formation_id: Optional[Union[int, List[int]]] = None,
+    include_count: bool = False,
+    gender: Optional[Union[str, List[str]]] = None
 ) -> Union[List[models.Staff], Tuple[List[models.Staff], int]]:
     # Build Rank Sorting Logic
     # We want to sort by Rank (Custom Order), then DOPA (Date of Present Appointment), then NIS No
@@ -70,9 +71,22 @@ def list_staff(
         stmt = stmt.where(models.Staff.dopa <= dopa_to)
 
     if state_id is not None:
-        stmt = stmt.where(models.Staff.state_id == state_id)
+        if isinstance(state_id, list):
+            stmt = stmt.where(models.Staff.state_id.in_(state_id))
+        else:
+            stmt = stmt.where(models.Staff.state_id == state_id)
+
     if lga_id is not None:
-        stmt = stmt.where(models.Staff.lga_id == lga_id)
+        if isinstance(lga_id, list):
+            stmt = stmt.where(models.Staff.lga_id.in_(lga_id))
+        else:
+            stmt = stmt.where(models.Staff.lga_id == lga_id)
+
+    if gender:
+        if isinstance(gender, list):
+            stmt = stmt.where(models.Staff.gender.in_(gender))
+        else:
+            stmt = stmt.where(models.Staff.gender == gender)
     if rank:
         if isinstance(rank, list):
              stmt = stmt.where(models.Staff.rank.in_(rank))
@@ -85,24 +99,43 @@ def list_staff(
              stmt = stmt.where(models.Staff.office == office)
              
     if formation_id is not None:
-        stmt = stmt.where(models.Staff.formation_id == formation_id)
+        if isinstance(formation_id, list):
+            stmt = stmt.where(models.Staff.formation_id.in_(formation_id))
+        else:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
     
     if completeness == "completed":
-        # Criteria: Must have State, LGA, and Office
+        # Criteria: Must have all critical fields filled
         stmt = stmt.where(
+            models.Staff.surname.is_not(None), models.Staff.surname != "",
+            models.Staff.other_names.is_not(None), models.Staff.other_names != "",
+            models.Staff.rank.is_not(None), models.Staff.rank != "",
+            models.Staff.gender.is_not(None), models.Staff.gender != "",
+            models.Staff.dob.is_not(None),
+            models.Staff.phone_no.is_not(None), models.Staff.phone_no != "",
             models.Staff.state_id.is_not(None),
             models.Staff.lga_id.is_not(None),
-            models.Staff.office.is_not(None),
-            models.Staff.office != ""
+            models.Staff.office.is_not(None), models.Staff.office != "",
+            models.Staff.dofa.is_not(None),
+            models.Staff.dopa.is_not(None),
+            models.Staff.dopp.is_not(None)
         )
     elif completeness == "incomplete":
-        # Criteria: Missing ANY of State, LGA, or Office
+        # Criteria: Missing ANY of the critical fields
         stmt = stmt.where(
             or_(
+                models.Staff.surname.is_(None), models.Staff.surname == "",
+                models.Staff.other_names.is_(None), models.Staff.other_names == "",
+                models.Staff.rank.is_(None), models.Staff.rank == "",
+                models.Staff.gender.is_(None), models.Staff.gender == "",
+                models.Staff.dob.is_(None),
+                models.Staff.phone_no.is_(None), models.Staff.phone_no == "",
                 models.Staff.state_id.is_(None),
                 models.Staff.lga_id.is_(None),
-                models.Staff.office.is_(None),
-                models.Staff.office == ""
+                models.Staff.office.is_(None), models.Staff.office == "",
+                models.Staff.dofa.is_(None),
+                models.Staff.dopa.is_(None),
+                models.Staff.dopp.is_(None)
             )
         )
 
