@@ -2648,6 +2648,11 @@
         async function loadStaffDashboardInfo() {
             if (!userId) return;
             try {
+                // Ensure offices are loaded for hierarchy
+                if (!window.allOffices) {
+                    await loadOffices();
+                }
+
                 // 1. Fetch Basic Info
                 const res = await fetch(`${API_URL}/staff/${userId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -2693,12 +2698,23 @@
                 const office = s.office || 'Not assigned';
                 const officeHierarchy = getOfficeHierarchy(office);
                 const doppStr = isoToDmy(s.dopp);
+                
                 const officeEl = document.getElementById('staffDashboardOffice');
-                const doppEl = document.getElementById('staffDashboardDopp');
+                const formationEl = document.getElementById('staffDashboardFormation');
                 const retEl = document.getElementById('staffDashboardRetirement');
                 
-                if (officeEl) officeEl.textContent = officeHierarchy;
-                if (doppEl) doppEl.textContent = doppStr || '-';
+                if (officeEl) {
+                    let officeText = officeHierarchy;
+                    if (doppStr) {
+                        officeText += ` (since ${doppStr})`;
+                    }
+                    officeEl.textContent = officeText;
+                }
+                
+                if (formationEl) {
+                    const formationName = s.formation ? (s.formation.name || s.formation.code) : 'Not assigned';
+                    formationEl.textContent = formationName;
+                }
                 
                 // Calculate and display retirement date
                 if (retEl) {
