@@ -2401,6 +2401,9 @@
                     }
                     
                     loadStaff();
+                    // Set Admin Color
+                    const navbar = document.querySelector('.navbar');
+                    if(navbar) navbar.style.setProperty('background-color', '#805626', 'important');
                     showView('dashboard');
                     
                     const params = new URLSearchParams(window.location.search);
@@ -2559,6 +2562,10 @@
                 switchPersonalBtn.classList.remove('d-none');
             }
             
+            // Change Navbar Color to Admin Brown
+            const navbar = document.querySelector('.navbar');
+            if(navbar) navbar.style.setProperty('background-color', '#805626', 'important');
+
             // Show Admin Dashboard
             showView('dashboard');
         }
@@ -2583,6 +2590,10 @@
             const switchPersonalBtn = document.getElementById('switchToPersonalItem');
             if(switchPersonalBtn) switchPersonalBtn.classList.add('d-none');
             
+            // Revert Navbar Color to Personal Green
+            const navbar = document.querySelector('.navbar');
+            if(navbar) navbar.style.setProperty('background-color', '#198754', 'important');
+
             // Show Personal Dashboard
             showView('staff-dashboard');
         }
@@ -2799,7 +2810,7 @@
                         if (s.office) {
                             html += `
                                 <tr class="table-warning">
-                                    <td><strong>Current</strong></td>
+                                    <td><strong>${s.dopp ? isoToDmy(s.dopp) : 'Current'}</strong></td>
                                     <td><strong>${s.office}</strong></td>
                                     <td><strong>Present Office</strong></td>
                                 </tr>
