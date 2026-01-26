@@ -2456,14 +2456,15 @@
                         </div>
 
                         <div class="row">
-                            <!-- Posting History -->
+                            <!-- Posting & Movement History -->
                             <div class="col-md-6 mb-4">
-                                <div class="card shadow-sm h-100">
+                                <!-- Inter-Formation Postings -->
+                                <div class="card shadow-sm mb-4">
                                     <div class="card-header bg-light">
-                                        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Posting History</h5>
+                                        <h5 class="mb-0"><i class="bi bi-cursor me-2"></i>Posting History (Inter-Formation)</h5>
                                     </div>
                                     <div class="card-body p-0">
-                                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
                                             <table class="table table-hover table-striped mb-0">
                                                 <thead class="table-light sticky-top">
                                                     <tr>
@@ -2473,7 +2474,30 @@
                                                     </tr>
                                                 </thead>
                                                 <tbody id="staffPostingHistoryBody">
-                                                    <tr><td colspan="4" class="text-center p-3">Loading...</td></tr>
+                                                    <tr><td colspan="3" class="text-center p-3">Loading...</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Intra-Formation Movements -->
+                                <div class="card shadow-sm">
+                                    <div class="card-header bg-light">
+                                        <h5 class="mb-0"><i class="bi bi-arrow-left-right me-2"></i>Movement History (Internal)</h5>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                            <table class="table table-hover table-striped mb-0">
+                                                <thead class="table-light sticky-top">
+                                                    <tr>
+                                                        <th>Date</th>
+                                                        <th>Office</th>
+                                                        <th>Remark</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="staffMovementHistoryBody">
+                                                    <tr><td colspan="3" class="text-center p-3">Loading...</td></tr>
                                                 </tbody>
                                             </table>
                                         </div>
@@ -2661,18 +2685,22 @@
 
                 // Check for missing fields
                 const missingFields = [];
-                if (!s.surname) missingFields.push("Surname");
-                if (!s.other_names) missingFields.push("Other Names");
-                if (!s.rank) missingFields.push("Rank");
-                if (!s.gender) missingFields.push("Gender");
-                if (!s.dob) missingFields.push("Date of Birth");
-                if (!s.phone_no) missingFields.push("Phone Number");
-                if (!s.state) missingFields.push("State of Origin");
-                if (!s.lga) missingFields.push("LGA");
-                if (!s.office) missingFields.push("Office");
-                if (!s.dofa) missingFields.push("Date of First Appointment (DOFA)");
-                if (!s.dopa) missingFields.push("Date of Present Appointment (DOPA)");
-                if (!s.dopp) missingFields.push("Date of Present Posting (DOPP)");
+                const requiredFields = [
+                    {k: 'surname', l: 'Surname'}, {k: 'other_names', l: 'Other Names'},
+                    {k: 'rank', l: 'Rank'}, {k: 'gender', l: 'Gender'},
+                    {k: 'dob', l: 'Date of Birth'}, {k: 'phone_no', l: 'Phone Number'},
+                    {k: 'state', l: 'State of Origin'}, {k: 'lga', l: 'LGA'},
+                    {k: 'office', l: 'Office'}, {k: 'dofa', l: 'Date of First Appointment (DOFA)'},
+                    {k: 'dopa', l: 'Date of Present Appointment (DOPA)'},
+                    {k: 'dopp', l: 'Date of Present Posting (DOPP)'},
+                    {k: 'qualification', l: 'Qualification'}, {k: 'email', l: 'Email'},
+                    {k: 'home_town', l: 'Home Town'}, {k: 'next_of_kin', l: 'Next of Kin'},
+                    {k: 'nok_phone', l: 'Next of Kin Phone'}
+                ];
+                
+                requiredFields.forEach(f => {
+                    if (!s[f.k]) missingFields.push(f.l);
+                });
 
                 const notifRow = document.getElementById('dashboard-notifications-row');
                 const notifList = document.getElementById('dashboard-missing-fields-list');
@@ -2727,16 +2755,37 @@
                 });
                 if (resHist.ok) {
                     const histData = await resHist.json();
-                    const tbody = document.getElementById('staffPostingHistoryBody');
-                    if (tbody) {
-                        if (histData.length === 0) {
-                            tbody.innerHTML = '<tr><td colspan="4" class="text-center p-3">No posting history found.</td></tr>';
+                    
+                    const postings = histData.filter(h => h.action_type === 'POSTING' || h.action_type === 'CURRENT');
+                    const movements = histData.filter(h => h.action_type === 'MOVE');
+                    
+                    // Render Postings
+                    const tbodyPost = document.getElementById('staffPostingHistoryBody');
+                    if (tbodyPost) {
+                        if (postings.length === 0) {
+                            tbodyPost.innerHTML = '<tr><td colspan="3" class="text-center p-3">No posting history found.</td></tr>';
                         } else {
-                            tbody.innerHTML = histData.map(h => `
+                            tbodyPost.innerHTML = postings.map(h => `
                                 <tr>
                                     <td>${isoToDmy(h.action_date)}</td>
                                     <td>${h.to_office || '-'}</td>
                                     <td>${h.remarks || h.action_type}</td>
+                                </tr>
+                            `).join('');
+                        }
+                    }
+                    
+                    // Render Movements
+                    const tbodyMove = document.getElementById('staffMovementHistoryBody');
+                    if (tbodyMove) {
+                        if (movements.length === 0) {
+                            tbodyMove.innerHTML = '<tr><td colspan="3" class="text-center p-3">No internal movement history found.</td></tr>';
+                        } else {
+                            tbodyMove.innerHTML = movements.map(h => `
+                                <tr>
+                                    <td>${isoToDmy(h.action_date)}</td>
+                                    <td>${h.to_office || '-'}</td>
+                                    <td>${h.remarks || 'Internal Move'}</td>
                                 </tr>
                             `).join('');
                         }
