@@ -1157,8 +1157,15 @@ def list_staff_endpoint():
                 with next(get_db()) as db:
                      fmt = crud.get_formation(db, f_id)
                      if fmt and fmt.formation_type == "Zonal Command":
+                         # Get all descendants (recursive - 2 levels deep should suffice for Zone -> State -> Area)
+                         all_ids = {f_id}
                          children = db.scalars(select(models.Formation).where(models.Formation.parent_id == f_id)).all()
-                         formation_id = [f_id] + [c.id for c in children]
+                         for c in children:
+                             all_ids.add(c.id)
+                             grand_children = db.scalars(select(models.Formation).where(models.Formation.parent_id == c.id)).all()
+                             for gc in grand_children:
+                                 all_ids.add(gc.id)
+                         formation_id = list(all_ids)
 
         with next(get_db()) as db:
             if user["role"] == "office_admin":

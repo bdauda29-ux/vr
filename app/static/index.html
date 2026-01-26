@@ -126,7 +126,7 @@
 </head>
 <body>
     <!-- Top Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-success fixed-top shadow-sm">
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top shadow-sm" style="background-color: #805626 !important;">
         <div class="container-fluid">
             <a class="navbar-brand d-flex flex-column" href="#">
                 <span><i class="bi bi-shield-lock-fill me-2"></i><span id="navbarBrandText">Personnel Formation</span></span>
@@ -2794,10 +2794,22 @@
                     // Render Movements
                     const tbodyMove = document.getElementById('staffMovementHistoryBody');
                     if (tbodyMove) {
+                        let html = '';
+                        // Add Present Office Row
+                        if (s.office) {
+                            html += `
+                                <tr class="table-warning">
+                                    <td><strong>Current</strong></td>
+                                    <td><strong>${s.office}</strong></td>
+                                    <td><strong>Present Office</strong></td>
+                                </tr>
+                            `;
+                        }
+
                         if (movements.length === 0) {
-                            tbodyMove.innerHTML = '<tr><td colspan="3" class="text-center p-3">No internal movement history found.</td></tr>';
+                            if (!s.office) html += '<tr><td colspan="3" class="text-center p-3">No internal movement history found.</td></tr>';
                         } else {
-                            tbodyMove.innerHTML = movements.map(h => `
+                            html += movements.map(h => `
                                 <tr>
                                     <td>${isoToDmy(h.action_date)}</td>
                                     <td>${h.to_office || '-'}</td>
@@ -2805,6 +2817,7 @@
                                 </tr>
                             `).join('');
                         }
+                        tbodyMove.innerHTML = html;
                     }
                 }
 
