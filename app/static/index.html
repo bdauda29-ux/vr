@@ -4608,7 +4608,7 @@
                                 <li><a class="dropdown-item" href="#" onclick="editStaff(${s.id}); return false;"><i class="bi bi-pencil me-2"></i>Edit</a></li>
                     `;
 
-                    if (role === 'super_admin' || role === 'main_admin') {
+                    if (role === 'super_admin' || role === 'main_admin' || role === 'formation_admin') {
                         actionBtns += `
                                 <li><a class="dropdown-item" href="#" onclick="openMoveModal(${s.id}); return false;"><i class="bi bi-arrow-right-circle me-2"></i>Move</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>History</a></li>

@@ -851,13 +851,25 @@ def list_offices_route():
     formation_id = user.get("formation_id") if user else None
     
     with next(get_db()) as db:
-        items = crud.list_offices_model(db, formation_id=formation_id)
+        search_formation_ids = formation_id
+        if formation_id:
+             fmt = crud.get_formation(db, formation_id)
+             if fmt and fmt.formation_type == "Zonal Command":
+                 # Add children
+                 children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+                 search_formation_ids = [formation_id] + [c.id for c in children]
+
+        items = crud.list_offices_model(db, formation_id=search_formation_ids)
         existing_names = {i.name.strip().lower() for i in items if i and i.name and i.name.strip()}
         
         # Only sync staff offices if user is logged in and belongs to an org (or is special admin)
         if user:
              stmt = select(distinct(models.Staff.office)).where(models.Staff.office.is_not(None), models.Staff.office != "")
              if formation_id:
+                 # If Zonal, we might want to sync from children too?
+                 # For now, keep sync restricted to own formation to avoid pollution, 
+                 # or sync if we really want to see them.
+                 # Let's keep it simple: sync mainly for own formation.
                  stmt = stmt.where(models.Staff.formation_id == formation_id)
              stmt = stmt.order_by(models.Staff.office)
              
@@ -874,7 +886,8 @@ def list_offices_route():
                 added = True
              if added:
                 db.commit()
-                items = crud.list_offices_model(db, formation_id=formation_id)
+                # Re-fetch with potentially new offices (though we only added to own formation)
+                items = crud.list_offices_model(db, formation_id=search_formation_ids)
                 
         return jsonify([schemas.to_dict_office(i) for i in items])
 
@@ -1387,7 +1400,7 @@ def update_staff_role(staff_id: int):
 @app.post("/staff/<int:staff_id>/move")
 def move_staff(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -1410,6 +1423,23 @@ def move_staff(staff_id: int):
         
         if formation_id and staff.formation_id != formation_id:
             return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            
+        # Zonal Command Validation for Formation Admin
+        if user["role"] == "formation_admin" and formation_id:
+            fmt = crud.get_formation(db, formation_id)
+            if fmt and fmt.formation_type == "Zonal Command":
+                # Allowed: Own formation + Children
+                children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+                allowed_ids = [formation_id] + [c.id for c in children]
+                
+                # Check if new_office exists in these formations
+                # We check by name since office is passed as name
+                stmt = select(models.Office).where(
+                    func.lower(models.Office.name) == new_office.lower(),
+                    models.Office.formation_id.in_(allowed_ids)
+                )
+                if not db.scalar(stmt):
+                    return jsonify({"detail": "Invalid office. Zonal Admins can only move staff to offices within their Zone or State Commands."}), 400
         
         old_office = staff.office
         if old_office == new_office:
@@ -1438,13 +1468,23 @@ def move_staff(staff_id: int):
 @app.get("/staff/<int:staff_id>/history")
 def get_staff_history(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "staff", "office_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "staff", "office_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
         # Check permission for staff role
         if user["role"] == "staff" and user["id"] != staff_id:
              return jsonify({"detail": "Permission denied"}), 403
+        
+        # Check permission for formation_admin
+        if user["role"] == "formation_admin":
+             staff = crud.get_staff(db, staff_id)
+             if not staff: return jsonify({"detail": "Not found"}), 404
+             # For now, restrict to same formation. 
+             # If Zonal Admins need to see history of child formation staff, this needs to be expanded.
+             # Given list_staff is strict, we keep this strict too.
+             if staff.formation_id != user.get("formation_id"):
+                  return jsonify({"detail": "Permission denied"}), 403
 
         stmt = select(models.PostingHistory).where(models.PostingHistory.staff_id == staff_id)
         
@@ -1490,7 +1530,7 @@ def get_staff_history(staff_id: int):
 @app.get("/staff/<int:staff_id>/promotions")
 def get_staff_promotions(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "staff", "office_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "staff", "office_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
@@ -1499,6 +1539,10 @@ def get_staff_promotions(staff_id: int):
              
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
+
+        if user["role"] == "formation_admin":
+             if staff.formation_id != user.get("formation_id"):
+                  return jsonify({"detail": "Permission denied"}), 403
         
         # Query Audit Logs for updates to this staff that involve rank
         # We look for action="UPDATE" and target=f"Staff: {staff.nis_no}" (or similar)

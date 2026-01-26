@@ -255,10 +255,13 @@ def list_offices(db: Session, formation_id: Optional[int] = None) -> List[str]:
         stmt = stmt.where(models.Staff.formation_id == formation_id)
     return list(db.scalars(stmt))
 
-def list_offices_model(db: Session, formation_id: Optional[int] = None) -> List[models.Office]:
+def list_offices_model(db: Session, formation_id: Optional[Union[int, List[int]]] = None) -> List[models.Office]:
     stmt = select(models.Office).order_by(models.Office.name)
-    if formation_id:
-        stmt = stmt.where(models.Office.formation_id == formation_id)
+    if formation_id is not None:
+        if isinstance(formation_id, list):
+            stmt = stmt.where(models.Office.formation_id.in_(formation_id))
+        else:
+            stmt = stmt.where(models.Office.formation_id == formation_id)
     return list(db.scalars(stmt))
 
 def get_office(db: Session, office_id: int) -> Optional[models.Office]:
