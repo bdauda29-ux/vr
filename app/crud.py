@@ -299,6 +299,11 @@ def update_office(db: Session, office_id: int, name: str, office_type: Optional[
         if existing:
             raise ValueError(f"Office '{name}' already exists in this formation")
 
+        if office_type == "Directorate":
+             fmt = db.get(models.Formation, obj.formation_id)
+             if not fmt or fmt.formation_type != "Directorate":
+                 raise ValueError("Office type 'Directorate' can only be assigned in a Directorate formation")
+
         obj.name = name
         if office_type is not None:
             obj.office_type = office_type

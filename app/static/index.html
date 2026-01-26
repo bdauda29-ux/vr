@@ -2427,6 +2427,16 @@
             if (dashView && dashView.children.length === 0) {
                 dashView.innerHTML = `
                     <div class="container mt-4">
+                        <div id="dashboard-notifications-row" class="row mb-3 d-none">
+                            <div class="col-12">
+                                <div class="alert alert-warning">
+                                    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>Action Required: Missing Information</h6>
+                                    <p class="mb-1">Please update your profile. The following fields are empty:</p>
+                                    <ul id="dashboard-missing-fields-list" class="mb-0"></ul>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row">
                             <div class="col-md-12 mb-4">
                                 <div class="card shadow-sm">
@@ -4385,7 +4395,7 @@
                     tr.innerHTML = `
                         <td>${index + 1}</td>
                         ${formationCell}
-                        <td ${contentEditableAttr} data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
+                        <td><a href="#" onclick="openHistoryModal(${s.id}); return false;" class="text-decoration-none fw-bold">${s.nis_no || ''}</a></td>
                         <td ${contentEditableAttr} data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
                         <td ${contentEditableAttr} data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
                         ${rankCell}
@@ -4398,7 +4408,7 @@
                     tr.innerHTML = `
                         <td>${index + 1}</td>
                         ${formationCell}
-                        <td ${contentEditableAttr} data-field="nis_no" data-original="${s.nis_no || ''}">${s.nis_no || ''}</td>
+                        <td><a href="#" onclick="openHistoryModal(${s.id}); return false;" class="text-decoration-none fw-bold">${s.nis_no || ''}</a></td>
                         <td ${contentEditableAttr} data-field="surname" data-original="${surnameFormatted}">${surnameFormatted}</td>
                         <td ${contentEditableAttr} data-field="other_names" data-original="${otherNamesFormatted}">${otherNamesFormatted}</td>
                         ${rankCell}
@@ -6235,8 +6245,11 @@
 
                 data.forEach((r, idx) => {
                     editRequestsCache[r.id] = r;
-                    const changesObj = r.data || {};
+                    const changesObj = r.changes || {};
                     const changeCount = Object.keys(changesObj).length;
+                    
+                    if (changeCount === 0) return;
+
                     const changesDetails = Object.entries(changesObj)
                         .map(([k, v]) => `${k}: ${v}`)
                         .join(', ');

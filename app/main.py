@@ -1279,7 +1279,17 @@ def update_staff(staff_id: int):
                          original_values[k] = old_val.isoformat() if old_val else None
                 else:
                      old_val = getattr(existing, k)
-                     if old_val != v:
+                     
+                     # Normalize for comparison (treat empty string and None as same)
+                     norm_v = v
+                     if isinstance(v, str) and not v.strip():
+                         norm_v = None
+                     
+                     norm_old = old_val
+                     if isinstance(old_val, str) and not old_val.strip():
+                         norm_old = None
+                         
+                     if norm_old != norm_v:
                          changes[k] = v
                          original_values[k] = old_val
             
@@ -1291,9 +1301,6 @@ def update_staff(staff_id: int):
                 obj = crud.update_staff(db, existing, data)
                 if obj:
                     # Create Edit Request (Log) with status "review_pending"
-                    # We store the *ORIGINAL* values in 'data' field so we can revert if rejected
-                    # Or we store 'changes' and 'original' both?
-                    # Let's store a structured object: { "changes": {...}, "original": {...} }
                     log_payload = {
                         "changes": changes,
                         "original": original_values
@@ -1313,6 +1320,16 @@ def update_staff(staff_id: int):
                 return jsonify({"detail": "Not found"}), 404
             except ValueError as e:
                 return jsonify({"detail": str(e)}), 400
+        
+        # Admin Update (Direct Update)
+        try:
+            obj = crud.update_staff(db, existing, data)
+            if obj:
+                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details", formation_id=formation_id)
+                return jsonify(schemas.to_dict_staff(obj))
+            return jsonify({"detail": "Not found"}), 404
+        except ValueError as e:
+            return jsonify({"detail": str(e)}), 400
 
 @app.delete("/staff/<int:staff_id>")
 def delete_staff(staff_id: int):
@@ -1489,9 +1506,11 @@ def move_staff(staff_id: int):
         if action_type == "POSTING":
              staff.formation_id = target_fmt_id
              staff.formation_dopp = effective_date
+             staff.dopp = effective_date
              
         # Usually a move implies updating DOPP (Date of Present Posting)
-        staff.dopp = effective_date
+        # But we only update DOPP for Inter-Formation Posting per user request
+        # staff.dopp = effective_date 
         
         db.commit()
         crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=formation_id)
