@@ -2394,16 +2394,16 @@
                 }
 
                 // Role Based UI
-                    // if (role === 'special_admin') {
-                    //     document.querySelectorAll('.special-only').forEach(el => el.classList.remove('d-none'));
-                    //     populateFormationFilter();
-                    //     showView('formations');
+                    if (role === 'special_admin') {
+                        document.querySelectorAll('.special-only').forEach(el => el.classList.remove('d-none'));
+                        populateFormationFilter();
+                        showView('formations');
                         
-                    //     // Hide loader
-                    //     const loader = document.getElementById('global-loader');
-                    //     if (loader) loader.style.display = 'none';
-                    //     return;
-                    // }
+                        // Hide loader
+                        const loader = document.getElementById('global-loader');
+                        if (loader) loader.style.display = 'none';
+                        return;
+                    }
 
                     // Setup Staff Dashboard View (HTML injection)
                     setupStaffDashboardView();

@@ -651,10 +651,13 @@ def dashboard_stats():
         # not formations under it. So we REMOVE the recursive ID collection here for the main stats.
         # The sub-formation stats endpoint will handle the breakdown.
         
-        # if user.get("role") == "formation_admin" and formation_id:
-        #    fmt = crud.get_formation(db, formation_id)
-        #    if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
-        #        ... (recursion removed) ...
+        # However, for SHQ, user requested: "all directorate should automatically be under service headquarters... giving a total value"
+        target_ids = formation_id
+        if user.get("role") == "formation_admin" and formation_id:
+             fmt = crud.get_formation(db, formation_id)
+             if fmt and (fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters"):
+                 # SHQ aggregates ALL descendants (Directorates etc)
+                 target_ids = crud.get_all_descendant_ids(db, formation_id)
 
         # Auto-Retirement Check (Triggered on Dashboard Load)
         # "when a personnel retirement date reaches, the system should automatically out him as retired, except for the rank of CGI"
@@ -679,7 +682,7 @@ def dashboard_stats():
             print(f"Auto-retirement error: {e}")
             db.rollback()
 
-        stats = crud.get_dashboard_stats(db, formation_id=formation_id)
+        stats = crud.get_dashboard_stats(db, formation_id=target_ids)
         stats["office_name"] = None
         return jsonify(stats)
 
@@ -1304,24 +1307,34 @@ def list_staff_endpoint():
                  # If no specific formation requested for special_admin, show all (global view)
                  formation_id = None
         
-        # Formation Admin: Allow viewing their own personnel + Child Formations if Zonal
-        if user["role"] == "formation_admin":
-            f_id = user.get("formation_id")
-            if f_id:
-                with next(get_db()) as db:
-                     fmt = crud.get_formation(db, f_id)
-                     if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
-                         # Get all descendants (recursive - 2 levels deep should suffice for Zone -> State -> Area)
-                         all_ids = {f_id}
-                         children = db.scalars(select(models.Formation).where(models.Formation.parent_id == f_id)).all()
-                         for c in children:
-                             all_ids.add(c.id)
-                             grand_children = db.scalars(select(models.Formation).where(models.Formation.parent_id == c.id)).all()
-                             for gc in grand_children:
-                                 all_ids.add(gc.id)
-                         formation_id = list(all_ids)
-
         with next(get_db()) as db:
+            # Formation Admin: Allow viewing their own personnel + Child Formations if Zonal
+            if user["role"] == "formation_admin":
+                f_id = user.get("formation_id")
+                if f_id:
+                     fmt = crud.get_formation(db, f_id)
+                     if fmt and fmt.formation_type == "Zonal Command":
+                         formation_id = crud.get_all_descendant_ids(db, f_id)
+                     else:
+                         formation_id = f_id
+
+            # SHQ Expansion: If filtering by SHQ, include all Directorates/descendants
+            if formation_id:
+                if not isinstance(formation_id, list):
+                    formation_id = [formation_id]
+                
+                expanded_ids = set(formation_id)
+                # Check for SHQ in the requested IDs
+                # We need to query to check type
+                # Optimization: Only query if not already known?
+                # Just loop and check.
+                for fid in formation_id:
+                    fmt = crud.get_formation(db, fid)
+                    if fmt and (fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters"):
+                        descendants = crud.get_all_descendant_ids(db, fid)
+                        expanded_ids.update(descendants)
+                formation_id = list(expanded_ids)
+
             if user["role"] == "office_admin":
                 staff_user = crud.get_staff(db, user["id"])
                 if not staff_user or not staff_user.office: return jsonify({"items": [], "total": 0}), 200
@@ -1616,7 +1629,21 @@ def move_staff(staff_id: int):
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
         
-        if formation_id and staff.formation_id != formation_id:
+        # Permission Check:
+        # 1. Standard: Must be in same formation
+        # 2. Zonal Admin Exception: Can access staff in sub-formations
+        allowed_access = False
+        if not formation_id or staff.formation_id == formation_id:
+            allowed_access = True
+        else:
+            # Check if user is Zonal Admin and staff is in sub-formation
+            user_fmt = crud.get_formation(db, formation_id)
+            if user_fmt and user_fmt.formation_type == "Zonal Command":
+                 zonal_descendants = crud.get_all_descendant_ids(db, formation_id)
+                 if staff.formation_id in zonal_descendants:
+                     allowed_access = True
+        
+        if not allowed_access:
             return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
         # Resolve New Office
@@ -1919,15 +1946,19 @@ def posting_staff(staff_id: int):
             if staff.formation_id == user_fmt_id:
                 allowed_source = True
             elif user_fmt.formation_type == "Zonal Command":
-                if staff_fmt and staff_fmt.parent_id == user_fmt_id:
+                # Recursive check for source
+                zonal_descendants = crud.get_all_descendant_ids(db, user_fmt_id)
+                if staff.formation_id in zonal_descendants:
                     allowed_source = True
             
             if not allowed_source:
                 return jsonify({"detail": "Permission denied: You can only post staff from your formation (or sub-formations for Zonal Commands)."}), 403
 
             if user_fmt.formation_type == "Zonal Command":
-                target_fmt = db.get(models.Formation, new_formation_id)
-                if not target_fmt or target_fmt.parent_id != user_fmt_id:
+                # Recursive check for target
+                # Allow posting TO self or descendants
+                zonal_descendants = crud.get_all_descendant_ids(db, user_fmt_id)
+                if new_formation_id != user_fmt_id and new_formation_id not in zonal_descendants:
                     return jsonify({"detail": "Permission denied: Zonal Commands can only post to formations under their command."}), 403
 
 

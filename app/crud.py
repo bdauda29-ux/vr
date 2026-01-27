@@ -220,7 +220,19 @@ def list_audit_logs(db: Session, limit: int = 100, offset: int = 0, formation_id
         stmt = stmt.where(models.AuditLog.action.in_(actions))
     return list(db.scalars(stmt))
 
-def get_dashboard_stats(db: Session, formation_id: Optional[int] = None):
+def get_all_descendant_ids(db: Session, root_id: int) -> list[int]:
+    ids = {root_id}
+    queue = [root_id]
+    while queue:
+        curr = queue.pop(0)
+        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr)).all()
+        for c in children:
+            if c.id not in ids:
+                ids.add(c.id)
+                queue.append(c.id)
+    return list(ids)
+
+def get_dashboard_stats(db: Session, formation_id: Optional[Union[int, list[int]]] = None):
     staff_q = select(func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None))
     office_q = select(func.count(distinct(models.Staff.office))).where(
             models.Staff.exit_date.is_(None),
