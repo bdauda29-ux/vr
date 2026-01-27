@@ -641,10 +641,71 @@ def dashboard_stats():
                 "office_name": office_name,
                 "rank_counts": rank_counts,
             })
+            
+        # Zonal Command Check for Aggregated Stats
+        if user.get("role") == "formation_admin" and formation_id:
+            fmt = crud.get_formation(db, formation_id)
+            if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
+                # Get all descendants recursively
+                all_ids = {formation_id}
+                queue = [formation_id]
+                while queue:
+                    curr_id = queue.pop(0)
+                    children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr_id)).all()
+                    for c in children:
+                        if c.id not in all_ids:
+                            all_ids.add(c.id)
+                            queue.append(c.id)
+                formation_id = list(all_ids)
 
         stats = crud.get_dashboard_stats(db, formation_id=formation_id)
         stats["office_name"] = None
         return jsonify(stats)
+
+@app.get("/dashboard/sub-formation-stats")
+def dashboard_sub_formation_stats():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    formation_id = user.get("formation_id")
+    if not formation_id: return jsonify([])
+    
+    with next(get_db()) as db:
+        # Check if Zonal Command
+        fmt = crud.get_formation(db, formation_id)
+        if not fmt or not fmt.formation_type or fmt.formation_type.strip().lower() != "zonal command":
+            return jsonify([])
+            
+        # Get Direct Children
+        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+        
+        results = []
+        for child in children:
+            # For each child, get its recursive subtree IDs
+            child_ids = {child.id}
+            queue = [child.id]
+            while queue:
+                curr_id = queue.pop(0)
+                sub_children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr_id)).all()
+                for sc in sub_children:
+                    if sc.id not in child_ids:
+                        child_ids.add(sc.id)
+                        queue.append(sc.id)
+            
+            # Count staff in these IDs
+            count = db.scalar(
+                select(func.count(models.Staff.id))
+                .where(
+                    models.Staff.exit_date.is_(None),
+                    models.Staff.formation_id.in_(list(child_ids))
+                )
+            )
+            results.append({"name": child.name, "count": count})
+            
+        # Sort by name
+        results.sort(key=lambda x: x["name"])
+        return jsonify(results)
 
 @app.get("/admin/exit-requests")
 def list_exit_requests():
@@ -1589,10 +1650,10 @@ def move_staff(staff_id: int):
                  fmt_name = target_fmt.name
                  if target_fmt.formation_type == "Directorate":
                      fmt_name = f"SHQ ({target_fmt.code})"
-                 to_office_val = f"{fmt_name} - {new_office}"
+                 to_office_val = fmt_name # Store only Formation Name as requested
         else:
             # Intra-formation move
-            to_office_val = f"{current_fmt_name} - {new_office}"
+            to_office_val = new_office # Store only Office Name for internal move
 
         # Prepare Remarks with History Info
         history_remarks = remarks
@@ -1641,10 +1702,34 @@ def get_staff_history(staff_id: int):
         if user["role"] == "formation_admin":
              staff = crud.get_staff(db, staff_id)
              if not staff: return jsonify({"detail": "Not found"}), 404
-             # For now, restrict to same formation. 
-             # If Zonal Admins need to see history of child formation staff, this needs to be expanded.
-             # Given list_staff is strict, we keep this strict too.
-             if staff.formation_id != user.get("formation_id"):
+             
+             user_fmt_id = user.get("formation_id")
+             allowed = False
+             
+             if staff.formation_id == user_fmt_id:
+                 allowed = True
+             else:
+                 # Check if Zonal Command and staff is in sub-formation
+                 fmt = crud.get_formation(db, user_fmt_id)
+                 if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
+                     # Recursive check
+                     # We can just check if staff's formation is a descendant
+                     # But traversing down from Zonal might be faster if tree is small, or traversing up from staff.
+                     # Given we have the "collect all ids" logic, let's use that pattern for consistency.
+                     all_ids = {user_fmt_id}
+                     queue = [user_fmt_id]
+                     while queue:
+                        curr_id = queue.pop(0)
+                        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr_id)).all()
+                        for c in children:
+                            if c.id not in all_ids:
+                                all_ids.add(c.id)
+                                queue.append(c.id)
+                     
+                     if staff.formation_id in all_ids:
+                         allowed = True
+             
+             if not allowed:
                   return jsonify({"detail": "Permission denied"}), 403
 
         stmt = select(models.PostingHistory).where(models.PostingHistory.staff_id == staff_id)
@@ -1666,12 +1751,21 @@ def get_staff_history(staff_id: int):
                 if staff.formation.formation_type == "Directorate":
                     fmt_name = f"SHQ ({staff.formation.code})"
                 
+                # Context-aware Current Row
+                current_target = fmt_name
+                current_date = staff.formation_dopp.isoformat() if staff.formation_dopp else (staff.dopp.isoformat() if staff.dopp else None)
+                
+                if action_type == "MOVE":
+                    # For Internal Posting, show Current Office and Office DOPP
+                    current_target = staff.office or "-"
+                    current_date = staff.dopp.isoformat() if staff.dopp else None
+                
                 res.append({
                     "id": "current",
                     "action_type": "CURRENT",
                     "from_office": "-",
-                    "to_office": f"{fmt_name} - {staff.office}",
-                    "action_date": staff.dopp.isoformat() if staff.dopp else None,
+                    "to_office": current_target,
+                    "action_date": current_date,
                     "remarks": "Current Posting",
                     "created_at": None
                 })
@@ -1702,7 +1796,28 @@ def get_staff_promotions(staff_id: int):
         if not staff: return jsonify({"detail": "Not found"}), 404
 
         if user["role"] == "formation_admin":
-             if staff.formation_id != user.get("formation_id"):
+             user_fmt_id = user.get("formation_id")
+             allowed = False
+             
+             if staff.formation_id == user_fmt_id:
+                 allowed = True
+             else:
+                 fmt = crud.get_formation(db, user_fmt_id)
+                 if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
+                     all_ids = {user_fmt_id}
+                     queue = [user_fmt_id]
+                     while queue:
+                        curr_id = queue.pop(0)
+                        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr_id)).all()
+                        for c in children:
+                            if c.id not in all_ids:
+                                all_ids.add(c.id)
+                                queue.append(c.id)
+                     
+                     if staff.formation_id in all_ids:
+                         allowed = True
+            
+             if not allowed:
                   return jsonify({"detail": "Permission denied"}), 403
         
         # Query Audit Logs for updates to this staff that involve rank

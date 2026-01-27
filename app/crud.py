@@ -230,9 +230,14 @@ def get_dashboard_stats(db: Session, formation_id: Optional[int] = None):
     rank_q = select(models.Staff.rank, func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None)).group_by(models.Staff.rank)
 
     if formation_id:
-        staff_q = staff_q.where(models.Staff.formation_id == formation_id)
-        office_q = office_q.where(models.Staff.formation_id == formation_id)
-        rank_q = rank_q.where(models.Staff.formation_id == formation_id)
+        if isinstance(formation_id, list):
+            staff_q = staff_q.where(models.Staff.formation_id.in_(formation_id))
+            office_q = office_q.where(models.Staff.formation_id.in_(formation_id))
+            rank_q = rank_q.where(models.Staff.formation_id.in_(formation_id))
+        else:
+            staff_q = staff_q.where(models.Staff.formation_id == formation_id)
+            office_q = office_q.where(models.Staff.formation_id == formation_id)
+            rank_q = rank_q.where(models.Staff.formation_id == formation_id)
 
     total_staff = db.scalar(staff_q)
     total_offices = db.scalar(office_q)

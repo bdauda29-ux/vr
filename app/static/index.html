@@ -632,6 +632,30 @@
                         </div>
                     </div>
 
+                    <!-- Sub-Formation Stats Row (Zonal Admins) -->
+                    <div class="row mb-4 d-none" id="sub-formation-stats-row">
+                        <div class="col-12">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-white py-3">
+                                    <h5 class="mb-0 fw-bold text-secondary">Formations Under Command</h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead class="bg-light">
+                                                <tr>
+                                                    <th class="ps-4">Formation Name</th>
+                                                    <th>Total Personnel</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="subFormationStatsTableBody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row">
                         <div class="col-12">
                              <div class="card border-0 shadow-sm">
@@ -1229,7 +1253,7 @@
                     <div class="card border-0 shadow-sm">
                         <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                             <h5 class="card-title mb-0 fw-bold text-secondary">Leave Requests</h5>
-                            <button class="btn btn-primary" onclick="openLeaveModal()">
+                            <button class="btn btn-primary" onclick="openLeaveModal()" id="applyLeaveBtn">
                                 <i class="bi bi-plus-lg me-1"></i> Apply for Leave
                             </button>
                         </div>
@@ -1889,7 +1913,7 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Posting History</h5>
+                    <h5 class="modal-title">Formation Posting History</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -1903,6 +1927,35 @@
                                 </tr>
                             </thead>
                             <tbody id="postingHistoryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Movement History Modal -->
+    <div class="modal fade" id="movementHistoryModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Internal Posting History</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Office</th>
+                                    <th>Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody id="movementHistoryTableBody"></tbody>
                         </table>
                     </div>
                 </div>
@@ -3084,6 +3137,39 @@
                         document.getElementById('dash-total-offices').textContent = data.total_offices ?? 0;
                     }
 
+                    // --- Sub-Formation Stats Logic (Zonal Command) ---
+                    const subStatsRow = document.getElementById('sub-formation-stats-row');
+                    if (subStatsRow) {
+                        try {
+                            const subRes = await fetch(`${API_URL}/dashboard/sub-formation-stats`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (subRes.ok) {
+                                const subData = await subRes.json();
+                                if (Array.isArray(subData) && subData.length > 0) {
+                                    const tbody = document.getElementById('subFormationStatsTableBody');
+                                    tbody.innerHTML = '';
+                                    subData.forEach(item => {
+                                        tbody.innerHTML += `
+                                            <tr>
+                                                <td class="ps-4 fw-medium">${item.name}</td>
+                                                <td><span class="badge bg-primary rounded-pill">${item.count}</span></td>
+                                            </tr>
+                                        `;
+                                    });
+                                    subStatsRow.classList.remove('d-none');
+                                } else {
+                                    subStatsRow.classList.add('d-none');
+                                }
+                            } else {
+                                subStatsRow.classList.add('d-none');
+                            }
+                        } catch (e) {
+                            console.error("Failed to load sub-formation stats", e);
+                            subStatsRow.classList.add('d-none');
+                        }
+                    }
+
                     const rankCounts = data.rank_counts || {};
                     const groupCounts = {
                         "Comptroller Cadre": 0,
@@ -3829,45 +3915,7 @@
             }
         }
 
-        let postingHistoryModalInstance;
-        async function openPostingHistoryModal(staffId) {
-             const modalEl = document.getElementById('postingHistoryModal');
-             postingHistoryModalInstance = new bootstrap.Modal(modalEl);
-             postingHistoryModalInstance.show();
-             
-             const tbody = document.getElementById('postingHistoryTableBody');
-             tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
-             
-             try {
-                 // Use staff history endpoint, filtered by action_type=POSTING
-                 const res = await fetch(`${API_URL}/staff/${staffId}/history?action_type=POSTING`, {
-                     headers: { 'Authorization': `Bearer ${token}` }
-                 });
-                 if (res.ok) {
-                     const data = await res.json();
-                     tbody.innerHTML = '';
-                     if (data.length === 0) {
-                         tbody.innerHTML = '<tr><td colspan="4" class="text-center">No posting history found.</td></tr>';
-                     } else {
-                         data.forEach(h => {
-                             const tr = document.createElement('tr');
-                             tr.innerHTML = `
-                                 <td>${h.action_date || '-'}</td>
-                                 <td>${h.from_office || '-'}</td>
-                                 <td>${h.to_office || '-'}</td>
-                                 <td>${h.remarks || '-'}</td>
-                             `;
-                             tbody.appendChild(tr);
-                         });
-                     }
-                 } else {
-                     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Failed to load history</td></tr>';
-                 }
-             } catch (e) {
-                 console.error(e);
-                 tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading history</td></tr>';
-             }
-        }
+
 
 
         async function loadResetList() {
@@ -4702,7 +4750,9 @@
                     if (role === 'super_admin' || role === 'main_admin') {
                         statusHtml += `
                                 <li><a class="dropdown-item" href="#" onclick="undoExit(${s.id}); return false;"><i class="bi bi-arrow-counterclockwise me-2"></i>Undo Exit</a></li>
-                                <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>History</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="openPostingHistoryModal(${s.id}); return false;"><i class="bi bi-cursor me-2"></i>Formation History</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="openMovementHistoryModal(${s.id}); return false;"><i class="bi bi-arrow-left-right me-2"></i>Internal History</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>All History</a></li>
                         `;
                     }
                     
@@ -4733,7 +4783,9 @@
                     if (role === 'super_admin' || role === 'main_admin' || role === 'formation_admin') {
                         actionBtns += `
                                 <li><a class="dropdown-item" href="#" onclick="openMoveModal(${s.id}); return false;"><i class="bi bi-arrow-right-circle me-2"></i>Move</a></li>
-                                <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>History</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="openPostingHistoryModal(${s.id}); return false;"><i class="bi bi-cursor me-2"></i>Formation History</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="openMovementHistoryModal(${s.id}); return false;"><i class="bi bi-arrow-left-right me-2"></i>Internal History</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>All History</a></li>
                         `;
                     }
                     
@@ -5203,6 +5255,12 @@
                  window.postingHistoryModalInstance = postingHistoryModalInstance;
              }
 
+             const moveHistEl = document.getElementById('movementHistoryModal');
+             if (moveHistEl) {
+                 movementHistoryModalInstance = new bootstrap.Modal(moveHistEl);
+                 window.movementHistoryModalInstance = movementHistoryModalInstance;
+             }
+
              initSortable();
         });
 
@@ -5412,6 +5470,40 @@
                     tbody.innerHTML = '';
                     if (Array.isArray(history) && history.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="4" class="text-center">No posting history found</td></tr>';
+                        return;
+                    }
+                    history.forEach(h => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${isoToDmy(h.action_date) || '-'}</td>
+                            <td>${h.to_office || '-'}</td>
+                            <td>${h.remarks || '-'}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Failed to load history</td></tr>';
+                }
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading history</td></tr>';
+            }
+        }
+
+        async function openMovementHistoryModal(id) {
+            const tbody = document.getElementById('movementHistoryTableBody');
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
+            movementHistoryModalInstance.show();
+
+            try {
+                const res = await fetch(`${API_URL}/staff/${id}/history?action_type=MOVE`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const history = await res.json();
+                    tbody.innerHTML = '';
+                    if (Array.isArray(history) && history.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No internal posting history found</td></tr>';
                         return;
                     }
                     history.forEach(h => {
@@ -6871,6 +6963,16 @@
 
         // Leave Management
         async function loadLeaveRequests() {
+            // Hide Apply Button for Special/Formation Admins as requested
+            const applyBtn = document.getElementById('applyLeaveBtn');
+            if (applyBtn) {
+                if (role === 'special_admin' || role === 'formation_admin') {
+                    applyBtn.classList.add('d-none');
+                } else {
+                    applyBtn.classList.remove('d-none');
+                }
+            }
+
             try {
                 const res = await fetch(`${API_URL}/leaves`, {
                     headers: { 'Authorization': `Bearer ${token}` }
