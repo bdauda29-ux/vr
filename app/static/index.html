@@ -1809,7 +1809,6 @@
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>Action</th>
                                     <th>From</th>
                                     <th>To</th>
                                     <th>Remarks</th>
@@ -2033,26 +2032,18 @@
         let rankSummaryChart;
         let officeSummaryChart;
         const RANKS = [
-            "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI",
-            "ASI 1", "ASI 2", "II", "AII", "IA 1", "IA 2", "IA 3"
+            "Comptroller General", "Deputy Comptroller General", "Assistant Comptroller General", 
+            "Comptroller", "Deputy Comptroller", "Assistant Comptroller", 
+            "Chief Superintendent", "Superintendent", "Deputy Superintendent", 
+            "Assistant Superintendent I", "Assistant Superintendent II", 
+            "Chief Inspector", "Deputy Chief Inspector", "Assistant Chief Inspector", 
+            "Principal Inspector", "Senior Inspector", "Inspector", "Assistant Inspector", 
+            "Chief Immigration Assistant", "Senior Immigration Assistant", 
+            "Immigration Assistant I", "Immigration Assistant II", "Immigration Assistant III"
         ];
         
         const RANK_NAMES = {
-            "DCG": "Deputy Comptroller General",
-            "ACG": "Assistant Comptroller General",
-            "CIS": "Comptroller of Immigration",
-            "DCI": "Deputy Comptroller of Immigration",
-            "ACI": "Assistant Comptroller of Immigration",
-            "CSI": "Chief Superintendent of Immigration",
-            "SI": "Superintendent of Immigration",
-            "DSI": "Deputy Superintendent of Immigration",
-            "ASI 1": "Assistant Superintendent of Immigration I",
-            "ASI 2": "Assistant Superintendent of Immigration II",
-            "II": "Inspector of Immigration",
-            "AII": "Assistant Inspector of Immigration",
-            "IA 1": "Immigration Assistant I",
-            "IA 2": "Immigration Assistant II",
-            "IA 3": "Immigration Assistant III"
+            // Mapping kept for backward compatibility if needed, though we use full names now
         };
         
         // DOM Elements - Sidebar removed
@@ -2272,6 +2263,7 @@
             if(viewId === 'personnel') {
                 // If coming to personnel, refresh list
                 currentOffset = 0;
+                loadOffices();
                 loadStaff();
             }
         }
@@ -5613,7 +5605,6 @@
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td>${isoToDmy(h.action_date) || '-'}</td>
-                            <td>${h.action_type}</td>
                             <td>${h.from_office || '-'}</td>
                             <td>${h.to_office || '-'}</td>
                             <td>${h.remarks || '-'}</td>

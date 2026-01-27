@@ -333,11 +333,32 @@ def create_formation_endpoint():
 @app.get("/formations")
 def list_formations_endpoint():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin"])
+    # Allow special_admin, super_admin, main_admin, and formation_admin
+    user, err, code = require_role(["special_admin", "super_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
         formations = crud.list_formations(db)
+        
+        # Filter logic based on role
+        if user["role"] == "formation_admin":
+            f_id = user.get("formation_id")
+            if f_id:
+                user_fmt = crud.get_formation(db, f_id)
+                # If SHQ, show all (except NIS root if needed)
+                if user_fmt and (user_fmt.code == "SHQ" or user_fmt.formation_type == "Service Headquarters"):
+                    pass # Show all
+                elif user_fmt and user_fmt.formation_type == "Zonal Command":
+                    # Show self and descendants
+                    descendant_ids = crud.get_all_descendant_ids(db, f_id)
+                    formations = [f for f in formations if f.id in descendant_ids]
+                else:
+                    # Show only self? Or self and descendants? 
+                    # Generally formation admin manages their formation.
+                    # If they have sub-formations (unlikely for non-Zone/SHQ), show them.
+                    descendant_ids = crud.get_all_descendant_ids(db, f_id)
+                    formations = [f for f in formations if f.id in descendant_ids]
+
         
         # Get personnel counts
         count_rows = db.query(models.Staff.formation_id, func.count(models.Staff.id))\
@@ -534,15 +555,34 @@ def list_formation_admins(formation_id):
 @app.get("/formations/<int:formation_id>/offices")
 def list_formation_offices(formation_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin"])
+    user, err, code = require_role(["special_admin", "super_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
         formation = crud.get_formation(db, formation_id)
         if not formation:
             return jsonify({"detail": "Formation not found"}), 404
-            
-        offices = crud.list_offices_model(db, formation_id=formation_id)
+        
+        # Recursive check for Zonal Command and SHQ
+        target_ids = [formation_id]
+        if formation.formation_type in ["Zonal Command", "Service Headquarters"] or formation.code == "SHQ":
+             descendants = crud.get_all_descendant_ids(db, formation_id)
+             # If SHQ, also include Directorates if they are not already in descendants (orphan check)
+             if formation.code == "SHQ":
+                 directorates = db.scalars(select(models.Formation).where(models.Formation.formation_type == "Directorate")).all()
+                 current_ids = set(descendants)
+                 for d in directorates:
+                     if d.id not in current_ids:
+                         current_ids.add(d.id)
+                         d_descendants = crud.get_all_descendant_ids(db, d.id)
+                         for dd in d_descendants:
+                             current_ids.add(dd)
+                 descendants = list(current_ids)
+             
+             target_ids.extend(descendants)
+             target_ids = list(set(target_ids))
+
+        offices = crud.list_offices_model(db, formation_id=target_ids)
         return jsonify([schemas.to_dict_office(o) for o in offices])
 
 @app.post("/users/<int:user_id>/reset-password")
@@ -647,17 +687,24 @@ def dashboard_stats():
             })
             
         # Zonal Command Check for Aggregated Stats
-        # User request: Zonal command admin total personnel/office should be for personnel of ONLY the zonal command,
-        # not formations under it. So we REMOVE the recursive ID collection here for the main stats.
-        # The sub-formation stats endpoint will handle the breakdown.
-        
-        # However, for SHQ, user requested: "all directorate should automatically be under service headquarters... giving a total value"
         target_ids = formation_id
         if user.get("role") == "formation_admin" and formation_id:
              fmt = crud.get_formation(db, formation_id)
-             if fmt and (fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters"):
-                 # SHQ aggregates ALL descendants (Directorates etc)
+             # SHQ and Zonal Command aggregate ALL descendants
+             if fmt and (fmt.code == "SHQ" or fmt.formation_type in ["Service Headquarters", "Zonal Command"]):
                  target_ids = crud.get_all_descendant_ids(db, formation_id)
+                 
+                 # If SHQ, include Directorates and their descendants
+                 if fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters":
+                     directorates = db.scalars(select(models.Formation).where(models.Formation.formation_type == "Directorate")).all()
+                     current_ids = set(target_ids)
+                     for d in directorates:
+                         if d.id not in current_ids:
+                             current_ids.add(d.id)
+                             d_descendants = crud.get_all_descendant_ids(db, d.id)
+                             for dd in d_descendants:
+                                 current_ids.add(dd)
+                     target_ids = list(current_ids)
 
         # Auto-Retirement Check (Triggered on Dashboard Load)
         # "when a personnel retirement date reaches, the system should automatically out him as retired, except for the rank of CGI"
@@ -703,6 +750,16 @@ def dashboard_sub_formation_stats():
             
         # Get Direct Children
         children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+        # Ensure children is a list
+        children = list(children)
+
+        # If SHQ, also include Directorates (orphans)
+        if fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters":
+             directorates = db.scalars(select(models.Formation).where(models.Formation.formation_type == "Directorate")).all()
+             existing_ids = {c.id for c in children}
+             for d in directorates:
+                 if d.id not in existing_ids:
+                     children.append(d)
         
         results = []
         for child in children:
