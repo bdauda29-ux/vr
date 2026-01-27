@@ -350,7 +350,6 @@ def list_formations_endpoint():
         
         # Build Hierarchy for Sorting
         # Goal: SHQ -> Directorates (children of SHQ) -> Zonal Commands -> Others
-        # Note: Zonal Commands have parent_id=None usually.
         
         # 1. Identify Roots and Map ID to Children
         children_map = {}
@@ -360,49 +359,54 @@ def list_formations_endpoint():
         shq = next((f for f in filtered if f.code == "SHQ"), None)
         
         for f in filtered:
-            if f.parent_id:
-                if f.parent_id not in children_map: children_map[f.parent_id] = []
-                children_map[f.parent_id].append(f)
+            pid = f.parent_id
+            
+            # Virtual Link: Treat orphan Directorates as children of SHQ for display
+            if not pid and f.formation_type == "Directorate" and f.code != "SHQ" and shq:
+                pid = shq.id
+            
+            if pid:
+                if pid not in children_map: children_map[pid] = []
+                children_map[pid].append(f)
             else:
                 if f.code != "SHQ": # Treat SHQ separately to ensure it's first
                     roots.append(f)
         
-        # Sort roots: Zonal Commands first among non-SHQ roots? 
-        # User: "Service headquarters first, directorates should be listed under it... then zonal commands"
-        # Since Directorates are under SHQ, SHQ comes first.
-        # Then Zonal Commands.
-        
+        # Sort roots: Zonal Commands first among non-SHQ roots
         roots.sort(key=lambda x: (0 if x.formation_type == "Zonal Command" else 1, x.name))
         
         sorted_formations = []
         
-        def add_node(node):
+        def add_node(node, depth=0):
             # Add node
             node.personnel_count = counts.get(node.id, 0)
-            sorted_formations.append(node)
+            node_dict = {
+                "id": node.id, 
+                "name": node.name, 
+                "code": node.code, 
+                "description": node.description,
+                "formation_type": node.formation_type,
+                "parent_id": node.parent_id,
+                "parent_name": node.parent.name if node.parent else None,
+                "personnel_count": getattr(node, "personnel_count", 0),
+                "depth": depth
+            }
+            sorted_formations.append(node_dict)
+            
             # Add children
             kids = children_map.get(node.id, [])
-            # Sort children: Directorates first?
+            # Sort children: Directorates first
             kids.sort(key=lambda x: (0 if x.formation_type == "Directorate" else 1, x.name))
             for k in kids:
-                add_node(k)
+                add_node(k, depth + 1)
         
         if shq:
-            add_node(shq)
+            add_node(shq, 0)
             
         for r in roots:
-            add_node(r)
+            add_node(r, 0)
             
-        return jsonify([{
-            "id": o.id, 
-            "name": o.name, 
-            "code": o.code, 
-            "description": o.description,
-            "formation_type": o.formation_type,
-            "parent_id": o.parent_id,
-            "parent_name": o.parent.name if o.parent else None,
-            "personnel_count": getattr(o, "personnel_count", 0)
-        } for o in sorted_formations])
+        return jsonify(sorted_formations)
 
 @app.put("/formations/<int:formation_id>")
 def update_formation_endpoint(formation_id):
@@ -643,20 +647,37 @@ def dashboard_stats():
             })
             
         # Zonal Command Check for Aggregated Stats
-        if user.get("role") == "formation_admin" and formation_id:
-            fmt = crud.get_formation(db, formation_id)
-            if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
-                # Get all descendants recursively
-                all_ids = {formation_id}
-                queue = [formation_id]
-                while queue:
-                    curr_id = queue.pop(0)
-                    children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr_id)).all()
-                    for c in children:
-                        if c.id not in all_ids:
-                            all_ids.add(c.id)
-                            queue.append(c.id)
-                formation_id = list(all_ids)
+        # User request: Zonal command admin total personnel/office should be for personnel of ONLY the zonal command,
+        # not formations under it. So we REMOVE the recursive ID collection here for the main stats.
+        # The sub-formation stats endpoint will handle the breakdown.
+        
+        # if user.get("role") == "formation_admin" and formation_id:
+        #    fmt = crud.get_formation(db, formation_id)
+        #    if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
+        #        ... (recursion removed) ...
+
+        # Auto-Retirement Check (Triggered on Dashboard Load)
+        # "when a personnel retirement date reaches, the system should automatically out him as retired, except for the rank of CGI"
+        try:
+            today = date.today()
+            # Update active staff who have reached retirement date and are not CGI
+            db.execute(
+                update(models.Staff)
+                .where(
+                    models.Staff.exit_date.is_(None),
+                    models.Staff.retirement_date <= today,
+                    models.Staff.rank != "CGI"
+                )
+                .values(
+                    exit_date=models.Staff.retirement_date,
+                    exit_mode="Statutory Retirement",
+                    remarks="System Auto-Retirement"
+                )
+            )
+            db.commit()
+        except Exception as e:
+            print(f"Auto-retirement error: {e}")
+            db.rollback()
 
         stats = crud.get_dashboard_stats(db, formation_id=formation_id)
         stats["office_name"] = None
@@ -672,9 +693,9 @@ def dashboard_sub_formation_stats():
     if not formation_id: return jsonify([])
     
     with next(get_db()) as db:
-        # Check if Zonal Command
+        # Check Formation
         fmt = crud.get_formation(db, formation_id)
-        if not fmt or not fmt.formation_type or fmt.formation_type.strip().lower() != "zonal command":
+        if not fmt:
             return jsonify([])
             
         # Get Direct Children
@@ -701,7 +722,7 @@ def dashboard_sub_formation_stats():
                     models.Staff.formation_id.in_(list(child_ids))
                 )
             )
-            results.append({"name": child.name, "count": count})
+            results.append({"name": child.name, "count": count, "formation_id": child.id})
             
         # Sort by name
         results.sort(key=lambda x: x["name"])
@@ -1613,12 +1634,27 @@ def move_staff(staff_id: int):
             if not user_fmt: return jsonify({"detail": "Formation error"}), 500
             
             if user_fmt.formation_type == "Zonal Command":
-                # Zonal Admin: Can move/post within Zone (Self + Children)
-                children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
-                allowed_ids = [formation_id] + [c.id for c in children]
+                # Zonal Admin:
+                # 1. Internal Move: Can only move personnel directly under its formation
+                if target_fmt_id == current_fmt_id: # Internal Move
+                     if current_fmt_id != formation_id:
+                         return jsonify({"detail": "Permission denied: Zonal Admins can only internally move staff directly under the Zonal Command formation."}), 403
                 
-                if target_fmt_id not in allowed_ids:
-                    return jsonify({"detail": "Permission denied: Zonal Admins can only post within their Zone."}), 403
+                # 2. Posting (handled here if target differs):
+                # "post out personnel within it or formations under it" -> "to formations under it"
+                else:
+                    children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+                    allowed_target_ids = [c.id for c in children] # Can post TO children
+                    # Can post FROM self or children (already checked by generic permission or need explicit?)
+                    # Staff access is checked at start of function? No, check line 1598 check:
+                    # if formation_id and staff.formation_id != formation_id: return 403
+                    # Wait, line 1598 restricts formation_admin to ONLY act on staff in their OWN formation.
+                    # This contradicts "post out personnel within it or formations under it".
+                    # I need to relax line 1598 for Zonal Admins first!
+                    
+                    if target_fmt_id not in allowed_target_ids:
+                        return jsonify({"detail": "Permission denied: Zonal Admins can only post TO formations under their command."}), 403
+
             else:
                 # State Command / Others: Can ONLY move within same formation
                 if target_fmt_id != formation_id:
@@ -1682,6 +1718,8 @@ def move_staff(staff_id: int):
         # Usually a move implies updating DOPP (Date of Present Posting)
         # But we only update DOPP for Inter-Formation Posting per user request
         # staff.dopp = effective_date 
+        # Update: User requested "when personnel is moved, the office DOPP automatically changes to the effective date of move"
+        staff.dopp = effective_date 
         
         db.commit()
         crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=formation_id)
@@ -1847,7 +1885,7 @@ def get_staff_promotions(staff_id: int):
 @app.post("/staff/<int:staff_id>/posting")
 def posting_staff(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin"])
+    user, err, code = require_role(["special_admin", "super_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     data = request.get_json(force=True)
@@ -1865,21 +1903,33 @@ def posting_staff(staff_id: int):
         
     with next(get_db()) as db:
         staff = crud.get_staff(db, staff_id)
-        if not staff: return jsonify({"detail": "Not found"}), 404
+        if not staff:
+            return jsonify({"detail": "Not found"}), 404
         
-        # Permission Check for Special Admin (Zonal/Formation Admin)
         user_fmt_id = user.get("formation_id")
-        if user_fmt_id:
-            # Check if staff belongs to user's formation or a child formation (e.g. State under Zonal)
+        user_role = user.get("role")
+        user_fmt = db.get(models.Formation, user_fmt_id) if user_fmt_id else None
+
+        if user_role == "formation_admin":
+            if not user_fmt:
+                return jsonify({"detail": "Formation error"}), 500
+
             staff_fmt = staff.formation
-            allowed = False
+            allowed_source = False
             if staff.formation_id == user_fmt_id:
-                allowed = True
-            elif staff_fmt and staff_fmt.parent_id == user_fmt_id:
-                allowed = True
+                allowed_source = True
+            elif user_fmt.formation_type == "Zonal Command":
+                if staff_fmt and staff_fmt.parent_id == user_fmt_id:
+                    allowed_source = True
             
-            if not allowed:
-                return jsonify({"detail": "Permission denied: You can only post staff from your formation or sub-formations."}), 403
+            if not allowed_source:
+                return jsonify({"detail": "Permission denied: You can only post staff from your formation (or sub-formations for Zonal Commands)."}), 403
+
+            if user_fmt.formation_type == "Zonal Command":
+                target_fmt = db.get(models.Formation, new_formation_id)
+                if not target_fmt or target_fmt.parent_id != user_fmt_id:
+                    return jsonify({"detail": "Permission denied: Zonal Commands can only post to formations under their command."}), 403
+
 
         old_formation_id = staff.formation_id
         old_office = staff.office

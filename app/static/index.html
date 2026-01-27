@@ -1658,14 +1658,14 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Mark Staff as Out</h5>
+                    <h5 class="modal-title">Posting/Out</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="outStaffId">
                     <div class="mb-3">
                         <label class="form-label">Reason / Mode</label>
-                        <select class="form-select" id="outReason">
+                        <select class="form-select" id="outReason" onchange="toggleOutTarget()">
                             <option value="Posted Out">Posted Out</option>
                             <option value="Retired">Retired</option>
                             <option value="Deceased">Deceased</option>
@@ -1673,6 +1673,15 @@
                             <option value="Resigned">Resigned</option>
                         </select>
                     </div>
+                    
+                    <div class="mb-3 d-none" id="outTargetFormationDiv">
+                        <label class="form-label required">Target Formation</label>
+                        <select class="form-select" id="outTargetFormation">
+                            <option value="">Select Formation...</option>
+                        </select>
+                        <div class="form-text text-muted" id="outTargetFormationHelp"></div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label">Effective Date</label>
                         <input type="text" class="form-control date-picker" id="outDate" placeholder="dd/mm/yyyy">
@@ -1680,7 +1689,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="confirmOut()">Confirm Exit</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmOut()">Confirm</button>
                 </div>
             </div>
         </div>
@@ -2092,6 +2101,13 @@
                             }
                         }
                     }
+
+                    if (userData.formation_type) {
+                        localStorage.setItem('formation_type', userData.formation_type);
+                    }
+                    if (userData.formation_code) {
+                        localStorage.setItem('formation_code', userData.formation_code);
+                    }
                 }
             }).catch((e) => {
                 console.error("Auth check failed", e);
@@ -2378,16 +2394,16 @@
                 }
 
                 // Role Based UI
-                    if (role === 'special_admin') {
-                        document.querySelectorAll('.special-only').forEach(el => el.classList.remove('d-none'));
-                        populateFormationFilter();
-                        showView('formations');
+                    // if (role === 'special_admin') {
+                    //     document.querySelectorAll('.special-only').forEach(el => el.classList.remove('d-none'));
+                    //     populateFormationFilter();
+                    //     showView('formations');
                         
-                        // Hide loader
-                        const loader = document.getElementById('global-loader');
-                        if (loader) loader.style.display = 'none';
-                        return;
-                    }
+                    //     // Hide loader
+                    //     const loader = document.getElementById('global-loader');
+                    //     if (loader) loader.style.display = 'none';
+                    //     return;
+                    // }
 
                     // Setup Staff Dashboard View (HTML injection)
                     setupStaffDashboardView();
@@ -2553,7 +2569,7 @@
                                 <!-- Intra-Formation Movements -->
                                 <div class="card shadow-sm">
                                     <div class="card-header bg-light">
-                                        <h5 class="mb-0"><i class="bi bi-arrow-left-right me-2"></i>Internal Posting</h5>
+                                        <h5 class="mb-0"><i class="bi bi-arrow-left-right me-2"></i>Internal Posting History</h5>
                                     </div>
                                     <div class="card-body p-0">
                                         <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
@@ -2611,9 +2627,10 @@
             const switchAdminBtn = document.getElementById('switchToAdminItem');
             if(switchAdminBtn) switchAdminBtn.classList.add('d-none');
             
-            // Show switch to personal button (Only if NOT formation/special admin)
+            // Show switch to personal button (Only if NOT formation admin)
+            // Special Admin can switch
             const switchPersonalBtn = document.getElementById('switchToPersonalItem');
-            if(switchPersonalBtn && role !== 'formation_admin' && role !== 'special_admin') {
+            if(switchPersonalBtn && role !== 'formation_admin') {
                 switchPersonalBtn.classList.remove('d-none');
             }
             
@@ -2635,9 +2652,10 @@
             if(adminDash) adminDash.classList.add('d-none');
             if(staffDash) staffDash.classList.remove('d-none');
             
-            // Show switch to admin button (Only if NOT formation/special admin)
+            // Show switch to admin button (Only if NOT formation admin)
+            // Special Admin can switch
             const switchAdminBtn = document.getElementById('switchToAdminItem');
-            if(switchAdminBtn && role !== 'formation_admin' && role !== 'special_admin') {
+            if(switchAdminBtn && role !== 'formation_admin') {
                 switchAdminBtn.classList.remove('d-none');
             }
             
@@ -2865,7 +2883,8 @@
                     const tbodyMove = document.getElementById('staffMovementHistoryBody');
                     if (tbodyMove) {
                         let html = '';
-                        // Add Present Office Row
+                        // Removed Present Office Row per user request
+                        /*
                         if (s.office) {
                             html += `
                                 <tr class="table-warning">
@@ -2875,6 +2894,7 @@
                                 </tr>
                             `;
                         }
+                        */
 
                         if (movements.length === 0) {
                             if (!s.office) html += '<tr><td colspan="3" class="text-center p-3">No internal movement history found.</td></tr>';
@@ -3102,6 +3122,20 @@
             } catch(e) { console.error("Failed to fetch office info", e); }
         }
 
+        function filterByFormation(id) {
+             showView('personnel');
+
+             if (!window.activeColumnFilters) window.activeColumnFilters = { rank: [], office: [], formation: [] };
+             else if (!window.activeColumnFilters.formation) window.activeColumnFilters.formation = [];
+             
+             window.activeColumnFilters.formation = [id.toString()];
+             
+             document.querySelectorAll('.filter-formation-cb').forEach(cb => cb.checked = false);
+             
+             currentOffset = 0;
+             loadStaff();
+        }
+
         async function loadDashboardStats() {
             try {
                 const res = await fetch(`${API_URL}/dashboard/stats`, {
@@ -3137,7 +3171,7 @@
                         document.getElementById('dash-total-offices').textContent = data.total_offices ?? 0;
                     }
 
-                    // --- Sub-Formation Stats Logic (Zonal Command) ---
+                    // --- Sub-Formation Stats Logic (Zonal Command & Hierarchical) ---
                     const subStatsRow = document.getElementById('sub-formation-stats-row');
                     if (subStatsRow) {
                         try {
@@ -3152,7 +3186,11 @@
                                     subData.forEach(item => {
                                         tbody.innerHTML += `
                                             <tr>
-                                                <td class="ps-4 fw-medium">${item.name}</td>
+                                                <td class="ps-4">
+                                                    <a href="#" class="text-decoration-none fw-bold" onclick="filterByFormation(${item.formation_id}); return false;">
+                                                        ${item.name}
+                                                    </a>
+                                                </td>
                                                 <td><span class="badge bg-primary rounded-pill">${item.count}</span></td>
                                             </tr>
                                         `;
@@ -4479,7 +4517,12 @@
                     if (s.out_request_status === 'Pending') {
                         actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openReviewExitModal(${s.id}, '${s.out_request_date}', '${s.out_request_reason}'); return false;"><i class="bi bi-exclamation-circle me-2"></i>Review Exit</a></li>`;
                     } else {
-                        actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Exit/Out</a></li>`;
+                        const fType = localStorage.getItem('formation_type');
+                        const fCode = localStorage.getItem('formation_code');
+                        const allowPostingOut = (fType === 'Zonal Command') || (fType === 'Directorate' && fCode === 'SHQ');
+                        if (allowPostingOut) {
+                            actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
+                        }
                     }
                     // Delete option removed as requested
                     actionBtns += `
@@ -4796,9 +4839,11 @@
                             actionBtns += `<li><span class="dropdown-item-text text-warning"><i class="bi bi-hourglass me-2"></i>Exit Pending</span></li>`;
                         }
                     } else {
-                        const restrictedTypes = ['State Command', 'Airport', 'Border Command', 'Directorate'];
-                        if (!restrictedTypes.includes(formationType)) {
-                             actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Exit/Out</a></li>`;
+                        const fType = localStorage.getItem('formation_type');
+                        const fCode = localStorage.getItem('formation_code');
+                        const allowPostingOut = (fType === 'Zonal Command') || (fType === 'Directorate' && fCode === 'SHQ');
+                        if (allowPostingOut) {
+                             actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
                         }
                     }
 
@@ -5738,9 +5783,12 @@
                     }
                     formations.forEach((o, index) => {
                         const tr = document.createElement('tr');
+                        const indent = '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(o.depth || 0);
+                        const folderIcon = (o.depth > 0) ? '<i class="bi bi-arrow-return-right text-muted me-2"></i>' : '';
+                        
                         tr.innerHTML = `
                             <td>${index + 1}</td>
-                            <td>${o.name}</td>
+                            <td>${indent}${folderIcon}${o.name}</td>
                             <td>${o.code}</td>
                             <td>${o.description || ''}</td>
                             <td>${o.personnel_count || 0}</td>
@@ -6789,10 +6837,71 @@
             rejectEditRequest(parseInt(idInput.value, 10));
         }
 
+        async function loadOutTargetFormations() {
+            const sel = document.getElementById('outTargetFormation');
+            // Always reload to ensure correct context or just load once? 
+            // Better to load once but handle context switch if possible (unlikely in one session).
+            if (sel.options.length > 1) return; 
+
+            sel.innerHTML = '<option value="">Loading...</option>';
+            
+            try {
+                let items = [];
+                // Determine source based on role/type
+                // If Zonal Command, restrict to sub-formations
+                const isZonal = (formationType === 'Zonal Command');
+                
+                if (isZonal && (role === 'formation_admin' || role === 'special_admin')) {
+                     const res = await fetch(`${API_URL}/dashboard/sub-formation-stats`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                     });
+                     if (res.ok) {
+                         const data = await res.json();
+                         // Map stats to simple objects
+                         items = data.map(d => ({ id: d.formation_id, name: d.formation_name }));
+                     }
+                } else {
+                    // SHQ or others: Fetch all formations
+                    const res = await fetch(`${API_URL}/formations`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        items = await res.json();
+                    }
+                }
+                
+                sel.innerHTML = '<option value="">Select Formation...</option>';
+                items.forEach(f => {
+                     sel.add(new Option(f.name, f.id));
+                });
+                
+            } catch(e) {
+                console.error(e);
+                sel.innerHTML = '<option value="">Error loading formations</option>';
+            }
+        }
+
+        async function toggleOutTarget() {
+            const reason = document.getElementById('outReason').value;
+            const targetDiv = document.getElementById('outTargetFormationDiv');
+            
+            if (reason === 'Posted Out') {
+                targetDiv.classList.remove('d-none');
+                await loadOutTargetFormations();
+            } else {
+                targetDiv.classList.add('d-none');
+            }
+        }
+
         function openOutModal(id) {
             document.getElementById('outStaffId').value = id;
             document.getElementById('outReason').value = 'Posted Out';
             document.getElementById('outDate').value = '';
+            
+            // Reset Target
+            document.getElementById('outTargetFormation').value = "";
+            toggleOutTarget(); // Initialize view
+            
             outModal.show();
         }
 
@@ -6806,12 +6915,47 @@
                 return;
             }
 
+            if (reason === 'Posted Out') {
+                const targetFmt = document.getElementById('outTargetFormation').value;
+                if (!targetFmt) {
+                    alert("Please select a target formation for posting");
+                    return;
+                }
+                
+                if (!confirm(`Are you sure you want to post this personnel out?`)) return;
+                
+                // Use Posting Endpoint
+                try {
+                    const res = await fetch(`${API_URL}/staff/${id}/posting`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            formation_id: parseInt(targetFmt),
+                            office: "Report to Formation", // Default office
+                            date: dateStr,
+                            remarks: "Posted Out from Dashboard"
+                        })
+                    });
+                    
+                    if (res.ok) {
+                        alert("Personnel posted successfully");
+                        outModal.hide();
+                        loadStaff();
+                    } else {
+                        const err = await res.json();
+                        alert("Error: " + (err.detail || "Failed to post"));
+                    }
+                } catch(e) { console.error(e); alert("Request failed"); }
+                
+                return;
+            }
+
             if (!confirm(`Are you sure you want to mark this personnel as ${reason}?`)) return;
 
             const isRequest = (role === 'office_admin');
-            const url = isRequest ? `${API_URL}/staff/${id}/exit-request` : `${API_URL}/staff/${id}`; // Super admin uses direct update for now, or we can use exit-request for them too?
-            // Actually, existing logic used PUT /staff/{id}.
-            // For office_admin, we use POST /staff/{id}/exit-request
             
             try {
                 let res;
@@ -6825,8 +6969,6 @@
                         body: JSON.stringify({ exit_date: dateStr, exit_mode: reason })
                     });
                 } else {
-                     // Super admin direct update (legacy way, or we can use new endpoints?)
-                     // Use legacy PUT for super admin direct exit
                      res = await fetch(`${API_URL}/staff/${id}`, {
                         method: 'PUT',
                         headers: { 
