@@ -97,4 +97,6 @@ def to_dict_audit_log(obj) -> Dict[str, Any]:
         "target": obj.target,
         "timestamp": obj.timestamp.isoformat() if obj.timestamp else None,
         "details": obj.details,
+        "user_id": getattr(obj, "user_id", None),
+        "username": getattr(obj, "username", None),
     }

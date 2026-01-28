@@ -11,6 +11,8 @@ class AuditLog(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     details = Column(String(512), nullable=True)
     formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    username = Column(String(64), nullable=True)
 
 class Formation(Base):
     __tablename__ = "formations"

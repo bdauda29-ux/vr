@@ -5,7 +5,7 @@ from . import models
 
 # Rank order mapping (Highest to Lowest)
 RANK_ORDER = [
-    "CGI", "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI",
+    "CGI", "DCG", "ACG", "CSI", "DSI",
     "ASI 1", "ASI 2", "II", "AII", "IA 1", "IA 2", "IA 3"
 ]
 
@@ -205,8 +205,8 @@ def delete_staff(db: Session, obj: models.Staff) -> None:
     db.delete(obj)
     db.commit()
 
-def create_audit_log(db: Session, action: str, target: str, details: Optional[str] = None, formation_id: Optional[int] = None) -> models.AuditLog:
-    obj = models.AuditLog(action=action, target=target, details=details, formation_id=formation_id)
+def create_audit_log(db: Session, action: str, target: str, details: Optional[str] = None, formation_id: Optional[int] = None, user_id: Optional[int] = None, username: Optional[str] = None) -> models.AuditLog:
+    obj = models.AuditLog(action=action, target=target, details=details, formation_id=formation_id, user_id=user_id, username=username)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -341,6 +341,17 @@ def delete_office(db: Session, office_id: int) -> bool:
 
 # Formation CRUD
 def create_formation(db: Session, name: str, code: str, description: Optional[str] = None, formation_type: Optional[str] = None, parent_id: Optional[int] = None) -> models.Formation:
+    # Auto-parent Directorate to Service Headquarters
+    if formation_type == "Directorate" and not parent_id:
+        shq = db.execute(select(models.Formation).where(
+            or_(
+                models.Formation.formation_type == "Service Headquarters",
+                models.Formation.code == "SHQ"
+            )
+        )).scalar_one_or_none()
+        if shq:
+            parent_id = shq.id
+            
     obj = models.Formation(name=name, code=code, description=description, formation_type=formation_type, parent_id=parent_id)
     db.add(obj)
     db.commit()

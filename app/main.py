@@ -169,6 +169,9 @@ def login():
                          verification_success = True
 
                     if verification_success:
+                        # Check for default password (force change)
+                        must_change_password = (not staff.password_hash and password == staff.nis_no)
+
                         # Increment login count
                         staff.login_count += 1
                         db.commit()
@@ -192,7 +195,8 @@ def login():
                             "id": staff.id,
                             "formation_id": staff.formation_id,
                             "formation_type": formation_type,
-                            "is_staff": True
+                            "is_staff": True,
+                            "must_change_password": must_change_password
                         })
                 
                 return jsonify({"detail": "Invalid credentials"}), 401
@@ -1001,7 +1005,7 @@ def import_excel():
                     db_session.rollback()
                     errors.append(f"Row {row_idx}: {str(e)}")
             
-            if success_count > 0: crud.create_audit_log(db_session, "IMPORT", filename, f"Imported {success_count} records")
+            if success_count > 0: crud.create_audit_log(db_session, "IMPORT", filename, f"Imported {success_count} records", user_id=user["id"], username=user["sub"])
             db_session.commit()
         return jsonify({"message": f"Imported {success_count} records", "errors": errors[:10]})
 
@@ -1556,7 +1560,7 @@ def update_staff(staff_id: int):
                     )
                     db.add(req)
                     
-                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=formation_id)
+                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=formation_id, user_id=user["id"], username=user["sub"])
                     db.commit()
                     
                     return jsonify(schemas.to_dict_staff(obj))
@@ -1591,7 +1595,7 @@ def delete_staff(staff_id: int):
             return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
         crud.delete_staff(db, obj)
-        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=formation_id)
+        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=formation_id, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Deleted"})
 
 @app.post("/staff/<int:staff_id>/reset-login")
@@ -1612,7 +1616,7 @@ def reset_login_count(staff_id: int):
         obj.login_count = 0
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=formation_id)
+        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=formation_id, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Login count reset successfully"})
 
 @app.post("/staff/<int:staff_id>/reset-password")
@@ -1659,7 +1663,7 @@ def update_staff_role(staff_id: int):
         db.add(obj)
         db.commit()
         db.refresh(obj)
-        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=formation_id)
+        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=formation_id, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(obj))
 
 @app.post("/staff/<int:staff_id>/move")
@@ -1782,12 +1786,16 @@ def move_staff(staff_id: int):
              history_remarks = f"{remarks} | Prev Formation DOPP: {prev_dopp_str}".strip(" |")
 
         # Create History Record
+        # User request: "date should be previous Office DOPP"
+        # We use staff.dopp (which is the DOPP for the office being left) as the history date.
+        history_date = staff.dopp if staff.dopp else effective_date
+        
         history = models.PostingHistory(
             staff_id=staff.id,
             action_type=action_type,
             from_office=from_office_val,
             to_office=to_office_val,
-            action_date=effective_date,
+            action_date=history_date, 
             remarks=history_remarks
         )
         db.add(history)
@@ -1806,7 +1814,7 @@ def move_staff(staff_id: int):
         staff.dopp = effective_date 
         
         db.commit()
-        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=formation_id)
+        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=formation_id, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/staff/<int:staff_id>/history")
@@ -2059,7 +2067,7 @@ def posting_staff(staff_id: int):
         staff.formation_dopp = effective_date
         
         db.commit()
-        crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id)
+        crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/settings/staff-edit")
@@ -2130,7 +2138,9 @@ def update_staff_edit_settings():
             "SETTINGS_UPDATE",
             "staff-edit",
             f"allow_edit_rank={allow_rank}, allow_edit_dopp={allow_dopp}, allow_login={allow_login}",
-            formation_id=formation_id
+            formation_id=formation_id,
+            user_id=user["id"],
+            username=user["sub"]
         )
     return jsonify({"allow_edit_rank": allow_rank, "allow_edit_dopp": allow_dopp, "allow_login": allow_login})
 
@@ -2159,7 +2169,7 @@ def change_password():
              
              user_obj.password_hash = auth.get_password_hash(new_password)
              db.commit()
-             crud.create_audit_log(db, "PASSWORD_CHANGE", user_obj.username, "Admin changed password", formation_id=user_obj.formation_id)
+             crud.create_audit_log(db, "PASSWORD_CHANGE", user_obj.username, "Admin changed password", formation_id=user_obj.formation_id, user_id=user_info["id"], username=user_info["sub"])
              return jsonify({"detail": "Password changed successfully"})
 
         # 2. Try Staff table
@@ -2177,7 +2187,7 @@ def change_password():
                 
             staff.password_hash = auth.get_password_hash(new_password)
             db.commit()
-            crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", formation_id=staff.formation_id)
+            crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", formation_id=staff.formation_id, user_id=user_info["id"], username=user_info["sub"])
             return jsonify({"detail": "Password changed successfully"})
 
         return jsonify({"detail": "User record not found"}), 404
@@ -2292,8 +2302,8 @@ def export_excel():
             }
 
             rank_order = {
-                "CGI": 0, "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
-                "CSI": 6, "SI": 7, "DSI": 8, "ASI 1": 9, "ASI1": 9,
+                "CGI": 0, "DCG": 1, "ACG": 2, 
+                "CSI": 6, "DSI": 8, "ASI 1": 9, "ASI1": 9,
                 "ASI 2": 10, "ASI2": 10, "II": 11, "AII": 12,
                 "IA 1": 13, "IA1": 13, "IA 2": 14, "IA2": 14, "IA 3": 15, "IA3": 15
             }
@@ -2610,7 +2620,7 @@ def export_pdf():
                     return ""
                 return "".join([ch for ch in str(value).upper() if ch.isalnum()])
 
-            senior_ranks = {"DCG","ACG","CIS","DCI","ACI","CSI","SI","DSI","ASI1","ASI2"}
+            senior_ranks = {"DCG","ACG","CSI","DSI","ASI1","ASI2"}
             junior_ranks = {"II","AII","IA1","IA2","IA3"}
 
             def merged_name_by_rank(staff) -> str:

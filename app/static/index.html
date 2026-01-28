@@ -249,7 +249,8 @@
                             <select class="form-select" id="formationDescriptionSelect" onchange="handleFormationTypeChange('create')">
                                 <option value="">Select Description...</option>
                                 <option value="Directorate">Directorate</option>
-                                <option value="Zonal Command">Zonal Command</option>
+                            <option value="Service Headquarters">Service Headquarters</option>
+                            <option value="Zonal Command">Zonal Command</option>
                                 <option value="State Command">State Command</option>
                                 <option value="Airport">Airport</option>
                                 <option value="Border Command">Border Command</option>
@@ -1292,6 +1293,7 @@
                                             <th>Action</th>
                                             <th>Target</th>
                                             <th>Details</th>
+                                            <th>Created By</th>
                                         </tr>
                                     </thead>
                                     <tbody id="auditTableBody"></tbody>
@@ -1485,6 +1487,10 @@
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-2">Check to include, use arrows to reorder.</p>
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleExportColumns(true)">Select All</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleExportColumns(false)">Unselect All</button>
+                    </div>
                     <ul class="list-group" id="exportColumnList">
                         <li class="list-group-item d-flex align-items-center">
                             <input class="form-check-input me-2" type="checkbox" value="nis_no" checked>
@@ -6302,6 +6308,11 @@
             exportModal.show();
         }
 
+        function toggleExportColumns(select) {
+            const checkboxes = document.querySelectorAll('#exportColumnList input[type="checkbox"]');
+            checkboxes.forEach(cb => cb.checked = select);
+        }
+
         function moveColumn(btn, direction) {
             const li = btn.closest('li');
             const parent = li.parentNode;
@@ -6431,6 +6442,7 @@
                             <td>${l.action}</td>
                             <td>${l.target}</td>
                             <td>${l.details || ''}</td>
+                            <td>${l.username || ''}</td>
                         `;
                         tbody.appendChild(tr);
                     });
@@ -6653,7 +6665,19 @@
                 }
 
                 body.innerHTML = '';
-                const entries = Object.entries(r.data || {});
+                
+                // Parse data if it's a string (fixes empty popup issue)
+                let requestData = r.data;
+                if (typeof requestData === 'string') {
+                    try {
+                        requestData = JSON.parse(requestData);
+                    } catch (e) {
+                        console.error("Failed to parse request data", e);
+                        requestData = {};
+                    }
+                }
+                
+                const entries = Object.entries(requestData || {});
 
                 const fieldLabels = {
                     nis_no: "NIS No",
