@@ -5444,7 +5444,17 @@
                     });
                     if (res.ok) {
                         const items = await res.json();
+                        
+                        // Zonal Command Filtering: Exclude self (parent) so only sub-formations are selectable
+                        const userFmtId = localStorage.getItem('formation_id');
+                        const userFmtType = localStorage.getItem('formation_type');
+
                         items.forEach(f => {
+                            // If user is Zonal Command, exclude the Zonal Command itself from targets
+                            if (userFmtType === 'Zonal Command' && userFmtId && String(f.id) === String(userFmtId)) {
+                                return;
+                            }
+
                             const opt = document.createElement('option');
                             opt.value = f.id;
                             opt.textContent = `${f.code} - ${f.name}`;
