@@ -2302,8 +2302,8 @@ def export_excel():
             }
 
             rank_order = {
-                "CGI": 0, "DCG": 1, "ACG": 2, 
-                "CSI": 6, "DSI": 8, "ASI 1": 9, "ASI1": 9,
+                "CGI": 0, "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
+                "CSI": 6, "SI": 7, "DSI": 8, "ASI 1": 9, "ASI1": 9,
                 "ASI 2": 10, "ASI2": 10, "II": 11, "AII": 12,
                 "IA 1": 13, "IA1": 13, "IA 2": 14, "IA2": 14, "IA 3": 15, "IA3": 15
             }
@@ -2620,7 +2620,7 @@ def export_pdf():
                     return ""
                 return "".join([ch for ch in str(value).upper() if ch.isalnum()])
 
-            senior_ranks = {"DCG","ACG","CSI","DSI","ASI1","ASI2"}
+            senior_ranks = {"DCG","ACG","CIS","DCI","ACI","CSI","SI","DSI","ASI1","ASI2"}
             junior_ranks = {"II","AII","IA1","IA2","IA3"}
 
             def merged_name_by_rank(staff) -> str:

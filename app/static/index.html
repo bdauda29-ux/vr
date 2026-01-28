@@ -333,6 +333,7 @@
                             <select class="form-select" id="updateFormationDescriptionSelect" onchange="handleFormationTypeChange('update')">
                                 <option value="">Select Description...</option>
                                 <option value="Directorate">Directorate</option>
+                                <option value="Service Headquarters">Service Headquarters</option>
                                 <option value="Zonal Command">Zonal Command</option>
                                 <option value="State Command">State Command</option>
                                 <option value="Airport">Airport</option>
@@ -368,7 +369,9 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <canvas id="officeRankChart"></canvas>
+                    <div style="height: 400px; position: relative;">
+                        <canvas id="officeRankChart"></canvas>
+                    </div>
                     <div id="officeChartTotal" class="text-center fw-bold mt-3 fs-5"></div>
                 </div>
                 <div class="modal-footer">
@@ -2038,14 +2041,8 @@
         let rankSummaryChart;
         let officeSummaryChart;
         const RANKS = [
-            "Comptroller General", "Deputy Comptroller General", "Assistant Comptroller General", 
-            "Comptroller", "Deputy Comptroller", "Assistant Comptroller", 
-            "Chief Superintendent", "Superintendent", "Deputy Superintendent", 
-            "Assistant Superintendent I", "Assistant Superintendent II", 
-            "Chief Inspector", "Deputy Chief Inspector", "Assistant Chief Inspector", 
-            "Principal Inspector", "Senior Inspector", "Inspector", "Assistant Inspector", 
-            "Chief Immigration Assistant", "Senior Immigration Assistant", 
-            "Immigration Assistant I", "Immigration Assistant II", "Immigration Assistant III"
+            "CGI", "DCG", "ACG", "CIS", "DCI", "ACI", "CSI", "SI", "DSI", 
+            "ASI 1", "ASI 2", "II", "AII", "IA 1", "IA 2", "IA 3"
         ];
         
         const RANK_NAMES = {
@@ -2300,10 +2297,20 @@
                      if(sa) sa.classList.add('d-none');
                      const sp = document.getElementById('switchToPersonalItem');
                      if(sp) sp.classList.add('d-none');
+                } else if (role === 'formation_admin' || role === 'special_admin') {
+                    // Formation/Special Admin: Strictly Admin Dashboard (No Personal View)
+                    const sp = document.getElementById('switchToPersonalItem');
+                    if(sp) sp.classList.add('d-none');
+                    const sa = document.getElementById('switchToAdminItem');
+                    if(sa) sa.classList.add('d-none');
+                    const sd = document.getElementById('navItemStaffDashboard');
+                    if(sd) sd.classList.add('d-none');
+                    
+                    // Ensure Admin Dashboard is shown
+                    if (typeof showView === 'function') showView('dashboard');
                 } else {
-                    // Admin/Super/Office: Default to Personal Mode (Staff Dashboard)
-                    // Formation Admin: Defaults to Admin Mode (no personal record)
-                    if (role !== 'formation_admin' && typeof switchToPersonalMode === 'function') {
+                    // Office Admin / Super Admin: Default to Personal Mode (Staff Dashboard) but can switch
+                    if (typeof switchToPersonalMode === 'function') {
                         switchToPersonalMode();
                     }
                 }
@@ -2625,10 +2632,9 @@
             const switchAdminBtn = document.getElementById('switchToAdminItem');
             if(switchAdminBtn) switchAdminBtn.classList.add('d-none');
             
-            // Show switch to personal button (Only if NOT formation admin)
-            // Special Admin can switch
+            // Show switch to personal button (Only if NOT formation/special admin)
             const switchPersonalBtn = document.getElementById('switchToPersonalItem');
-            if(switchPersonalBtn && role !== 'formation_admin') {
+            if(switchPersonalBtn && role !== 'formation_admin' && role !== 'special_admin') {
                 switchPersonalBtn.classList.remove('d-none');
             }
             
@@ -4097,6 +4103,17 @@
                 } else {
                      throw new Error("Invalid data format received");
                 }
+                
+                // Enforce Rank Seniority Sorting
+                data.sort((a, b) => {
+                    const ra = (a.rank || '').toUpperCase();
+                    const rb = (b.rank || '').toUpperCase();
+                    let ia = RANKS.indexOf(ra);
+                    let ib = RANKS.indexOf(rb);
+                    if (ia === -1) ia = 999;
+                    if (ib === -1) ib = 999;
+                    return ia - ib;
+                });
 
                 if (role === 'super_admin' || role === 'main_admin' || role === 'special_admin') {
                     buildSuperAdminTableHeader();
@@ -4266,8 +4283,36 @@
                 let options = [];
                 let isObject = false; // For State/LGA where option is {id, name}
                 
-                if (field === 'rank') options = RANKS;
-                else if (field === 'office') options = officesList;
+                if (field === 'rank') {
+                    options = RANKS;
+                }
+                else if (field === 'office') {
+                    // Ensure officesList is populated
+                    if (!officesList || officesList.length === 0) {
+                         if (window.allOffices && window.allOffices.length > 0) {
+                             officesList = window.allOffices.map(o => o.name);
+                         } else {
+                             // Fallback: try to fetch or wait
+                             // For now, let's trigger a load if not loading
+                             loadOffices().then(() => {
+                                 // Re-open if still open? 
+                                 // Or just let user click again. 
+                                 // Better: update container content
+                                 if (officesList.length > 0) {
+                                     // Recursive call or manual update? 
+                                     // Let's just manually update for simplicity in this context
+                                     // but recursive is safer to reuse logic.
+                                     // We'll close and let user reopen or just show a message.
+                                     container.innerHTML = '<div class="text-muted small">Loaded. Please reopen.</div>';
+                                 }
+                             });
+                             container.innerHTML = '<div class="text-muted small">Loading offices...</div>';
+                             return;
+                         }
+                    }
+                    // Sort offices alphabetically
+                    options = [...officesList].sort();
+                }
                 else if (field === 'gender') options = ['Male', 'Female'];
                 else if (field === 'state_id') {
                     options = allStates || [];
@@ -6779,9 +6824,14 @@
                             return lgaNameMap[idNum];
                         }
                     }
+                    // Uppercase rank/names
+                    if (key === 'rank' || key === 'surname' || key === 'other_names') {
+                        if (typeof value === 'string') return value.toUpperCase().trim();
+                    }
                     if (typeof value === 'boolean') return value ? '1' : '0';
                     if (typeof value === 'number') return String(value);
                     let s = String(value).trim();
+                    if (s === 'null' || s === 'undefined') return '';
                     if (key === 'allow_edit_rank' || key === 'allow_edit_dopp') {
                         const lower = s.toLowerCase();
                         if (lower === 'true' || lower === '1' || lower === 'yes' || lower === 'on') return '1';
