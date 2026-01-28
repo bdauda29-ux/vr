@@ -98,6 +98,12 @@
                     if (data.formation_type) localStorage.setItem('formation_type', data.formation_type);
                     localStorage.setItem('is_staff', data.is_staff);
                     
+                    if (data.must_change_password) {
+                        localStorage.setItem('must_change_password', 'true');
+                    } else {
+                        localStorage.removeItem('must_change_password');
+                    }
+                    
                     // Redirect
                     window.location.href = '/';
                 } else {

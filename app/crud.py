@@ -233,6 +233,20 @@ def get_all_descendant_ids(db: Session, root_id: int) -> list[int]:
     return list(ids)
 
 def get_dashboard_stats(db: Session, formation_id: Optional[Union[int, list[int]]] = None):
+    # Recursive ID resolution for Service Headquarters and Zonal Commands
+    target_ids = []
+    if formation_id:
+        if isinstance(formation_id, list):
+            # If list, assume strict filtering or we'd need to expand each
+            target_ids = formation_id
+        else:
+            # If single ID, check if it's SHQ or Zonal Command and get descendants
+            fmt = db.get(models.Formation, formation_id)
+            if fmt and fmt.formation_type in ["Service Headquarters", "Zonal Command", "Directorate"]:
+                target_ids = get_all_descendant_ids(db, formation_id)
+            else:
+                target_ids = [formation_id]
+
     staff_q = select(func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None))
     office_q = select(func.count(distinct(models.Staff.office))).where(
             models.Staff.exit_date.is_(None),
@@ -241,15 +255,10 @@ def get_dashboard_stats(db: Session, formation_id: Optional[Union[int, list[int]
         )
     rank_q = select(models.Staff.rank, func.count(models.Staff.id)).where(models.Staff.exit_date.is_(None)).group_by(models.Staff.rank)
 
-    if formation_id:
-        if isinstance(formation_id, list):
-            staff_q = staff_q.where(models.Staff.formation_id.in_(formation_id))
-            office_q = office_q.where(models.Staff.formation_id.in_(formation_id))
-            rank_q = rank_q.where(models.Staff.formation_id.in_(formation_id))
-        else:
-            staff_q = staff_q.where(models.Staff.formation_id == formation_id)
-            office_q = office_q.where(models.Staff.formation_id == formation_id)
-            rank_q = rank_q.where(models.Staff.formation_id == formation_id)
+    if target_ids:
+        staff_q = staff_q.where(models.Staff.formation_id.in_(target_ids))
+        office_q = office_q.where(models.Staff.formation_id.in_(target_ids))
+        rank_q = rank_q.where(models.Staff.formation_id.in_(target_ids))
 
     total_staff = db.scalar(staff_q)
     total_offices = db.scalar(office_q)
@@ -340,7 +349,7 @@ def delete_office(db: Session, office_id: int) -> bool:
     return False
 
 # Formation CRUD
-def create_formation(db: Session, name: str, code: str, description: Optional[str] = None, formation_type: Optional[str] = None, parent_id: Optional[int] = None) -> models.Formation:
+def create_formation(db: Session, name: str, code: str, formation_type: Optional[str] = None, parent_id: Optional[int] = None) -> models.Formation:
     # Auto-parent Directorate to Service Headquarters
     if formation_type == "Directorate" and not parent_id:
         shq = db.execute(select(models.Formation).where(
@@ -352,18 +361,29 @@ def create_formation(db: Session, name: str, code: str, description: Optional[st
         if shq:
             parent_id = shq.id
             
-    obj = models.Formation(name=name, code=code, description=description, formation_type=formation_type, parent_id=parent_id)
+    obj = models.Formation(name=name, code=code, formation_type=formation_type, parent_id=parent_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)
+
+    # Auto-create Sub-formation for Zonal Commands
+    if formation_type == "Zonal Command":
+        hq_name = f"{name} Headquarters"
+        hq_code = f"{code}-HQ"
+        
+        # Check if already exists (idempotency)
+        exists = db.scalar(select(models.Formation).where(models.Formation.code == hq_code))
+        if not exists:
+            hq = models.Formation(name=hq_name, code=hq_code, formation_type="Zonal Headquarters", parent_id=obj.id)
+            db.add(hq)
+            db.commit()
+
     return obj
 
-def update_formation(db: Session, formation_id: int, name: str, description: Optional[str] = None, formation_type: Optional[str] = None, parent_id: Optional[int] = None) -> Optional[models.Formation]:
+def update_formation(db: Session, formation_id: int, name: str, formation_type: Optional[str] = None, parent_id: Optional[int] = None) -> Optional[models.Formation]:
     obj = db.get(models.Formation, formation_id)
     if obj:
         obj.name = name
-        if description is not None:
-            obj.description = description
         if formation_type is not None:
             obj.formation_type = formation_type
         if parent_id is not None:

@@ -19,7 +19,6 @@ class Formation(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(128), unique=True, index=True, nullable=False)
     code = Column(String(32), unique=True, index=True, nullable=False) # e.g. 'NIS'
-    description = Column(String(256), nullable=True)
     formation_type = Column(String(32), nullable=True) # Directorate, Zonal Command, State Command
     parent_id = Column(Integer, ForeignKey("formations.id"), nullable=True)
     parent = relationship("Formation", remote_side=[id], backref="children")

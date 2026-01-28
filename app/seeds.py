@@ -95,7 +95,8 @@ def seed_vr_formation(db):
     shq = db.query(models.Formation).filter(models.Formation.code == shq_code).first()
     if not shq:
         print(f"Seeding Formation: {shq_name} ({shq_code})...")
-        shq = models.Formation(name=shq_name, code=shq_code, description="Service Headquarters", formation_type="Directorate")
+        # Use formation_type="Service Headquarters" as requested for aggregation logic
+        shq = models.Formation(name=shq_name, code=shq_code, formation_type="Service Headquarters")
         db.add(shq)
         db.commit()
         print(f"Formation '{shq_name}' created.")

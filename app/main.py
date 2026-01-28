@@ -246,7 +246,7 @@ def get_current_user_info():
              if org:
                  formation_name = org.name
                  payload["formation_code"] = org.code
-                 payload["formation_description"] = org.description
+                 payload["formation_type"] = org.formation_type
     
     payload["formation_name"] = formation_name
     return jsonify(payload)
@@ -262,7 +262,6 @@ def create_formation_endpoint():
     data = request.get_json()
     name = data.get("name")
     code_val = data.get("code")
-    description = data.get("description")
     formation_type = data.get("formation_type")
     parent_id = data.get("parent_id")
     
@@ -322,12 +321,11 @@ def create_formation_endpoint():
             if existing:
                 return jsonify({"detail": "Formation code already exists"}), 400
                 
-            formation = crud.create_formation(db, name, code_val, description, formation_type, parent_id)
+            formation = crud.create_formation(db, name, code_val, formation_type, parent_id)
             return jsonify({
                 "id": formation.id, 
                 "name": formation.name, 
                 "code": formation.code, 
-                "description": formation.description,
                 "formation_type": formation.formation_type,
                 "parent_id": formation.parent_id
             })
@@ -364,7 +362,7 @@ def list_formations_endpoint():
                     formations = [f for f in formations if f.id in descendant_ids]
 
         
-        # Get personnel counts
+        # Get personnel counts (Direct)
         count_rows = db.query(models.Staff.formation_id, func.count(models.Staff.id))\
             .filter(models.Staff.exit_date.is_(None))\
             .group_by(models.Staff.formation_id).all()
@@ -397,23 +395,33 @@ def list_formations_endpoint():
                 if f.code != "SHQ": # Treat SHQ separately to ensure it's first
                     roots.append(f)
         
+        # Memoize recursive counts
+        memo_counts = {}
+        def get_recursive_count(node_id):
+            if node_id in memo_counts: return memo_counts[node_id]
+            total = counts.get(node_id, 0)
+            for child in children_map.get(node_id, []):
+                total += get_recursive_count(child.id)
+            memo_counts[node_id] = total
+            return total
+
         # Sort roots: Zonal Commands first among non-SHQ roots
         roots.sort(key=lambda x: (0 if x.formation_type == "Zonal Command" else 1, x.name))
         
         sorted_formations = []
         
         def add_node(node, depth=0):
-            # Add node
-            node.personnel_count = counts.get(node.id, 0)
+            # Add node with recursive count
+            total_count = get_recursive_count(node.id)
+            
             node_dict = {
                 "id": node.id, 
                 "name": node.name, 
                 "code": node.code, 
-                "description": node.description,
                 "formation_type": node.formation_type,
                 "parent_id": node.parent_id,
                 "parent_name": node.parent.name if node.parent else None,
-                "personnel_count": getattr(node, "personnel_count", 0),
+                "personnel_count": total_count,
                 "depth": depth
             }
             sorted_formations.append(node_dict)
@@ -441,7 +449,6 @@ def update_formation_endpoint(formation_id):
     
     data = request.get_json()
     name = data.get("name")
-    description = data.get("description")
     formation_type = data.get("formation_type")
     parent_id = data.get("parent_id")
     
@@ -494,7 +501,7 @@ def update_formation_endpoint(formation_id):
                  if parent.formation_type != "Zonal Command":
                       return jsonify({"detail": f"{formation_type} must be under Zonal Command"}), 400
 
-        formation = crud.update_formation(db, formation_id, name, description, formation_type, parent_id)
+        formation = crud.update_formation(db, formation_id, name, formation_type, parent_id)
         if not formation:
             return jsonify({"detail": "Formation not found"}), 404
             
@@ -502,7 +509,6 @@ def update_formation_endpoint(formation_id):
             "id": formation.id, 
             "name": formation.name, 
             "code": formation.code, 
-            "description": formation.description,
             "formation_type": formation.formation_type,
             "parent_id": formation.parent_id
         })
@@ -1391,7 +1397,7 @@ def list_staff_endpoint():
                 # Just loop and check.
                 for fid in formation_id:
                     fmt = crud.get_formation(db, fid)
-                    if fmt and (fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters"):
+                    if fmt and (fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters" or fmt.formation_type == "Zonal Command"):
                         descendants = crud.get_all_descendant_ids(db, fid)
                         expanded_ids.update(descendants)
                 formation_id = list(expanded_ids)
@@ -2454,7 +2460,7 @@ def export_excel():
                 formation_obj = crud.get_formation(db, formation_id)
                 if formation_obj:
                     org_name = formation_obj.name
-                    org_desc = formation_obj.description or ""
+                    org_desc = formation_obj.formation_type or ""
             
             formation_full_name = f"{org_name} {org_desc}".strip()
             main_title = formation_full_name
@@ -2746,7 +2752,7 @@ def export_pdf():
                 formation_obj = crud.get_formation(db, formation_id)
                 if formation_obj:
                     org_name = formation_obj.name
-                    org_desc = formation_obj.description or ""
+                    org_desc = formation_obj.formation_type or ""
             
             formation_full_name = f"{org_name} {org_desc}".strip()
             main_title = formation_full_name

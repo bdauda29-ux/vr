@@ -245,9 +245,9 @@
                             <div class="form-text">Unique code for the formation.</div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Description</label>
-                            <select class="form-select" id="formationDescriptionSelect" onchange="handleFormationTypeChange('create')">
-                                <option value="">Select Description...</option>
+                            <label class="form-label required">Formation Type</label>
+                            <select class="form-select" id="formationTypeSelect" onchange="handleFormationTypeChange('create')">
+                                <option value="">Select Type...</option>
                                 <option value="Directorate">Directorate</option>
                             <option value="Service Headquarters">Service Headquarters</option>
                             <option value="Zonal Command">Zonal Command</option>
@@ -258,7 +258,7 @@
                                 <option value="FTZ">FTZ</option>
                                 <option value="Other">Other</option>
                             </select>
-                            <input type="text" class="form-control mt-2 d-none" id="formationDescriptionOther" placeholder="Enter description">
+                            <input type="text" class="form-control mt-2 d-none" id="formationTypeOther" placeholder="Enter type">
                         </div>
                         <div class="mb-3 d-none" id="createParentFormationDiv">
                             <label class="form-label required">Under Formation</label>
@@ -329,9 +329,9 @@
                             <input type="text" class="form-control" id="updateFormationCode" readonly disabled>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Description</label>
-                            <select class="form-select" id="updateFormationDescriptionSelect" onchange="handleFormationTypeChange('update')">
-                                <option value="">Select Description...</option>
+                            <label class="form-label">Formation Type</label>
+                            <select class="form-select" id="updateFormationTypeSelect" onchange="handleFormationTypeChange('update')">
+                                <option value="">Select Type...</option>
                                 <option value="Directorate">Directorate</option>
                                 <option value="Service Headquarters">Service Headquarters</option>
                                 <option value="Zonal Command">Zonal Command</option>
@@ -342,7 +342,7 @@
                                 <option value="FTZ">FTZ</option>
                                 <option value="Other">Other</option>
                             </select>
-                            <input type="text" class="form-control mt-2 d-none" id="updateFormationDescriptionOther" placeholder="Enter description">
+                            <input type="text" class="form-control mt-2 d-none" id="updateFormationTypeOther" placeholder="Enter type">
                         </div>
                         <div class="mb-3 d-none" id="updateParentFormationDiv">
                             <label class="form-label required">Under Formation</label>
@@ -693,7 +693,7 @@
                                             <th>S/N</th>
                                             <th>Name</th>
                                             <th>Code</th>
-                                            <th>Description</th>
+                                            <th>Type</th>
                                             <th>Personnel</th>
                                             <th>Actions</th>
                                         </tr>
@@ -2078,7 +2078,7 @@
                     
                     if (navbarBrand) {
                         const name = userData.formation_name || userData.formation_code || 'Personnel Formation';
-                        const desc = userData.formation_description || "";
+                        const desc = userData.formation_type || "";
                         
                         navbarBrand.textContent = name;
                         
@@ -2113,8 +2113,8 @@
         // --- Formation Management UI Functions ---
 
         function handleFormationTypeChange(mode) {
-            const selectId = mode === 'create' ? 'formationDescriptionSelect' : 'updateFormationDescriptionSelect';
-            const inputId = mode === 'create' ? 'formationDescriptionOther' : 'updateFormationDescriptionOther';
+            const selectId = mode === 'create' ? 'formationTypeSelect' : 'updateFormationTypeSelect';
+            const inputId = mode === 'create' ? 'formationTypeOther' : 'updateFormationTypeOther';
             const parentDivId = mode === 'create' ? 'createParentFormationDiv' : 'updateParentFormationDiv';
             const parentSelectId = mode === 'create' ? 'createParentFormationSelect' : 'updateParentFormationSelect';
             
@@ -2169,7 +2169,7 @@
                 }
                 
                 if (!isMatch) {
-                    const type = f.formation_type || f.description;
+                    const type = f.formation_type;
                     if (allowedTypes.includes(type)) isMatch = true;
                 }
                 
@@ -5832,7 +5832,7 @@
                             <td>${index + 1}</td>
                             <td>${indent}${folderIcon}${o.name}</td>
                             <td>${o.code}</td>
-                            <td>${o.description || ''}</td>
+                            <td>${o.formation_type || ''}</td>
                             <td>${o.personnel_count || 0}</td>
                             <td>
                                 <button class="btn btn-sm btn-outline-primary me-1" onclick="openUpdateFormationModal(${o.id})">Edit</button>
@@ -5970,13 +5970,11 @@
             const name = document.getElementById('formationName').value;
             const code = document.getElementById('formationCode').value;
             
-            const descSelect = document.getElementById('formationDescriptionSelect').value;
-            let description = descSelect;
-            let formation_type = descSelect;
+            const typeSelect = document.getElementById('formationTypeSelect').value;
+            let formation_type = typeSelect;
             
-            if (descSelect === 'Other') {
-                description = document.getElementById('formationDescriptionOther').value;
-                formation_type = 'Other';
+            if (typeSelect === 'Other') {
+                formation_type = document.getElementById('formationTypeOther').value;
             }
             
             const parentId = document.getElementById('createParentFormationSelect').value || null;
@@ -5993,7 +5991,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}` 
                     },
-                    body: JSON.stringify({ name, code, description, formation_type, parent_id: parentId })
+                    body: JSON.stringify({ name, code, formation_type, parent_id: parentId })
                 });
                 
                 if (res.ok) {
@@ -6060,12 +6058,12 @@
             document.getElementById('updateFormationName').value = formation.name;
             document.getElementById('updateFormationCode').value = formation.code;
             
-            const select = document.getElementById('updateFormationDescriptionSelect');
-            const otherInput = document.getElementById('updateFormationDescriptionOther');
+            const select = document.getElementById('updateFormationTypeSelect');
+            const otherInput = document.getElementById('updateFormationTypeOther');
             const parentSelect = document.getElementById('updateParentFormationSelect');
             
             // Determine type
-            const type = formation.formation_type || formation.description;
+            const type = formation.formation_type;
             
             // Reset
             select.value = "";
@@ -6106,13 +6104,11 @@
             const id = document.getElementById('updateFormationId').value;
             const name = document.getElementById('updateFormationName').value;
             
-            const descSelect = document.getElementById('updateFormationDescriptionSelect').value;
-            let description = descSelect;
-            let formation_type = descSelect;
+            const typeSelect = document.getElementById('updateFormationTypeSelect').value;
+            let formation_type = typeSelect;
             
-            if (descSelect === 'Other') {
-                description = document.getElementById('updateFormationDescriptionOther').value;
-                formation_type = 'Other';
+            if (typeSelect === 'Other') {
+                formation_type = document.getElementById('updateFormationTypeOther').value;
             }
             
             const parentId = document.getElementById('updateParentFormationSelect').value || null;
@@ -6129,7 +6125,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}` 
                     },
-                    body: JSON.stringify({ name, description, formation_type, parent_id: parentId })
+                    body: JSON.stringify({ name, formation_type, parent_id: parentId })
                 });
                 
                 if (res.ok) {
@@ -7413,6 +7409,18 @@
                 if(res.ok) {
                     alert("Password changed successfully");
                     changePasswordModal.hide();
+                    localStorage.removeItem('must_change_password');
+                    
+                    // Reset Modal to normal state
+                    const cpEl = document.getElementById('changePasswordModal');
+                    if(cpEl) {
+                        const closeBtn = cpEl.querySelector('.btn-close');
+                        if(closeBtn) closeBtn.style.display = ''; // Restore
+                        
+                        // Re-init with default options
+                        if(changePasswordModal) changePasswordModal.dispose();
+                        changePasswordModal = new bootstrap.Modal(cpEl);
+                    }
                 } else {
                     alert("Error: " + (data.detail || "Failed to change password"));
                 }

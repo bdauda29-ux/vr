@@ -31,12 +31,15 @@ def run_migrations():
             print("Table 'formations' already exists.")
             # Check for description column
             columns = [c['name'] for c in inspector.get_columns('formations')]
-            if 'description' not in columns:
-                print("Column 'description' missing in 'formations'. Adding it...")
-                with engine.connect() as conn:
-                    with conn.begin():
-                        conn.execute(text("ALTER TABLE formations ADD COLUMN description VARCHAR(256)"))
-                print("Column 'description' added to 'formations' successfully.")
+            if 'description' in columns:
+                print("Column 'description' found in 'formations'. Dropping it...")
+                try:
+                    with engine.connect() as conn:
+                        with conn.begin():
+                            conn.execute(text("ALTER TABLE formations DROP COLUMN description"))
+                    print("Column 'description' dropped from 'formations' successfully.")
+                except Exception as e:
+                    print(f"Failed to drop column 'description' (might be SQLite limitation): {e}")
 
             # Check for formation_type and parent_id
             columns = [c['name'] for c in inspector.get_columns('formations')]
