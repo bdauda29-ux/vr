@@ -3836,126 +3836,8 @@
         }
 
 
-        async function populatePostingFormationFilter() {
-             const sel = document.getElementById('postingFormationId');
-             if (!sel) return;
-             sel.innerHTML = '<option value="">Loading...</option>';
-             
-             try {
-                 const res = await fetch(`${API_URL}/formations`, {
-                     headers: { 'Authorization': `Bearer ${token}` }
-                 });
-                 if (res.ok) {
-                     const data = await res.json();
-                     sel.innerHTML = '<option value="">Select Formation...</option>';
-                     data.forEach(f => {
-                         const opt = document.createElement('option');
-                         opt.value = f.id;
-                         opt.textContent = `${f.code} - ${f.name}`;
-                         sel.appendChild(opt);
-                     });
-                 } else {
-                     sel.innerHTML = '<option value="">Failed to load</option>';
-                 }
-             } catch (e) {
-                 console.error(e);
-                 sel.innerHTML = '<option value="">Error</option>';
-             }
-        }
+        // Deprecated functions (populatePostingFormationFilter, loadPostingOffices, openPostingModal, submitPosting) removed to avoid duplication.
 
-        async function loadPostingOffices(formationId) {
-            const officeSel = document.getElementById('postingOffice');
-            officeSel.innerHTML = '<option value="">Loading offices...</option>';
-            officeSel.disabled = true;
-            
-            if (!formationId) {
-                officeSel.innerHTML = '<option value="">Select Formation First...</option>';
-                return;
-            }
-            
-            try {
-                const res = await fetch(`${API_URL}/formations/${formationId}/offices`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const offices = await res.json();
-                    officeSel.innerHTML = '<option value="">Select Office...</option>';
-                    offices.forEach(o => {
-                        const opt = document.createElement('option');
-                        opt.value = o.name;
-                        opt.textContent = o.name;
-                        officeSel.appendChild(opt);
-                    });
-                    officeSel.disabled = false;
-                } else {
-                    officeSel.innerHTML = '<option value="">Failed to load offices</option>';
-                }
-            } catch (e) {
-                console.error(e);
-                officeSel.innerHTML = '<option value="">Error loading offices</option>';
-            }
-        }
-
-        function openPostingModal(staffId) {
-            document.getElementById('postingStaffId').value = staffId;
-            document.getElementById('postingFormationId').value = "";
-            document.getElementById('postingOffice').innerHTML = '<option value="">Select Formation First...</option>';
-            document.getElementById('postingOffice').disabled = true;
-            document.getElementById('postingOfficeInput').value = "";
-            document.getElementById('postingDate').value = "";
-            document.getElementById('postingRemarks').value = "";
-            
-            populatePostingFormationFilter(); // Refresh list
-            
-            const modal = new bootstrap.Modal(document.getElementById('postingModal'));
-            modal.show();
-        }
-
-        async function submitPosting() {
-            const staffId = document.getElementById('postingStaffId').value;
-            const formationId = document.getElementById('postingFormationId').value;
-            let office = document.getElementById('postingOffice').value;
-            const officeInput = document.getElementById('postingOfficeInput').value.trim();
-            const dateVal = document.getElementById('postingDate').value;
-            const remarks = document.getElementById('postingRemarks').value;
-            
-            if (officeInput) office = officeInput;
-            
-            if (!formationId || !office) {
-                alert("Formation and Office are required.");
-                return;
-            }
-            
-            if (!confirm("Are you sure you want to post this staff?")) return;
-            
-            try {
-                const res = await fetch(`${API_URL}/staff/${staffId}/posting`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        formation_id: parseInt(formationId),
-                        office: office,
-                        date: dateVal,
-                        remarks: remarks
-                    })
-                });
-                
-                const data = await res.json();
-                if (res.ok) {
-                    alert("Staff posted successfully.");
-                    bootstrap.Modal.getInstance(document.getElementById('postingModal')).hide();
-                    loadStaff();
-                } else {
-                    alert("Error: " + (data.detail || "Unknown error"));
-                }
-            } catch (e) {
-                console.error(e);
-                alert("Network error");
-            }
-        }
 
 
 
@@ -4564,7 +4446,7 @@
                         const fCode = localStorage.getItem('formation_code');
                         const allowPostingOut = (fType === 'Zonal Command') || (fType === 'Directorate' && fCode === 'SHQ');
                         if (allowPostingOut) {
-                            actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
+                            actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openPostingModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
                         }
                     }
                     // Delete option removed as requested
@@ -4884,9 +4766,14 @@
                     } else {
                         const fType = localStorage.getItem('formation_type');
                         const fCode = localStorage.getItem('formation_code');
-                        const allowPostingOut = (fType === 'Zonal Command') || (fType === 'Directorate' && fCode === 'SHQ');
+                        
+                        // Posting/Out Permission:
+                        // Only Service Headquarters and Zonal Commands can post out.
+                        const isSHQ = (fType === 'Service Headquarters' || fCode === 'SHQ');
+                        const allowPostingOut = (fType === 'Zonal Command' || isSHQ);
+                        
                         if (allowPostingOut) {
-                             actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openOutModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
+                             actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openPostingModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
                         }
                     }
 
@@ -5450,10 +5337,10 @@
                         const userFmtType = localStorage.getItem('formation_type');
 
                         items.forEach(f => {
-                            // If user is Zonal Command, exclude the Zonal Command itself from targets
-                            if (userFmtType === 'Zonal Command' && userFmtId && String(f.id) === String(userFmtId)) {
-                                return;
-                            }
+                            // Reverted: User wants Zonal Command itself to be selectable (e.g. Zone B Office)
+                            // if (userFmtType === 'Zonal Command' && userFmtId && String(f.id) === String(userFmtId)) {
+                            //    return;
+                            // }
 
                             const opt = document.createElement('option');
                             opt.value = f.id;

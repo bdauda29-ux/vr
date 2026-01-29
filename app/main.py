@@ -1739,12 +1739,15 @@ def move_staff(staff_id: int):
                 else:
                     children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
                     allowed_target_ids = [c.id for c in children] # Can post TO children
-                    # Can post FROM self or children (already checked by generic permission or need explicit?)
-                    # Staff access is checked at start of function? No, check line 1598 check:
-                    # if formation_id and staff.formation_id != formation_id: return 403
-                    # Wait, line 1598 restricts formation_admin to ONLY act on staff in their OWN formation.
-                    # This contradicts "post out personnel within it or formations under it".
-                    # I need to relax line 1598 for Zonal Admins first!
+                    allowed_target_ids.append(formation_id) # Can post TO self (if for some reason moving back to HQ from child?)
+
+                    # Check source permission (relaxed for Zonal Admin)
+                    # Zonal Admin can move/post staff from self or any child
+                    allowed_source_ids = [c.id for c in children]
+                    allowed_source_ids.append(formation_id)
+                    
+                    if staff.formation_id not in allowed_source_ids:
+                         return jsonify({"detail": "Permission denied: Zonal Admins can only manage staff under their command."}), 403
                     
                     if target_fmt_id not in allowed_target_ids:
                         return jsonify({"detail": "Permission denied: Zonal Admins can only post TO formations under their command."}), 403
