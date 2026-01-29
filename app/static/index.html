@@ -2366,7 +2366,14 @@
                 if (reviewEl) reviewExitModal = new bootstrap.Modal(reviewEl);
 
                 const cpEl = document.getElementById('changePasswordModal');
-                if (cpEl) changePasswordModal = new bootstrap.Modal(cpEl);
+                if (cpEl) {
+                    changePasswordModal = new bootstrap.Modal(cpEl);
+                    if (localStorage.getItem('must_change_password') === 'true') {
+                         changePasswordModal.dispose();
+                         changePasswordModal = new bootstrap.Modal(cpEl, { backdrop: 'static', keyboard: false });
+                         changePasswordModal.show();
+                    }
+                }
                 
                 // historyModal, moveModal, viewStaffModal are initialized in global DOMContentLoaded below
                 
@@ -2579,8 +2586,8 @@
                                             <table class="table table-hover table-striped mb-0">
                                                 <thead class="table-light sticky-top">
                                                     <tr>
-                                                        <th>Date</th>
-                                                        <th>Office</th>
+                                                        <th>Prev. Office DOPP</th>
+                                                        <th>Previous Office</th>
                                                         <th>Remark</th>
                                                     </tr>
                                                 </thead>
@@ -2904,7 +2911,7 @@
                             html += movements.map(h => `
                                 <tr>
                                     <td>${isoToDmy(h.action_date)}</td>
-                                    <td>${h.to_office || '-'}</td>
+                                    <td>${h.from_office || '-'}</td>
                                     <td>${h.remarks || 'Internal Move'}</td>
                                 </tr>
                             `).join('');
@@ -3050,6 +3057,29 @@
                 
                 // Re-init date pickers for this modal just in case
                 flatpickr("#staffEditModal .date-picker", { dateFormat: "d/m/Y", allowInput: true });
+
+                // Apply Role-Based Restrictions
+                const role = localStorage.getItem('role');
+                const isSuper = ['super_admin', 'main_admin', 'special_admin'].includes(role);
+                // Fields that only super admins can edit directly (others should use Posting/Promotion workflows)
+                const restrictedFields = [
+                    'staffEditRank', 
+                    'staffEditOffice', 
+                    'staffEditDopp', 
+                    'staffEditFormationDopp', 
+                    'staffEditDofa', 
+                    'staffEditDopa',
+                    'staffEditNis' // ID should also be restricted
+                ];
+                
+                restrictedFields.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.disabled = !isSuper;
+                        if (!isSuper) el.classList.add('bg-light');
+                        else el.classList.remove('bg-light');
+                    }
+                });
 
                 staffEditModal.show();
             } catch(e) { console.error(e); alert('Error opening edit modal'); }
@@ -3421,7 +3451,7 @@
                 </td>
                 <td>
                     <button class="btn btn-sm btn-primary me-1" onclick="editOffice(${office.id}, '${safeName}', '${safeType}', '${safeParentId}')">Edit</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteOffice(${office.id})">Remove</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteOffice(${office.id})"><i class="bi bi-trash"></i></button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -5720,14 +5750,25 @@
                     formations.forEach((o, index) => {
                         const tr = document.createElement('tr');
                         const indent = '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(o.depth || 0);
-                        const folderIcon = (o.depth > 0) ? '<i class="bi bi-arrow-return-right text-muted me-2"></i>' : '';
+                        
+                        // Check if next item has greater depth (is a child)
+                        const hasChildren = (index < formations.length - 1) && (formations[index + 1].depth > o.depth);
+                        
+                        // Collapse icon
+                        let toggleIcon = '';
+                        if (hasChildren) {
+                            toggleIcon = `<i class="bi bi-dash-square me-2" style="cursor:pointer;" onclick="toggleFormation(this, ${o.depth})"></i>`;
+                        } else if (o.depth > 0) {
+                            // Indent spacer for children without children
+                             toggleIcon = '<i class="bi bi-dot me-2 text-muted"></i>';
+                        }
                         
                         const isBold = (o.formation_type === 'Service Headquarters' || o.formation_type === 'Zonal Command');
                             const nameHtml = isBold ? `<strong>${o.name}</strong>` : o.name;
 
                             tr.innerHTML = `
                             <td>${index + 1}</td>
-                            <td>${indent}${folderIcon}${nameHtml}</td>
+                            <td>${indent}${toggleIcon}${nameHtml}</td>
                             <td>${o.code}</td>
                             <td>${o.formation_type || ''}</td>
                             <td>${o.personnel_count || 0}</td>
@@ -5738,6 +5779,8 @@
                                 <button class="btn btn-sm btn-outline-secondary" onclick="openFormationRankChart(${o.id}, '${o.name.replace(/'/g, "\\'")}')"><i class="bi bi-bar-chart"></i> Rank Chart</button>
                             </td>
                         `;
+                        tr.dataset.depth = o.depth;
+                        tr.className = 'formation-row';
                         tbody.appendChild(tr);
                     });
                 } else {
@@ -5746,6 +5789,51 @@
             } catch (e) {
                 console.error(e);
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading formations</td></tr>';
+            }
+        }
+
+        function toggleFormation(icon, parentDepth) {
+            const tr = icon.closest('tr');
+            let nextTr = tr.nextElementSibling;
+            const isCollapsed = icon.classList.contains('bi-plus-square');
+            
+            // Toggle icon
+            if (isCollapsed) {
+                icon.classList.remove('bi-plus-square');
+                icon.classList.add('bi-dash-square');
+            } else {
+                icon.classList.remove('bi-dash-square');
+                icon.classList.add('bi-plus-square');
+            }
+            
+            // Toggle children
+            // Logic:
+            // If Expanding: Show immediate children. If a child is also a parent and was collapsed, show it but NOT its children.
+            // If Collapsing: Hide all descendants.
+            
+            let skipUntilDepth = null;
+            
+            while (nextTr && nextTr.classList.contains('formation-row')) {
+                const depth = parseInt(nextTr.dataset.depth);
+                if (depth <= parentDepth) break; // End of children scope
+                
+                if (isCollapsed) { // We are expanding
+                    if (skipUntilDepth !== null && depth > skipUntilDepth) {
+                        // Keep hidden (it's a child of a collapsed parent)
+                    } else {
+                        skipUntilDepth = null; // Reset skip
+                        nextTr.style.display = 'table-row';
+                        
+                        // Check if this row is a collapsed parent
+                        const childIcon = nextTr.querySelector('.bi-plus-square');
+                        if (childIcon) {
+                            skipUntilDepth = depth;
+                        }
+                    }
+                } else { // We are collapsing
+                    nextTr.style.display = 'none';
+                }
+                nextTr = nextTr.nextElementSibling;
             }
         }
 

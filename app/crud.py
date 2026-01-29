@@ -205,17 +205,19 @@ def delete_staff(db: Session, obj: models.Staff) -> None:
     db.delete(obj)
     db.commit()
 
-def create_audit_log(db: Session, action: str, target: str, details: Optional[str] = None, formation_id: Optional[int] = None, user_id: Optional[int] = None, username: Optional[str] = None) -> models.AuditLog:
-    obj = models.AuditLog(action=action, target=target, details=details, formation_id=formation_id, user_id=user_id, username=username)
+def create_audit_log(db: Session, action: str, target: str, details: Optional[str] = None, formation_id: Optional[int] = None, office_id: Optional[int] = None, user_id: Optional[int] = None, username: Optional[str] = None) -> models.AuditLog:
+    obj = models.AuditLog(action=action, target=target, details=details, formation_id=formation_id, office_id=office_id, user_id=user_id, username=username)
     db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
-def list_audit_logs(db: Session, limit: int = 100, offset: int = 0, formation_id: Optional[int] = None, actions: Optional[List[str]] = None) -> List[models.AuditLog]:
+def list_audit_logs(db: Session, limit: int = 100, offset: int = 0, formation_id: Optional[int] = None, office_id: Optional[int] = None, actions: Optional[List[str]] = None) -> List[models.AuditLog]:
     stmt = select(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).offset(offset).limit(limit)
     if formation_id:
         stmt = stmt.where(models.AuditLog.formation_id == formation_id)
+    if office_id:
+        stmt = stmt.where(models.AuditLog.office_id == office_id)
     if actions:
         stmt = stmt.where(models.AuditLog.action.in_(actions))
     return list(db.scalars(stmt))

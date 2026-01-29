@@ -406,7 +406,12 @@ def list_formations_endpoint():
             return total
 
         # Sort roots: Zonal Commands first among non-SHQ roots
-        roots.sort(key=lambda x: (0 if x.formation_type == "Zonal Command" else 1, x.name))
+        def get_sort_key(f):
+            if f.formation_type == "Directorate": return 0
+            if f.formation_type == "Zonal Command": return 1
+            return 2
+
+        roots.sort(key=lambda x: (get_sort_key(x), x.name))
         
         sorted_formations = []
         
@@ -428,8 +433,8 @@ def list_formations_endpoint():
             
             # Add children
             kids = children_map.get(node.id, [])
-            # Sort children: Directorates first
-            kids.sort(key=lambda x: (0 if x.formation_type == "Directorate" else 1, x.name))
+            # Sort children: Directorates first, then Zonal, then Others
+            kids.sort(key=lambda x: (get_sort_key(x), x.name))
             for k in kids:
                 add_node(k, depth + 1)
         
@@ -1387,8 +1392,39 @@ def delete_office_route(office_id: int):
              office = crud.get_office(db, office_id)
              if not office or office.formation_id != user["formation_id"]:
                  return jsonify({"detail": "Permission denied"}), 403
-                 
+        
+        # Safety Check: Prevent deletion if office has children or staff
+        office = crud.get_office(db, office_id)
+        if not office:
+             return jsonify({"detail": "Not found"}), 404
+             
+        # Check children
+        child_count = db.query(models.Office).filter(models.Office.parent_id == office_id).count()
+        if child_count > 0:
+             return jsonify({"detail": f"Cannot delete office. It has {child_count} sub-offices."}), 400
+             
+        # Check staff (Match by formation_id and office name)
+        staff_count = db.query(models.Staff).filter(
+            models.Staff.formation_id == office.formation_id, 
+            models.Staff.office == office.name
+        ).count()
+        if staff_count > 0:
+             return jsonify({"detail": f"Cannot delete office. It has {staff_count} active staff members."}), 400
+
         if crud.delete_office(db, office_id):
+            # Create Audit Log
+            crud.create_audit_log(
+                db, 
+                schemas.AuditLogCreate(
+                    action="DELETE_OFFICE", 
+                    target=f"{office.name} (ID: {office.id})", 
+                    details="Office deleted",
+                    formation_id=office.formation_id,
+                    office_id=office.id
+                ), 
+                user_id=user["id"],
+                username=user["username"]
+            )
             return jsonify({"detail": "Deleted"}), 200
         return jsonify({"detail": "Not found"}), 404
 
@@ -1546,7 +1582,7 @@ def create_staff():
 
         try:
             obj = crud.create_staff(db, data)
-            crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff", formation_id=formation_id)
+            crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff", formation_id=formation_id, office_id=obj.office_id)
             return jsonify(schemas.to_dict_staff(obj)), 201
         except ValueError as e: return jsonify({"detail": str(e)}), 400
 
@@ -1644,7 +1680,7 @@ def update_staff(staff_id: int):
                     )
                     db.add(req)
                     
-                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=formation_id, user_id=user["id"], username=user["sub"])
+                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
                     db.commit()
                     
                     return jsonify(schemas.to_dict_staff(obj))
@@ -1653,10 +1689,28 @@ def update_staff(staff_id: int):
                 return jsonify({"detail": str(e)}), 400
         
         # Admin Update (Direct Update)
+        
+        # Restriction for non-super admins on sensitive fields
+        if user["role"] not in ["super_admin", "main_admin", "special_admin"]:
+             restricted_fields = ["rank", "office", "dopp", "formation_dopp", "dofa", "dopa", "nis_no"]
+             for f in restricted_fields:
+                 # Check if field is present and changed
+                 if f in data:
+                     old_val = getattr(existing, f)
+                     new_val = data[f]
+                     
+                     # Normalize for comparison
+                     if isinstance(old_val, (date, datetime)) and isinstance(new_val, str):
+                         # parse new_val to date if needed, but data[k] is already parsed in lines 1606-1607 for date fields
+                         pass 
+                         
+                     if old_val != new_val:
+                          return jsonify({"detail": f"Permission denied: Cannot directly edit {f}. Use Posting/Promotion workflows."}), 403
+
         try:
             obj = crud.update_staff(db, existing, data)
             if obj:
-                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details", formation_id=formation_id)
+                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details", formation_id=formation_id, office_id=obj.office_id)
                 return jsonify(schemas.to_dict_staff(obj))
             return jsonify({"detail": "Not found"}), 404
         except ValueError as e:
@@ -1678,8 +1732,9 @@ def delete_staff(staff_id: int):
         if formation_id and obj.formation_id != formation_id:
             return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
+        staff_office_id = obj.office_id
         crud.delete_staff(db, obj)
-        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=formation_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=formation_id, office_id=staff_office_id, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Deleted"})
 
 @app.post("/staff/<int:staff_id>/reset-login")
@@ -1700,7 +1755,7 @@ def reset_login_count(staff_id: int):
         obj.login_count = 0
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=formation_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Login count reset successfully"})
 
 @app.post("/staff/<int:staff_id>/reset-password")
@@ -1721,7 +1776,7 @@ def reset_staff_password(staff_id: int):
         obj.password_hash = None # Reset to use NIS number
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=formation_id)
+        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=formation_id, office_id=obj.office_id)
         return jsonify({"detail": "Password reset successfully"})
 
 @app.put("/staff/<int:staff_id>/role")
@@ -1747,7 +1802,7 @@ def update_staff_role(staff_id: int):
         db.add(obj)
         db.commit()
         db.refresh(obj)
-        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=formation_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(obj))
 
 @app.post("/staff/<int:staff_id>/move")
@@ -1842,7 +1897,6 @@ def move_staff(staff_id: int):
         # Determine Action Type
         action_type = "MOVE"
         to_office_val = new_office
-        from_office_val = old_office
         
         # Get Current Formation Name for History
         current_fmt = staff.formation
@@ -1850,11 +1904,11 @@ def move_staff(staff_id: int):
         if current_fmt and current_fmt.formation_type == "Directorate":
             current_fmt_name = f"SHQ ({current_fmt.code})"
             
-        from_office_val = f"{current_fmt_name} - {old_office}"
-        
         # Check if Formation Change
         if target_fmt_id != current_fmt_id:
             action_type = "POSTING"
+            from_office_val = f"{current_fmt_name} - {old_office}"
+            
             # If posting, include Formation Name
             target_fmt = crud.get_formation(db, target_fmt_id)
             if target_fmt:
@@ -1864,6 +1918,7 @@ def move_staff(staff_id: int):
                  to_office_val = fmt_name # Store only Formation Name as requested
         else:
             # Intra-formation move
+            from_office_val = old_office
             to_office_val = new_office # Store only Office Name for internal move
 
         # Prepare Remarks with History Info
@@ -1889,6 +1944,7 @@ def move_staff(staff_id: int):
         
         # Update Staff
         staff.office = new_office
+        staff.office_id = target_office_obj.id  # Ensure office_id is updated
         if action_type == "POSTING":
              staff.formation_id = target_fmt_id
              staff.formation_dopp = effective_date
@@ -1901,7 +1957,7 @@ def move_staff(staff_id: int):
         staff.dopp = effective_date 
         
         db.commit()
-        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=formation_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=formation_id, office_id=staff.office_id, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/staff/<int:staff_id>/history")
@@ -2154,7 +2210,7 @@ def posting_staff(staff_id: int):
         staff.formation_dopp = effective_date
         
         db.commit()
-        crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id, office_id=staff.office_id, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/settings/staff-edit")
@@ -2274,7 +2330,7 @@ def change_password():
                 
             staff.password_hash = auth.get_password_hash(new_password)
             db.commit()
-            crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", formation_id=staff.formation_id, user_id=user_info["id"], username=user_info["sub"])
+            crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", formation_id=staff.formation_id, office_id=staff.office_id, user_id=user_info["id"], username=user_info["sub"])
             return jsonify({"detail": "Password changed successfully"})
 
         return jsonify({"detail": "User record not found"}), 404
@@ -2282,22 +2338,33 @@ def change_password():
 @app.get("/audit-logs")
 def get_audit_logs():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "formation_admin"])
+    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "formation_admin", "office_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
+    office_id = None
     actions = None
     
     if user["role"] == "special_admin":
-        # Special admin sees logs from all formations, but only "posting" related events
+        # Special admin sees logs from all formations, all actions
         formation_id = None
-        actions = ["POSTING", "MOVE", "EXIT", "RETURN", "POSTED_OUT", "UNDO_EXIT"] # Broad interpretation of "posting"
+        actions = None
         
+    elif user["role"] == "office_admin":
+         # Get staff record to find office_id
+         with next(get_db()) as db:
+              staff = crud.get_staff(db, user["id"])
+              if staff:
+                  office_id = staff.office_id
+                  # formation_id is already in user, but let's rely on office_id filter primarily for office scope
+              else:
+                  return jsonify([]), 200
+
     limit = request.args.get("limit", 100, type=int)
     offset = request.args.get("offset", 0, type=int)
     
     with next(get_db()) as db:
-        logs = crud.list_audit_logs(db, limit=limit, offset=offset, formation_id=formation_id, actions=actions)
+        logs = crud.list_audit_logs(db, limit=limit, offset=offset, formation_id=formation_id, office_id=office_id, actions=actions)
         return jsonify([schemas.to_dict_audit_log(l) for l in logs])
 
 @app.get("/export/excel")
@@ -3016,7 +3083,7 @@ def request_exit(staff_id: int):
         staff.out_request_date = exit_date
         staff.out_request_reason = exit_mode
         db.commit()
-        crud.create_audit_log(db, "EXIT_REQUEST", f"Staff: {staff.nis_no}", f"Requested exit: {exit_mode} on {exit_date}")
+        crud.create_audit_log(db, "EXIT_REQUEST", f"Staff: {staff.nis_no}", f"Requested exit: {exit_mode} on {exit_date}", formation_id=staff.formation_id, office_id=staff.office_id)
         return jsonify({"detail": "Request submitted"})
 
 @app.post("/staff/<int:staff_id>/exit-approve")
@@ -3081,7 +3148,7 @@ def reject_exit(staff_id: int):
         staff.out_request_reason = None
         
         db.commit()
-        crud.create_audit_log(db, "EXIT_REJECT", f"Staff: {staff.nis_no}", "Rejected exit request")
+        crud.create_audit_log(db, "EXIT_REJECT", f"Staff: {staff.nis_no}", "Rejected exit request", formation_id=staff.formation_id, office_id=staff.office_id)
         return jsonify({"detail": "Request rejected"})
 
 @app.post("/staff/<int:staff_id>/undo-exit")
@@ -3176,7 +3243,7 @@ def approve_edit_request(req_id):
             req.reviewed_by = user.get("sub")
             req.reviewed_at = func.now()
             
-            crud.create_audit_log(db, "REVIEW_KEEP", f"Staff: {req.staff.nis_no}", f"Kept updates (Request {req_id})", formation_id=formation_id)
+            crud.create_audit_log(db, "REVIEW_KEEP", f"Staff: {req.staff.nis_no}", f"Kept updates (Request {req_id})", formation_id=formation_id, office_id=req.staff.office_id)
             db.commit()
             return jsonify({"detail": "Updates kept (Approved)"})
         except Exception as e:
@@ -3230,7 +3297,7 @@ def reject_edit_request(req_id):
             req.reviewed_by = user.get("sub")
             req.reviewed_at = func.now()
             
-            crud.create_audit_log(db, "REVIEW_REVERT", f"Staff: {req.staff.nis_no}", f"Reverted updates (Request {req_id})", formation_id=formation_id)
+            crud.create_audit_log(db, "REVIEW_REVERT", f"Staff: {req.staff.nis_no}", f"Reverted updates (Request {req_id})", formation_id=formation_id, office_id=req.staff.office_id)
             db.commit()
             return jsonify({"detail": "Updates reverted (Rejected)"})
         except Exception as e:

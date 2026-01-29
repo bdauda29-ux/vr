@@ -83,6 +83,16 @@ def run_migrations():
                 else:
                     print(f"Column 'formation_id' already exists in '{table}'.")
 
+        # 4. Add office_id to audit_logs
+        if 'audit_logs' in table_names:
+            columns = [c['name'] for c in inspector.get_columns('audit_logs')]
+            if 'office_id' not in columns:
+                print("Column 'office_id' missing in 'audit_logs'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE audit_logs ADD COLUMN office_id INTEGER"))
+                print("Column 'office_id' added to 'audit_logs' successfully.")
+
         # --- Existing Migrations ---
 
         if 'offices' in table_names:
