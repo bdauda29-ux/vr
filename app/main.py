@@ -771,6 +771,12 @@ def dashboard_sub_formation_stats():
                  if d.id not in existing_ids:
                      children.append(d)
         
+        # If Zonal Command, include itself as a sub-formation so it appears in the list
+        if fmt.formation_type == "Zonal Command":
+            # Check if not already present (to be safe)
+            if fmt.id not in [c.id for c in children]:
+                children.append(fmt)
+        
         results = []
         for child in children:
             # For each child, get its recursive subtree IDs
