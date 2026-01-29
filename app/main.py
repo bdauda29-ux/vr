@@ -771,11 +771,7 @@ def dashboard_sub_formation_stats():
                  if d.id not in existing_ids:
                      children.append(d)
         
-        # If Zonal Command, include itself as a sub-formation so it appears in the list
-        if fmt.formation_type == "Zonal Command":
-            # Check if not already present (to be safe)
-            if fmt.id not in [c.id for c in children]:
-                children.append(fmt)
+        # Zonal Command should not list itself under its sub-formations
         
         results = []
         for child in children:
@@ -1248,6 +1244,27 @@ def create_office_route():
     formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
+        # Validate Office Hierarchy Rules
+        if formation_id:
+            formation = crud.get_formation(db, formation_id)
+            if formation:
+                # Rule 1: Non-Directorate Formations cannot have Division/Directorate offices
+                is_directorate_level = formation.formation_type in ["Directorate", "Service Headquarters"]
+                if not is_directorate_level and office_type in ["Division", "Directorate"]:
+                     return jsonify({"detail": f"Formations of type '{formation.formation_type}' cannot have offices of type '{office_type}'. Only 'Section' and 'Unit' are allowed."}), 400
+
+        # Rule 2: 'Unit' must have a parent of type Section, Division, or Directorate
+        if office_type == "Unit":
+            if not parent_id:
+                return jsonify({"detail": "An office of type 'Unit' must have a parent office (Section, Division, or Directorate)."}), 400
+            
+            parent_office = crud.get_office(db, parent_id)
+            if not parent_office:
+                return jsonify({"detail": "Selected parent office not found."}), 400
+            
+            if parent_office.office_type not in ["Section", "Division", "Directorate"]:
+                return jsonify({"detail": f"A 'Unit' must be under a Section, Division, or Directorate. Selected parent is '{parent_office.office_type}'."}), 400
+
         try:
             obj = crud.create_office(db, name, formation_id=formation_id, office_type=office_type, parent_id=parent_id)
             return jsonify(schemas.to_dict_office(obj)), 201
@@ -1275,6 +1292,61 @@ def update_office_route(office_id: int):
         if user["role"] == "formation_admin":
              if current_office.formation_id != user["formation_id"]:
                  return jsonify({"detail": "Permission denied"}), 403
+
+        # Validate Office Hierarchy Rules
+        formation_id = current_office.formation_id
+        if formation_id:
+            formation = crud.get_formation(db, formation_id)
+            if formation:
+                # Rule 1: Non-Directorate Formations cannot have Division/Directorate offices
+                is_directorate_level = formation.formation_type in ["Directorate", "Service Headquarters"]
+                if not is_directorate_level and office_type in ["Division", "Directorate"]:
+                     return jsonify({"detail": f"Formations of type '{formation.formation_type}' cannot have offices of type '{office_type}'. Only 'Section' and 'Unit' are allowed."}), 400
+
+        # Rule 2: 'Unit' must have a parent of type Section, Division, or Directorate
+        if office_type == "Unit":
+            if not parent_id:
+                # Check if it already has a parent that isn't being changed?
+                # The update might not send parent_id if it's not changing.
+                # However, typically PUT updates send full object or specific fields.
+                # If parent_id is None in data, does it mean "remove parent" or "no change"?
+                # crud.update_office uses default=None but usually updates if provided.
+                # Let's assume the frontend sends the current parent_id if not changed, or we should check existing.
+                
+                # If parent_id is explicitly None (meaning remove parent), that's invalid for Unit.
+                # If parent_id is missing from payload, we should check current_office.parent_id.
+                
+                # But here data.get("parent_id") returns None if missing OR if null.
+                # If the user intends to KEEP the current parent, they should send it.
+                # If they send null, it means remove.
+                
+                # Let's check crud.update_office behavior.
+                pass
+            
+            # Use provided parent_id or fall back to existing if not provided?
+            # Actually, standard PUT/PATCH: if field is missing, might mean no change.
+            # But here `data.get("parent_id")` is ambiguous.
+            
+            # Let's assume if parent_id is provided (truthy), we check it.
+            # If parent_id is falsy (None or 0):
+            # If it's strictly None and key exists -> clearing parent -> Error.
+            # If key missing -> might be okay if existing parent is valid.
+            
+            # To be safe and strict:
+            check_parent_id = parent_id if parent_id else current_office.parent_id
+            
+            if not check_parent_id:
+                 return jsonify({"detail": "An office of type 'Unit' must have a parent office (Section, Division, or Directorate)."}), 400
+            
+            # Check the parent office type
+            # If parent_id is changing, check new parent.
+            # If parent_id is same, check existing parent (in case it changed type? unlikely but possible).
+            parent_office = crud.get_office(db, check_parent_id)
+            if not parent_office:
+                 return jsonify({"detail": "Parent office not found."}), 400
+            
+            if parent_office.office_type not in ["Section", "Division", "Directorate"]:
+                return jsonify({"detail": f"A 'Unit' must be under a Section, Division, or Directorate. Parent is '{parent_office.office_type}'."}), 400
 
         old_name = current_office.name
         

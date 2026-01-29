@@ -1905,8 +1905,6 @@
                         <select class="form-select" id="postingOffice" required>
                             <option value="">Select Formation First...</option>
                         </select>
-                        <div class="form-text">Or type a new office name:</div>
-                         <input type="text" class="form-control mt-1" id="postingOfficeInput" placeholder="New Office Name">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Effective Date</label>
@@ -4748,9 +4746,20 @@
                                 <li><a class="dropdown-item" href="#" onclick="editStaff(${s.id}); return false;"><i class="bi bi-pencil me-2"></i>Edit</a></li>
                     `;
 
+                    const fType = localStorage.getItem('formation_type');
+                    const fCode = localStorage.getItem('formation_code');
+                    
+                    const isSHQ = (fType === 'Service Headquarters' || fCode === 'SHQ');
+                    const allowPostingOut = (fType === 'Zonal Command' || isSHQ);
+                    // Move Permission: Removed for Zonal Command
+                    const allowMove = (role === 'super_admin' || role === 'main_admin' || (role === 'formation_admin' && fType !== 'Zonal Command'));
+
+                    if (allowMove) {
+                        actionBtns += `<li><a class="dropdown-item" href="#" onclick="openMoveModal(${s.id}); return false;"><i class="bi bi-arrow-right-circle me-2"></i>Move</a></li>`;
+                    }
+
                     if (role === 'super_admin' || role === 'main_admin' || role === 'formation_admin') {
                         actionBtns += `
-                                <li><a class="dropdown-item" href="#" onclick="openMoveModal(${s.id}); return false;"><i class="bi bi-arrow-right-circle me-2"></i>Move</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openPostingHistoryModal(${s.id}); return false;"><i class="bi bi-cursor me-2"></i>Formation History</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openMovementHistoryModal(${s.id}); return false;"><i class="bi bi-arrow-left-right me-2"></i>Internal History</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>All History</a></li>
@@ -4764,14 +4773,6 @@
                             actionBtns += `<li><span class="dropdown-item-text text-warning"><i class="bi bi-hourglass me-2"></i>Exit Pending</span></li>`;
                         }
                     } else {
-                        const fType = localStorage.getItem('formation_type');
-                        const fCode = localStorage.getItem('formation_code');
-                        
-                        // Posting/Out Permission:
-                        // Only Service Headquarters and Zonal Commands can post out.
-                        const isSHQ = (fType === 'Service Headquarters' || fCode === 'SHQ');
-                        const allowPostingOut = (fType === 'Zonal Command' || isSHQ);
-                        
                         if (allowPostingOut) {
                              actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openPostingModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
                         }
@@ -5318,41 +5319,42 @@
             document.getElementById('postingStaffId').value = id;
             document.getElementById('postingOffice').innerHTML = '<option value="">Select Formation First...</option>';
             document.getElementById('postingOffice').disabled = true;
-            document.getElementById('postingOfficeInput').value = '';
             document.getElementById('postingDate').value = '';
             document.getElementById('postingRemarks').value = '';
             
-            // Populate formation dropdown if empty
+            // Populate formation dropdown, excluding the staff's current formation
             const formationSel = document.getElementById('postingFormationId');
-            if (formationSel.options.length <= 1) {
-                try {
-                    const res = await fetch(`${API_URL}/formations`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (res.ok) {
-                        const items = await res.json();
-                        
-                        // Zonal Command Filtering: Exclude self (parent) so only sub-formations are selectable
-                        const userFmtId = localStorage.getItem('formation_id');
-                        const userFmtType = localStorage.getItem('formation_type');
-
-                        items.forEach(f => {
-                            // Reverted: User wants Zonal Command itself to be selectable (e.g. Zone B Office)
-                            // if (userFmtType === 'Zonal Command' && userFmtId && String(f.id) === String(userFmtId)) {
-                            //    return;
-                            // }
-
-                            const opt = document.createElement('option');
-                            opt.value = f.id;
-                            opt.textContent = `${f.code} - ${f.name}`;
-                            formationSel.appendChild(opt);
-                        });
-                    }
-                } catch (e) {
-                    console.error("Failed to load formations", e);
+            formationSel.innerHTML = '<option value="">Loading...</option>';
+            try {
+                // Load staff to determine current formation
+                let currentFormationId = null;
+                const staffRes = await fetch(`${API_URL}/staff/${id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (staffRes.ok) {
+                    const s = await staffRes.json();
+                    currentFormationId = s && s.formation ? String(s.formation.id) : null;
                 }
-            } else {
-                formationSel.value = "";
+
+                const res = await fetch(`${API_URL}/formations`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const items = await res.json();
+                    formationSel.innerHTML = '<option value="">Select Formation...</option>';
+                    items.forEach(f => {
+                        if (currentFormationId && String(f.id) === currentFormationId) return; // exclude current formation
+                        const opt = document.createElement('option');
+                        opt.value = f.id;
+                        opt.textContent = `${f.code} - ${f.name}`;
+                        formationSel.appendChild(opt);
+                    });
+                } else {
+                    formationSel.innerHTML = '<option value="">Failed to load formations</option>';
+                }
+            } catch (e) {
+                console.error("Failed to load formations", e);
+                formationSel.innerHTML = '<option value="">Error loading formations</option>';
             }
             
             postingModalInstance.show();
@@ -5394,21 +5396,16 @@
         async function submitPosting() {
             const staffId = document.getElementById('postingStaffId').value;
             const formationId = document.getElementById('postingFormationId').value;
-            let office = document.getElementById('postingOffice').value;
-            const officeInput = document.getElementById('postingOfficeInput').value.trim();
+            const office = document.getElementById('postingOffice').value;
             const dateStr = document.getElementById('postingDate').value;
             const remarks = document.getElementById('postingRemarks').value;
-            
-            if (officeInput) {
-                office = officeInput;
-            }
 
             if (!formationId) {
                 alert("Please select a target formation");
                 return;
             }
             if (!office) {
-                alert("Please select or enter a new office");
+                alert("Please select an office");
                 return;
             }
 
@@ -5725,9 +5722,12 @@
                         const indent = '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(o.depth || 0);
                         const folderIcon = (o.depth > 0) ? '<i class="bi bi-arrow-return-right text-muted me-2"></i>' : '';
                         
-                        tr.innerHTML = `
+                        const isBold = (o.formation_type === 'Service Headquarters' || o.formation_type === 'Zonal Command');
+                            const nameHtml = isBold ? `<strong>${o.name}</strong>` : o.name;
+
+                            tr.innerHTML = `
                             <td>${index + 1}</td>
-                            <td>${indent}${folderIcon}${o.name}</td>
+                            <td>${indent}${folderIcon}${nameHtml}</td>
                             <td>${o.code}</td>
                             <td>${o.formation_type || ''}</td>
                             <td>${o.personnel_count || 0}</td>
