@@ -149,3 +149,15 @@ class StaffEditRequest(Base):
     reviewed_by = Column(String(64), nullable=True) # Username of reviewer
     
     staff = relationship("Staff")
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("staff.id"), nullable=True) # For specific user
+    formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True) # For formation admins
+    office_name = Column(String(128), nullable=True) # For office admins
+    message = Column(String(256), nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    user = relationship("Staff")

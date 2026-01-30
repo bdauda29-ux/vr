@@ -90,37 +90,7 @@
             opacity: 0.8;
         }
 
-        /* Modern Column Filters */
-        .th-filter-wrapper {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-        }
-        .th-filter-icon {
-            font-size: 0.8em;
-            opacity: 0.5;
-            transition: opacity 0.2s;
-            padding: 2px 5px;
-            border-radius: 4px;
-        }
-        .th-filter-icon:hover, .th-filter-icon.active {
-            opacity: 1;
-            background-color: rgba(0,0,0,0.1);
-            color: var(--bs-primary);
-        }
-        .filter-dropdown-menu {
-            min-width: 250px;
-            padding: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-            border: 1px solid rgba(0,0,0,0.1);
-        }
-        .filter-options-container {
-            max-height: 200px;
-            overflow-y: auto;
-            margin-top: 5px;
-            margin-bottom: 5px;
-        }
+        /* Modern Column Filters - Removed */
 
     </style>
 </head>
@@ -590,6 +560,23 @@
 
                 <!-- Dashboard View -->
                 <div id="view-dashboard" class="view-section">
+                    <!-- Admin Notifications Row -->
+                    <div class="row mb-4 d-none" id="admin-notifications-row">
+                        <div class="col-12">
+                            <div class="card border-primary shadow-sm">
+                                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0"><i class="bi bi-bell-fill me-2"></i> Notifications</h5>
+                                    <span class="badge bg-white text-primary rounded-pill" id="notification-count">0</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="list-group list-group-flush" id="admin-notifications-list">
+                                        <!-- Populated by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Notification Pane for Empty Fields -->
                     <div class="row mb-4 d-none" id="dashboard-notifications-row">
                         <div class="col-12">
@@ -744,91 +731,148 @@
                                         </li>
                                     </ul>
 
-                                    <div class="mb-3">
-                                        <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false" aria-controls="filterCollapse">
-                                            <i class="bi bi-funnel"></i> Show/Hide Filters
-                                        </button>
-                                    </div>
-                                    
-                                    <div class="collapse" id="filterCollapse">
-                                        <div class="row mb-3 g-2">
-                                            <div class="col-12 col-md-3">
-                                                <input type="text" id="searchInput" class="form-control" placeholder="Search surname, NIS...">
-                                            </div>
-                                            <div class="col-6 col-md-2 d-none">
-                                                <div class="dropdown" id="filterRankDropdown">
-                                                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterRankBtn">
-                                                        All Ranks
-                                                    </button>
-                                                    <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
-                                                        <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
-                                                        <li><hr class="dropdown-divider"></li>
-                                                        <div id="filterRankContainer">
-                                                            <!-- Checkboxes go here -->
-                                                        </div>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                            <div class="col-6 col-md-2">
-                                                <div class="dropdown" id="filterOfficeDropdown">
-                                                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterOfficeBtn">
-                                                        All Offices
-                                                    </button>
-                                                    <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
-                                                         <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
-                                                         <li><hr class="dropdown-divider"></li>
-                                                         <div id="filterOfficeContainer">
-                                                            <!-- Checkboxes go here -->
-                                                         </div>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                            <div class="col-6 col-md-2" id="formationFilterContainer" style="display:none;">
-                                                <div class="dropdown" id="filterFormationDropdown">
-                                                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="filterFormationBtn">
-                                                        All Formations
-                                                    </button>
-                                                    <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; width: 250px;">
-                                                         <li><input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onkeyup="filterDropdown(this)"></li>
-                                                         <li><hr class="dropdown-divider"></li>
-                                                         <div id="filterFormationListContainer">
-                                                            <!-- Checkboxes go here -->
-                                                         </div>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                            <div class="col-6 col-md-2">
-                                                <select id="sortDopp" class="form-select" onchange="loadStaff()">
-                                                    <option value="">Sort by DOPP</option>
-                                                    <option value="asc">DOPP Ascending</option>
-                                                    <option value="desc">DOPP Descending</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-6 col-md-3">
-                                                <input type="text" id="dopaRange" class="form-control" placeholder="DOPA Range (From to To)">
-                                            </div>
-                                            <div class="col-6 col-md-2 exited-only d-none">
-                                                <input type="text" id="exitFrom" class="form-control date-picker" placeholder="Eff. Date From">
-                                            </div>
-                                            <div class="col-6 col-md-2 exited-only d-none">
-                                                <input type="text" id="exitTo" class="form-control date-picker" placeholder="Eff. Date To">
-                                            </div>
-                                            <div class="col-12 col-md-1">
-                                                <button class="btn btn-primary w-100" onclick="loadStaff()"><i class="bi bi-search"></i></button>
-                                            </div>
-                                            <div class="col-12 col-md-2">
-                                                <button class="btn btn-outline-secondary w-100" onclick="clearFilters()"><i class="bi bi-x-circle"></i> Clear Filters</button>
-                                            </div>
-                                            <div class="col-6 col-md-2 text-md-end">
-                                                <button class="btn btn-success w-100" onclick="showAddForm()"><i class="bi bi-plus-lg"></i> Add</button>
-                                            </div>
-                                            <div class="col-6 col-md-2 text-md-end">
-                                                <div class="btn-group w-100">
-                                                    <button class="btn btn-success btn-sm w-50" onclick="openExportModal('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
-                                                    <button class="btn btn-danger btn-sm w-50" onclick="openExportModal('pdf')"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                                    <!-- Modern Filter Bar -->
+                                    <div class="d-flex align-items-center gap-2 mb-3">
+                                        <!-- Filter Menu Button -->
+                                        <div class="dropdown">
+                                            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Filters">
+                                                <i class="bi bi-filter-left fs-5"></i>
+                                            </button>
+                                            <div class="dropdown-menu p-2 shadow" style="width: 280px;">
+                                                <h6 class="dropdown-header">Filters</h6>
+                                                <input type="text" class="form-control form-control-sm mb-2" placeholder="Search filters..." onkeyup="filterFilterMenu(this)">
+                                                <div class="list-group list-group-flush small" id="mainFilterMenu">
+                                                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="toggleFilterPanel('rank', event)">
+                                                        Rank <span class="badge bg-light text-dark rounded-pill" id="badge-rank"></span>
+                                                    </a>
+                                                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="toggleFilterPanel('office', event)">
+                                                        Office <span class="badge bg-light text-dark rounded-pill" id="badge-office"></span>
+                                                    </a>
+                                                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center admin-only" onclick="toggleFilterPanel('formation', event)" id="menu-item-formation">
+                                                        Formation <span class="badge bg-light text-dark rounded-pill" id="badge-formation"></span>
+                                                    </a>
+                                                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="toggleFilterPanel('dopa', event)">
+                                                        Date of First Appointment
+                                                    </a>
+                                                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="toggleFilterPanel('sort', event)">
+                                                        Sort Order
+                                                    </a>
+                                                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center exited-only d-none" onclick="toggleFilterPanel('exit_date', event)">
+                                                        Exit Date
+                                                    </a>
                                                 </div>
                                             </div>
                                         </div>
+
+                                        <!-- Main Search Input -->
+                                        <div class="flex-grow-1 position-relative">
+                                            <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                                            <input type="text" id="searchInput" class="form-control ps-5" placeholder="Search leads (Surname, NIS...)" onkeyup="if(event.key === 'Enter') loadStaff()">
+                                        </div>
+
+                                        <!-- Action Buttons -->
+                                        <div class="d-flex gap-2">
+                                             <button class="btn btn-outline-secondary" onclick="loadStaff()" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+                                             <button class="btn btn-outline-danger" onclick="clearFilters()" title="Clear All"><i class="bi bi-x-lg"></i></button>
+                                             <button class="btn btn-success" onclick="showAddForm()"><i class="bi bi-plus-lg"></i> Add</button>
+                                             <div class="dropdown">
+                                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">Export</button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li><button class="dropdown-item" onclick="openExportModal('excel')"><i class="bi bi-file-earmark-excel text-success"></i> Excel</button></li>
+                                                    <li><button class="dropdown-item" onclick="openExportModal('pdf')"><i class="bi bi-file-earmark-pdf text-danger"></i> PDF</button></li>
+                                                </ul>
+                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Filter Panels Container (Hidden by default, toggled via menu) -->
+                                    <div id="activeFilterPanels" class="mb-3">
+                                        
+                                        <!-- Rank Filter Panel -->
+                                        <div class="card mb-2 filter-panel d-none" id="panel-rank">
+                                            <div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">
+                                                <small class="fw-bold">Rank Filter</small>
+                                                <button type="button" class="btn-close btn-close-white" style="filter: grayscale(1);" onclick="closeFilterPanel('rank')"></button>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                <input type="text" class="form-control form-control-sm mb-2" placeholder="Search ranks..." onkeyup="filterCheckboxList(this, 'filterRankContainer')">
+                                                <div id="filterRankContainer" class="d-flex flex-wrap gap-3" style="max-height: 150px; overflow-y: auto;">
+                                                    <!-- Checkboxes populated by JS -->
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Office Filter Panel -->
+                                        <div class="card mb-2 filter-panel d-none" id="panel-office">
+                                            <div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">
+                                                <small class="fw-bold">Office Filter</small>
+                                                <button type="button" class="btn-close btn-close-white" style="filter: grayscale(1);" onclick="closeFilterPanel('office')"></button>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                <input type="text" class="form-control form-control-sm mb-2" placeholder="Search offices..." onkeyup="filterCheckboxList(this, 'filterOfficeContainer')">
+                                                <div id="filterOfficeContainer" class="d-flex flex-wrap gap-3" style="max-height: 150px; overflow-y: auto;">
+                                                    <!-- Checkboxes populated by JS -->
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Formation Filter Panel -->
+                                        <div class="card mb-2 filter-panel d-none" id="panel-formation">
+                                            <div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">
+                                                <small class="fw-bold">Formation Filter</small>
+                                                <button type="button" class="btn-close btn-close-white" style="filter: grayscale(1);" onclick="closeFilterPanel('formation')"></button>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                <input type="text" class="form-control form-control-sm mb-2" placeholder="Search formations..." onkeyup="filterCheckboxList(this, 'filterFormationListContainer')">
+                                                <div id="filterFormationListContainer" class="d-flex flex-wrap gap-3" style="max-height: 150px; overflow-y: auto;">
+                                                    <!-- Checkboxes populated by JS -->
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Sort Panel -->
+                                        <div class="card mb-2 filter-panel d-none" id="panel-sort">
+                                            <div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">
+                                                <small class="fw-bold">Sort Options</small>
+                                                <button type="button" class="btn-close btn-close-white" style="filter: grayscale(1);" onclick="closeFilterPanel('sort')"></button>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                <select id="sortDopp" class="form-select form-select-sm w-auto" onchange="loadStaff()">
+                                                    <option value="">Default Sort</option>
+                                                    <option value="asc">DOPP Ascending (Oldest First)</option>
+                                                    <option value="desc">DOPP Descending (Newest First)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <!-- DOPA Panel -->
+                                        <div class="card mb-2 filter-panel d-none" id="panel-dopa">
+                                            <div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">
+                                                <small class="fw-bold">DOPA Range</small>
+                                                <button type="button" class="btn-close btn-close-white" style="filter: grayscale(1);" onclick="closeFilterPanel('dopa')"></button>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                <div class="input-group input-group-sm w-50">
+                                                    <input type="text" id="dopaRange" class="form-control" placeholder="YYYY-MM-DD to YYYY-MM-DD">
+                                                    <button class="btn btn-primary" onclick="loadStaff()">Apply</button>
+                                                </div>
+                                                <small class="text-muted">Format: YYYY-MM-DD to YYYY-MM-DD</small>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Exit Date Panel -->
+                                        <div class="card mb-2 filter-panel d-none" id="panel-exit_date">
+                                            <div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">
+                                                <small class="fw-bold">Exit Date Range</small>
+                                                <button type="button" class="btn-close btn-close-white" style="filter: grayscale(1);" onclick="closeFilterPanel('exit_date')"></button>
+                                            </div>
+                                            <div class="card-body p-2 d-flex gap-2">
+                                                 <input type="text" id="exitFrom" class="form-control form-control-sm date-picker" placeholder="From dd/mm/yyyy">
+                                                 <input type="text" id="exitTo" class="form-control form-control-sm date-picker" placeholder="To dd/mm/yyyy">
+                                                 <button class="btn btn-sm btn-primary" onclick="loadStaff()">Apply</button>
+                                            </div>
+                                        </div>
+
                                     </div>
 
                                     <div class="btn-group mb-3 w-100" role="group" aria-label="Status Filter">
@@ -1901,8 +1945,8 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label required">New Office</label>
-                        <select class="form-select" id="postingOffice" required>
+                        <label class="form-label">New Office (Optional)</label>
+                        <select class="form-select" id="postingOffice">
                             <option value="">Select Formation First...</option>
                         </select>
                     </div>
@@ -3203,6 +3247,11 @@
                         document.getElementById('dash-total-offices').textContent = data.total_offices ?? 0;
                     }
 
+                    // --- Notifications Logic ---
+                    if (role === 'formation_admin' || role === 'office_admin') {
+                        loadNotifications();
+                    }
+
                     // --- Sub-Formation Stats Logic (Zonal Command & Hierarchical) ---
                     const subStatsRow = document.getElementById('sub-formation-stats-row');
                     if (subStatsRow) {
@@ -3310,6 +3359,78 @@
                     }
                 }
             } catch(e) { console.error(e); }
+        }
+
+        // --- Notification Functions ---
+        async function loadNotifications() {
+            const row = document.getElementById('admin-notifications-row');
+            const list = document.getElementById('admin-notifications-list');
+            const countBadge = document.getElementById('notification-count');
+            
+            if (!row || !list) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/notifications`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const notifs = await res.json();
+                    const unread = notifs.filter(n => !n.is_read);
+                    
+                    if (countBadge) countBadge.textContent = unread.length;
+                    
+                    if (notifs.length > 0) {
+                        row.classList.remove('d-none');
+                        list.innerHTML = '';
+                        
+                        // Show max 5 recent notifications
+                        notifs.slice(0, 5).forEach(n => {
+                            const isReadClass = n.is_read ? 'text-muted bg-light' : 'fw-bold';
+                            const btnHtml = n.is_read 
+                                ? '<i class="bi bi-check2-all text-success"></i>' 
+                                : `<button class="btn btn-sm btn-outline-primary py-0" onclick="markNotificationRead(${n.id})">Mark Read</button>`;
+                                
+                            const dateStr = n.created_at ? new Date(n.created_at).toLocaleDateString() : '';
+                            
+                            const item = document.createElement('div');
+                            item.className = `list-group-item d-flex justify-content-between align-items-center ${isReadClass}`;
+                            item.innerHTML = `
+                                <div>
+                                    <span>${n.message}</span>
+                                    <br><small class="text-muted" style="font-size:0.75rem;">${dateStr}</small>
+                                </div>
+                                <div>${btnHtml}</div>
+                            `;
+                            list.appendChild(item);
+                        });
+                        
+                        if (notifs.length > 5) {
+                            const more = document.createElement('div');
+                            more.className = 'list-group-item text-center text-muted small';
+                            more.textContent = `And ${notifs.length - 5} more...`;
+                            list.appendChild(more);
+                        }
+                    } else {
+                        row.classList.add('d-none');
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load notifications", e);
+            }
+        }
+
+        async function markNotificationRead(id) {
+            try {
+                const res = await fetch(`${API_URL}/notifications/${id}/read`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    loadNotifications(); // Reload to update UI
+                }
+            } catch (e) {
+                console.error("Failed to mark notification read", e);
+            }
         }
 
         // Offices View Logic
@@ -3781,23 +3902,73 @@
 
         function updateFilterLabel(type) {
             const checkboxes = document.querySelectorAll(`.filter-${type.toLowerCase()}-cb:checked`);
-            const btn = document.getElementById(`filter${type}Btn`);
-            if(checkboxes.length === 0) {
-                btn.textContent = `All ${type}s`;
-            } else if(checkboxes.length === 1) {
-                const label = checkboxes[0].nextElementSibling ? checkboxes[0].nextElementSibling.innerText : checkboxes[0].value;
-                btn.textContent = label;
-            } else {
-                btn.textContent = `${checkboxes.length} selected`;
+            const badge = document.getElementById(`badge-${type.toLowerCase()}`);
+            if (badge) {
+                if (checkboxes.length > 0) {
+                    badge.textContent = checkboxes.length;
+                    badge.classList.remove('d-none');
+                } else {
+                    badge.textContent = '';
+                    badge.classList.add('d-none');
+                }
             }
         }
         
+        function toggleFilterPanel(type, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            // Close other panels
+            document.querySelectorAll('.filter-panel').forEach(el => {
+                if (el.id !== `panel-${type}`) el.classList.add('d-none');
+            });
+            
+            const panel = document.getElementById(`panel-${type}`);
+            if (panel) {
+                panel.classList.toggle('d-none');
+                // Focus search input if exists
+                const searchInput = panel.querySelector('input[type="text"]');
+                if (searchInput && !panel.classList.contains('d-none')) {
+                    setTimeout(() => searchInput.focus(), 100);
+                }
+            }
+        }
+        
+        function closeFilterPanel(type) {
+             const panel = document.getElementById(`panel-${type}`);
+             if (panel) panel.classList.add('d-none');
+        }
+
+        function filterFilterMenu(input) {
+            const filter = input.value.toLowerCase();
+            const items = document.querySelectorAll('#mainFilterMenu .list-group-item');
+            items.forEach(item => {
+                const text = item.textContent || item.innerText;
+                item.style.display = text.toLowerCase().includes(filter) ? "" : "none";
+            });
+        }
+        
+        function filterCheckboxList(input, containerId) {
+             const filter = input.value.toLowerCase();
+             const container = document.getElementById(containerId);
+             if (!container) return;
+             const items = container.querySelectorAll('.form-check');
+             items.forEach(item => {
+                 const text = item.textContent || item.innerText;
+                 item.style.display = text.toLowerCase().includes(filter) ? "" : "none";
+             });
+        }
+
         function toggleSelectAllFilter(source, selector, type) {
             document.querySelectorAll(selector).forEach(cb => {
                 cb.checked = source.checked;
             });
             updateFilterLabel(type);
         }
+
+
 
         function populateRanks() {
             // Populate Form Select (Single)
@@ -3851,7 +4022,7 @@
                          
                          if(filterContainer) {
                              const div = document.createElement('div');
-                             div.className = 'form-check';
+                             div.className = 'form-check w-100';
                              div.innerHTML = `
                                 <input class="form-check-input filter-office-cb" type="checkbox" value="${name}" id="fo_${idx}" onchange="updateFilterLabel('Office'); loadStaff();">
                                 <label class="form-check-label" for="fo_${idx}">${name}</label>
@@ -3971,18 +4142,10 @@
              if (currentStatus) params.append('status', currentStatus);
              
              // Multi-select Ranks
-             if (window.activeColumnFilters && window.activeColumnFilters.rank.length > 0) {
-                 window.activeColumnFilters.rank.forEach(r => params.append('rank', r));
-             } else {
-                 document.querySelectorAll('.filter-rank-cb:checked').forEach(cb => params.append('rank', cb.value));
-             }
+             document.querySelectorAll('.filter-rank-cb:checked').forEach(cb => params.append('rank', cb.value));
              
             // Multi-select Offices
-            if (window.activeColumnFilters && window.activeColumnFilters.office.length > 0) {
-                 window.activeColumnFilters.office.forEach(o => params.append('office', o));
-            } else {
-                document.querySelectorAll('.filter-office-cb:checked').forEach(cb => params.append('office', cb.value));
-            }
+            document.querySelectorAll('.filter-office-cb:checked').forEach(cb => params.append('office', cb.value));
             
             // Multi-select Formations (Special Admin)
             if (window.activeColumnFilters && window.activeColumnFilters.formation.length > 0) {
@@ -4092,6 +4255,9 @@
             document.getElementById('searchInput').value = '';
             currentOffset = 0;
             
+            // Close all panels
+            document.querySelectorAll('.filter-panel').forEach(el => el.classList.add('d-none'));
+
             // Reset Dropdowns
             document.querySelectorAll('.filter-rank-cb').forEach(cb => cb.checked = false);
             updateFilterLabel('Rank');
@@ -4132,187 +4298,7 @@
             loadStaff();
         }
 
-        // --- Modern Column Filters Logic ---
-        const activeColumnFilters = {
-            rank: [],
-            office: [],
-            formation: [],
-            gender: [],
-            state_id: [],
-            lga_id: []
-        };
 
-        function renderThFilter(title, field) {
-            // Support rank, office, formation, gender, state, lga
-            if (!['rank', 'office', 'formation', 'gender', 'state_id', 'lga_id'].includes(field)) {
-                return `<th>${title}</th>`;
-            }
-            const isActive = activeColumnFilters[field].length > 0;
-            return `
-                <th style="position: relative;">
-                    <div class="th-filter-wrapper" onclick="openColumnFilter(event, '${field}')">
-                        <span>${title}</span>
-                        <i class="bi bi-funnel-fill th-filter-icon ${isActive ? 'active' : ''}" id="filter-icon-${field}"></i>
-                    </div>
-                    <div class="dropdown-menu filter-dropdown-menu" id="filter-dropdown-${field}">
-                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Search..." onclick="event.stopPropagation()" onkeyup="filterDropdownSearch(this)">
-                        <div class="d-flex justify-content-between mb-2">
-                            <a href="#" class="small text-decoration-none" onclick="event.stopPropagation(); toggleAllFilterOptions('${field}', true)">Select All</a>
-                            <a href="#" class="small text-decoration-none text-danger" onclick="event.stopPropagation(); toggleAllFilterOptions('${field}', false)">Clear</a>
-                        </div>
-                        <div class="filter-options-container" id="filter-options-${field}">
-                            <!-- Options loaded dynamically -->
-                        </div>
-                        <div class="d-flex justify-content-end mt-2 pt-2 border-top">
-                            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); applyColumnFilter('${field}')">Apply</button>
-                        </div>
-                    </div>
-                </th>
-            `;
-        }
-
-        function openColumnFilter(event, field) {
-            event.stopPropagation();
-            // Close other dropdowns
-            document.querySelectorAll('.filter-dropdown-menu.show').forEach(el => {
-                if (el.id !== `filter-dropdown-${field}`) el.classList.remove('show');
-            });
-
-            const dropdown = document.getElementById(`filter-dropdown-${field}`);
-            if (!dropdown) return;
-
-            // Toggle
-            if (dropdown.classList.contains('show')) {
-                dropdown.classList.remove('show');
-                return;
-            }
-
-            // Populate options if empty
-            const container = document.getElementById(`filter-options-${field}`);
-            if (container.innerHTML.trim() === '') {
-                let options = [];
-                let isObject = false; // For State/LGA where option is {id, name}
-                
-                if (field === 'rank') {
-                    options = RANKS;
-                }
-                else if (field === 'office') {
-                    // Ensure officesList is populated
-                    if (!officesList || officesList.length === 0) {
-                         if (window.allOffices && window.allOffices.length > 0) {
-                             officesList = window.allOffices.map(o => o.name);
-                         } else {
-                             // Fallback: try to fetch or wait
-                             // For now, let's trigger a load if not loading
-                             loadOffices().then(() => {
-                                 // Re-open if still open? 
-                                 // Or just let user click again. 
-                                 // Better: update container content
-                                 if (officesList.length > 0) {
-                                     // Recursive call or manual update? 
-                                     // Let's just manually update for simplicity in this context
-                                     // but recursive is safer to reuse logic.
-                                     // We'll close and let user reopen or just show a message.
-                                     container.innerHTML = '<div class="text-muted small">Loaded. Please reopen.</div>';
-                                 }
-                             });
-                             container.innerHTML = '<div class="text-muted small">Loading offices...</div>';
-                             return;
-                         }
-                    }
-                    // Sort offices alphabetically
-                    options = [...officesList].sort();
-                }
-                else if (field === 'gender') options = ['Male', 'Female'];
-                else if (field === 'state_id') {
-                    options = allStates || [];
-                    isObject = true;
-                }
-                else if (field === 'lga_id') {
-                    // Collect all LGAs from all states
-                    options = [];
-                    if (allStates) {
-                        allStates.forEach(s => {
-                            if (s.lgas) options.push(...s.lgas);
-                        });
-                    }
-                    // Sort by name
-                    options.sort((a, b) => a.name.localeCompare(b.name));
-                    isObject = true;
-                }
-                
-                if (options.length > 0) {
-                    container.innerHTML = options.map(opt => {
-                        const val = isObject ? opt.id : opt;
-                        const label = isObject ? opt.name : opt;
-                        const checked = activeColumnFilters[field].includes(String(val)) ? 'checked' : '';
-                        // Sanitized ID for HTML
-                        const safeId = String(val).replace(/[^a-zA-Z0-9]/g, '');
-                        return `
-                            <div class="form-check">
-                                <input class="form-check-input filter-cb-${field}" type="checkbox" value="${val}" id="cb-${field}-${safeId}" ${checked} onclick="event.stopPropagation()">
-                                <label class="form-check-label small" for="cb-${field}-${safeId}">${label}</label>
-                            </div>
-                        `;
-                    }).join('');
-                } else if (field === 'formation') {
-                     // Try to fetch formations if not loaded
-                     // This is a placeholder for formation support
-                     container.innerHTML = '<div class="text-muted small">Loading...</div>';
-                     // fetch logic here if needed
-                     // Quick fix: populate if window.formationsList exists (it might not be global yet)
-                     // If special admin, formations might be fetched.
-                }
-            }
-
-            dropdown.classList.add('show');
-
-            // Close on click outside
-            document.addEventListener('click', function closeMenu(e) {
-                if (!dropdown.contains(e.target) && !event.target.contains(e.target)) {
-                    dropdown.classList.remove('show');
-                    document.removeEventListener('click', closeMenu);
-                }
-            });
-        }
-
-        function filterDropdownSearch(input) {
-            const filter = input.value.toLowerCase();
-            const container = input.nextElementSibling.nextElementSibling; // skip links div
-            const items = container.getElementsByClassName('form-check');
-            Array.from(items).forEach(item => {
-                const text = item.textContent || item.innerText;
-                if (text.toLowerCase().indexOf(filter) > -1) {
-                    item.style.display = "";
-                } else {
-                    item.style.display = "none";
-                }
-            });
-        }
-
-        function toggleAllFilterOptions(field, select) {
-            const container = document.getElementById(`filter-options-${field}`);
-            const cbs = container.querySelectorAll(`input[type="checkbox"]`);
-            cbs.forEach(cb => cb.checked = select);
-        }
-
-        function applyColumnFilter(field) {
-            const container = document.getElementById(`filter-options-${field}`);
-            const cbs = container.querySelectorAll(`input.filter-cb-${field}:checked`);
-            activeColumnFilters[field] = Array.from(cbs).map(cb => cb.value);
-            
-            // Update Icon
-            const icon = document.getElementById(`filter-icon-${field}`);
-            if (activeColumnFilters[field].length > 0) icon.classList.add('active');
-            else icon.classList.remove('active');
-
-            // Close Dropdown
-            document.getElementById(`filter-dropdown-${field}`).classList.remove('show');
-
-            // Trigger Load
-            loadStaff();
-        }
-        // --- End Modern Column Filters Logic ---
 
         function buildSuperAdminTableHeader() {
             const thead = document.getElementById('staffTableHead');
@@ -4322,11 +4308,11 @@
                 html = `
                     <tr>
                         <th>S/N</th>
-                        ${role === 'special_admin' ? renderThFilter('Formation', 'formation') : ''}
+                        ${role === 'special_admin' ? '<th>Formation</th>' : ''}
                         <th>NIS/No</th>
                         <th>Surname</th>
                         <th>Other Names</th>
-                        ${renderThFilter('Rank', 'rank')}
+                        <th>Rank</th>
                         <th>Phone No</th>
                         <th>Reason for Exit</th>
                         <th>Effective Date</th>
@@ -4337,17 +4323,17 @@
                 html = `
                     <tr>
                         <th>S/N</th>
-                        ${role === 'special_admin' ? renderThFilter('Formation', 'formation') : ''}
+                        ${role === 'special_admin' ? '<th>Formation</th>' : ''}
                         <th>NIS/No</th>
                         <th>Surname</th>
                         <th>Other Names</th>
-                        ${renderThFilter('Rank', 'rank')}
+                        <th>Rank</th>
                         <th>Gender</th>
                         <th>DOB</th>
                         <th>Phone</th>
                         <th>Email</th>
                         <th>Qual</th>
-                        ${renderThFilter('Office', 'office')}
+                        <th>Office</th>
                         <th>State</th>
                         <th>LGA</th>
                         <th>DOFA</th>
@@ -4375,7 +4361,7 @@
                         <th>NIS/No</th>
                         <th>Surname</th>
                         <th>Other Names</th>
-                        ${renderThFilter('Rank', 'rank')}
+                        <th>Rank</th>
                         <th>Phone No</th>
                         <th>Reason for Exit</th>
                         <th>Effective Date</th>
@@ -4388,9 +4374,9 @@
                         <th>S/N</th>
                         <th>NIS/No</th>
                         <th>Name</th>
-                        ${renderThFilter('Rank', 'rank')}
+                        <th>Rank</th>
                         <th>DOFA / DOPA</th>
-                        ${renderThFilter('Office', 'office')}
+                        <th>Office</th>
                         <th>State/LGA</th>
                         <th>Phone</th>
                         <th>Actions</th>
@@ -4759,7 +4745,7 @@
 
                     rowHtml = `
                         <td>${index + 1}</td>
-                        <td>${s.nis_no}</td>
+                        <td><a href="#" onclick="openViewModal(${s.id}); return false;" class="text-decoration-none fw-bold text-dark">${s.nis_no}</a></td>
                         <td>${surnameFormatted}</td>
                         <td>${otherNamesFormatted}</td>
                         <td>${rankBadge(s.rank)}</td>
@@ -4822,7 +4808,7 @@
 
                     rowHtml = `
                         <td>${index + 1}</td>
-                        <td>${s.nis_no}</td>
+                        <td><a href="#" onclick="openViewModal(${s.id}); return false;" class="text-decoration-none fw-bold text-dark">${s.nis_no}</a></td>
                         <td>${formatStaffName(s.rank, s.surname, s.other_names)}</td>
                         <td>${rankBadge(s.rank)}</td>
                         <td>${dates}</td>
@@ -5289,7 +5275,7 @@
                     select.innerHTML = '<option value="">Select New Office</option>';
                     offices.forEach(o => {
                         const opt = document.createElement('option');
-                        opt.value = o.name;
+                        opt.value = o.id;
                         opt.textContent = o.name;
                         select.appendChild(opt);
                     });
@@ -5325,7 +5311,7 @@
                         'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({
-                        office: newOffice,
+                        office_id: newOffice,
                         date: userDateToIsoOrNull(dateStr), // Convert dd/mm/yyyy to YYYY-MM-DD
                         remarks: remarks
                     })
@@ -5434,10 +5420,11 @@
                 alert("Please select a target formation");
                 return;
             }
-            if (!office) {
-                alert("Please select an office");
-                return;
-            }
+            // Office is now optional
+            // if (!office) {
+            //    alert("Please select an office");
+            //    return;
+            // }
 
             try {
                 const res = await fetch(`${API_URL}/staff/${staffId}/posting`, {
@@ -5675,15 +5662,10 @@
         // --- Formation Management (Special Admin) ---
         
         async function populateFormationFilter() {
-            // Remove role check to allow all admins to see formation filter if container exists
-            // if (role !== 'special_admin') return;
-            
             const container = document.getElementById('filterFormationListContainer');
-            const wrapper = document.getElementById('formationFilterContainer');
-            if (!container || !wrapper) return;
+            if (!container) return;
             
-            wrapper.style.display = 'block';
-            container.innerHTML = '<li class="dropdown-item text-muted">Loading...</li>';
+            container.innerHTML = '<div class="text-muted small p-2">Loading...</div>';
             
             try {
                 const res = await fetch(`${API_URL}/formations`, {
@@ -5693,41 +5675,27 @@
                     const formations = await res.json();
                     container.innerHTML = '';
                     if (formations.length === 0) {
-                        container.innerHTML = '<li class="dropdown-item text-muted">No formations found</li>';
+                        container.innerHTML = '<div class="text-muted small p-2">No formations found</div>';
                         return;
                     }
                     
-                    // Add "Select All" option
-                    const selectAllId = 'filter-formation-all';
-                    const liAll = document.createElement('li');
-                    liAll.className = 'dropdown-item';
-                    liAll.innerHTML = `
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="${selectAllId}" onchange="toggleSelectAllFilter(this, '.filter-formation-cb', 'Formation')">
-                            <label class="form-check-label w-100 stretched-link" for="${selectAllId}">Select All</label>
-                        </div>
-                    `;
-                    container.appendChild(liAll);
-                    
                     formations.forEach(o => {
-                        const li = document.createElement('li');
-                        li.className = 'dropdown-item';
-                        li.innerHTML = `
-                            <div class="form-check">
-                                <input class="form-check-input filter-formation-cb" type="checkbox" value="${o.id}" id="filter-formation-${o.id}" onchange="updateFilterLabel('Formation')">
-                                <label class="form-check-label w-100 stretched-link" for="filter-formation-${o.id}">
-                                    ${o.name} <small class="text-muted">(${o.code})</small>
-                                </label>
-                            </div>
+                        const div = document.createElement('div');
+                        div.className = 'form-check w-100';
+                        div.innerHTML = `
+                            <input class="form-check-input filter-formation-cb" type="checkbox" value="${o.id}" id="filter-formation-${o.id}" onchange="updateFilterLabel('Formation'); loadStaff();">
+                            <label class="form-check-label" for="filter-formation-${o.id}">
+                                ${o.name} <small class="text-muted">(${o.code})</small>
+                            </label>
                         `;
-                        container.appendChild(li);
+                        container.appendChild(div);
                     });
                 } else {
-                    container.innerHTML = '<li class="dropdown-item text-danger">Failed to load</li>';
+                    container.innerHTML = '<div class="text-danger small p-2">Failed to load</div>';
                 }
             } catch (e) {
                 console.error(e);
-                container.innerHTML = '<li class="dropdown-item text-danger">Error loading</li>';
+                container.innerHTML = '<div class="text-danger small p-2">Error loading</div>';
             }
         }
 
@@ -7456,6 +7424,9 @@
 
             const staffEditModalEl = document.getElementById('staffEditModal');
             if (staffEditModalEl) staffEditModal = new bootstrap.Modal(staffEditModalEl);
+
+            populateRanks();
+            loadOffices();
         });
 
 

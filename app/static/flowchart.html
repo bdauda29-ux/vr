@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VSS System Flowchart</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; text-align: center; }
+        .mermaid { margin: 0 auto; text-align: left; display: inline-block; }
+    </style>
+</head>
+<body>
+    <h1>VSS System Architecture & User Flow</h1>
+    <p>This chart details user flows, role-based access, and key features of the VSS system.</p>
+    
+    <div class="mermaid">
+    graph TD
+        User((User)) --> Login[Login Page]
+        Login -->|Credentials| Auth{Authentication}
+        Auth -->|Fail| Login
+        Auth -->|Success| RoleCheck{Check Role}
+    
+        RoleCheck -->|Super/Special Admin| AdminDash[Admin Dashboard]
+        RoleCheck -->|Formation Admin| FormDash[Formation Dashboard]
+        RoleCheck -->|Office Admin| OfficeDash[Office Dashboard]
+        RoleCheck -->|Staff| StaffDash[Staff Dashboard]
+    
+        subgraph Admin_Features [Admin Capabilities]
+            AdminDash --> MngForm[Manage Formations]
+            AdminDash --> MngOffice[Manage Offices]
+            AdminDash --> MngStaff[Manage Staff]
+            AdminDash --> SysAudit[System Audit Logs]
+        end
+    
+        subgraph Formation_Features [Formation Admin Capabilities]
+            FormDash --> ViewSub[View Sub-Formations]
+            FormDash --> PostStaff[Post Staff Out - Inter-Formation]
+            FormDash --> MoveStaff[Move Staff - Intra-Formation]
+            FormDash --> ApproveEdit[Approve Edit Requests]
+            FormDash --> ViewStats[View Formation Stats]
+            FormDash --> Notifications[Receive Notifications]
+        end
+    
+        subgraph Office_Features [Office Admin Capabilities]
+            OfficeDash --> ViewOfficeStaff[View Office Staff]
+            OfficeDash --> InitLeave[Initiate Leave]
+            OfficeDash --> ReqEdit[Request Staff Edit]
+            OfficeDash --> ViewOfficeStats[View Office Stats]
+            OfficeDash --> OfficeNotifs[Receive Notifications]
+        end
+    
+        subgraph Staff_Features [Staff Capabilities]
+            StaffDash --> ViewProfile[View Profile]
+            StaffDash --> ReqUpdate[Request Profile Update]
+            StaffDash --> ViewHistory[View Posting History]
+        end
+    
+        PostStaff -->|Notify| Notifications
+        MoveStaff -->|Notify| OfficeNotifs
+        
+        ReqUpdate -->|Submit| PendingEdit[Pending Edit Request]
+        PendingEdit -->|Review| ApproveEdit
+        
+        classDef admin fill:#f9f,stroke:#333,stroke-width:2px;
+        classDef formation fill:#bbf,stroke:#333,stroke-width:2px;
+        classDef office fill:#bfb,stroke:#333,stroke-width:2px;
+        classDef staff fill:#fbb,stroke:#333,stroke-width:2px;
+        
+        class AdminDash,MngForm,MngOffice,MngStaff,SysAudit admin;
+        class FormDash,ViewSub,PostStaff,MoveStaff,ApproveEdit,ViewStats,Notifications formation;
+        class OfficeDash,ViewOfficeStaff,InitLeave,ReqEdit,ViewOfficeStats,OfficeNotifs office;
+        class StaffDash,ViewProfile,ReqUpdate,ViewHistory staff;
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>
