@@ -109,6 +109,15 @@ class Staff(Base):
     formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True)
     formation = relationship("Formation", back_populates="staff")
     formation_dopp = Column(Date, nullable=True)
+    custom_data = Column(Text, nullable=True) # JSON string for custom fields
+
+class CustomFieldDefinition(Base):
+    __tablename__ = "custom_field_definitions"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(64), unique=True, nullable=False) # key, e.g. "blood_group"
+    label = Column(String(128), nullable=False) # Label, e.g. "Blood Group"
+    field_type = Column(String(32), nullable=False, default="text") # text, date, number
+    is_active = Column(Boolean, default=True)
 
 class Leave(Base):
     __tablename__ = "leaves"

@@ -443,3 +443,27 @@ def update_user_password(db: Session, user_id: int, password_hash: str) -> Optio
         db.commit()
         db.refresh(user)
     return user
+
+def get_custom_field_definitions(db: Session) -> List[models.CustomFieldDefinition]:
+    return list(db.scalars(select(models.CustomFieldDefinition).order_by(models.CustomFieldDefinition.id)))
+
+def create_custom_field_definition(db: Session, name: str, label: str, field_type: str = "text") -> models.CustomFieldDefinition:
+    # Check if exists
+    existing = db.scalar(select(models.CustomFieldDefinition).where(models.CustomFieldDefinition.name == name))
+    if existing:
+        raise ValueError(f"Field with name '{name}' already exists")
+        
+    obj = models.CustomFieldDefinition(name=name, label=label, field_type=field_type)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+def delete_custom_field_definition(db: Session, field_id: int) -> bool:
+    obj = db.get(models.CustomFieldDefinition, field_id)
+    if obj:
+        db.delete(obj)
+        db.commit()
+        return True
+    return False
+

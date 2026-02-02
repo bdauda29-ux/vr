@@ -715,6 +715,9 @@
                         <li class="nav-item admin-only d-none" role="presentation">
                             <button class="nav-link" id="edit-requests-tab" data-bs-toggle="tab" data-bs-target="#edit-requests-pane" type="button">Edit Approvals</button>
                         </li>
+                        <li class="nav-item admin-only special-only d-none" role="presentation">
+                            <button class="nav-link" id="custom-fields-tab" data-bs-toggle="tab" data-bs-target="#custom-fields-pane" type="button" onclick="loadCustomFieldsUI()">Custom Fields</button>
+                        </li>
                     </ul>
 
                     <div class="tab-content" id="personnelTabContent">
@@ -1060,6 +1063,18 @@
                                             </div>
                                         </div>
 
+                                        <!-- Custom Fields Container -->
+                                        <div class="card mb-3 shadow-sm border-light d-none" id="customFieldsCard">
+                                            <div class="card-header bg-light">
+                                                <h6 class="card-title mb-0 text-primary">Additional Info</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="row" id="customFieldsContainer">
+                                                    <!-- Dynamic Fields Here -->
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div class="text-end">
                                             <button type="button" class="btn btn-secondary me-2" onclick="showList()">Cancel</button>
                                             <button type="submit" class="btn btn-primary px-4">Save Personnel</button>
@@ -1213,6 +1228,35 @@
                                                 </tr>
                                             </thead>
                                             <tbody id="editRequestsBodyInline"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="tab-pane fade" id="custom-fields-pane" role="tabpanel">
+                            <div class="card">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0">Custom Field Definitions</h5>
+                    <button class="btn btn-primary btn-sm special-only d-none" onclick="openAddCustomFieldModal()">
+                        <i class="bi bi-plus-lg"></i> Add Custom Field
+                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>Label</th>
+                                                    <th>Field Name (ID)</th>
+                                                    <th>Type</th>
+                                                    <th>Status</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="customFieldsTableBody">
+                                                <!-- Loaded dynamically -->
+                                            </tbody>
                                         </table>
                                     </div>
                                 </div>
@@ -1438,6 +1482,44 @@
 </div>
 
     <!-- Modals -->
+    <!-- Add Custom Field Modal -->
+    <div class="modal fade" id="addCustomFieldModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Custom Field</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addCustomFieldForm">
+                        <div class="mb-3">
+                            <label class="form-label required">Field Label</label>
+                            <input type="text" class="form-control" id="customFieldLabel" placeholder="e.g. Blood Group" required>
+                            <div class="form-text">The name displayed to users.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required">Field Name (ID)</label>
+                            <input type="text" class="form-control" id="customFieldName" placeholder="e.g. blood_group" required>
+                            <div class="form-text">Unique internal identifier (lowercase, underscores only).</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required">Field Type</label>
+                            <select class="form-select" id="customFieldType">
+                                <option value="text">Text</option>
+                                <option value="date">Date</option>
+                                <option value="number">Number</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="submitAddCustomField()">Create Field</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Office Modal -->
     <div class="modal fade" id="officeModal" tabindex="-1">
         <div class="modal-dialog">
@@ -2024,6 +2106,44 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Custom Field Modal -->
+    <div class="modal fade" id="addCustomFieldModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Custom Field</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addCustomFieldForm">
+                        <div class="mb-3">
+                            <label class="form-label required">Label</label>
+                            <input type="text" class="form-control" id="customFieldLabel" placeholder="e.g. Blood Group" required>
+                            <div class="form-text">The name displayed on the form.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required">Variable Name</label>
+                            <input type="text" class="form-control" id="customFieldName" placeholder="e.g. blood_group" required pattern="[a-z0-9_]+">
+                            <div class="form-text">Lowercase, numbers, and underscores only. No spaces.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" id="customFieldType">
+                                <option value="text">Text</option>
+                                <option value="date">Date</option>
+                                <option value="number">Number</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="submitAddCustomField()">Add Field</button>
                 </div>
             </div>
         </div>
@@ -5031,6 +5151,7 @@
                 next_of_kin: document.getElementById('next_of_kin').value,
                 nok_phone: document.getElementById('nok_phone').value,
                 remark: document.getElementById('remark').value,
+                custom_data: getCustomFieldsData(),
             };
 
             const method = id ? 'PUT' : 'POST';
@@ -5075,6 +5196,82 @@
                 console.error(err);
                 alert('Request failed');
             }
+        }
+
+        async function renderCustomFieldsInputs(customData = {}) {
+            const container = document.getElementById('customFieldsContainer');
+            const card = document.getElementById('customFieldsCard');
+            container.innerHTML = '<div class="col-12 text-center"><small class="text-muted">Loading fields...</small></div>';
+            card.classList.remove('d-none');
+
+            try {
+                // Fetch active custom fields definitions
+                // We should cache this or fetch only once if possible, but for now fetch every time to be safe
+                const res = await fetch(`${API_URL}/custom-fields`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    const fields = await res.json();
+                    const activeFields = fields.filter(f => f.is_active);
+                    
+                    if (activeFields.length === 0) {
+                        card.classList.add('d-none');
+                        container.innerHTML = '';
+                        return;
+                    }
+                    
+                    container.innerHTML = '';
+                    activeFields.forEach(f => {
+                        const val = customData && customData[f.name] ? customData[f.name] : '';
+                        
+                        const div = document.createElement('div');
+                        div.className = 'col-md-6 mb-3';
+                        
+                        let inputHtml = '';
+                        if (f.field_type === 'date') {
+                            inputHtml = `<input type="text" class="form-control date-picker custom-field-input" data-name="${f.name}" placeholder="dd/mm/yyyy" value="${isoToDmy(val)}">`;
+                        } else if (f.field_type === 'number') {
+                            inputHtml = `<input type="number" class="form-control custom-field-input" data-name="${f.name}" value="${val}">`;
+                        } else {
+                            inputHtml = `<input type="text" class="form-control custom-field-input" data-name="${f.name}" value="${val}">`;
+                        }
+                        
+                        div.innerHTML = `
+                            <label class="form-label">${f.label}</label>
+                            ${inputHtml}
+                        `;
+                        container.appendChild(div);
+                    });
+                    
+                    // Re-initialize date pickers
+                    flatpickr(".date-picker", { dateFormat: "d/m/Y", allowInput: true });
+                    
+                } else {
+                    card.classList.add('d-none');
+                }
+            } catch (e) {
+                console.error("Error loading custom fields for form", e);
+                card.classList.add('d-none');
+            }
+        }
+
+        function getCustomFieldsData() {
+            const data = {};
+            document.querySelectorAll('.custom-field-input').forEach(input => {
+                const name = input.getAttribute('data-name');
+                let value = input.value;
+                
+                // Handle date format conversion back to ISO if needed
+                if (input.classList.contains('date-picker') && value) {
+                     value = userDateToIsoOrNull(value);
+                }
+                
+                if (name) {
+                    data[name] = value;
+                }
+            });
+            return data;
         }
 
         async function editStaff(id) {
@@ -5132,6 +5329,9 @@
                 document.getElementById('nok_phone').value = s.nok_phone || "";
                 document.getElementById('remark').value = s.remark || "";
                 
+                // Render and Populate Custom Fields
+                await renderCustomFieldsInputs(s.custom_data);
+
                 const rankSelect = document.getElementById('rank');
                 const doppInput = document.getElementById('dopp');
                 const remarkInput = document.getElementById('remark');
@@ -5662,8 +5862,41 @@
                                 <label class="fw-bold small text-muted">Remarks</label>
                                 <div class="p-2 bg-light rounded">${s.remark || 'No remarks'}</div>
                             </div>
+                            <div id="viewCustomFieldsContainer" class="col-12 mt-3 d-none">
+                                <hr>
+                                <h6 class="text-primary mb-3">Additional Info</h6>
+                                <div class="row" id="viewCustomFieldsRow"></div>
+                            </div>
                         </div>
                     `;
+
+                    // Render Custom Fields in View
+                    if (s.custom_data && Object.keys(s.custom_data).length > 0) {
+                         // Fetch definitions to get labels
+                         try {
+                             const cfRes = await fetch(`${API_URL}/custom-fields`, {
+                                 headers: { 'Authorization': `Bearer ${token}` }
+                             });
+                             if (cfRes.ok) {
+                                 const fields = await cfRes.json();
+                                 const container = document.getElementById('viewCustomFieldsContainer');
+                                 const row = document.getElementById('viewCustomFieldsRow');
+                                 let hasFields = false;
+                                 
+                                 fields.forEach(f => {
+                                     if (s.custom_data[f.name]) {
+                                         hasFields = true;
+                                         let val = s.custom_data[f.name];
+                                         if (f.field_type === 'date') val = isoToDmy(val);
+                                         
+                                         row.innerHTML += renderField(f.label, val);
+                                     }
+                                 });
+                                 
+                                 if (hasFields) container.classList.remove('d-none');
+                             }
+                         } catch (e) { console.error("Error loading custom fields for view", e); }
+                    }
                 } else {
                     body.innerHTML = '<div class="alert alert-danger">Failed to load details</div>';
                 }
@@ -6545,6 +6778,115 @@
             }
         }
         
+        let customFieldModal;
+
+        function openAddCustomFieldModal() {
+            if (!customFieldModal) {
+                customFieldModal = new bootstrap.Modal(document.getElementById('addCustomFieldModal'));
+            }
+            document.getElementById('addCustomFieldForm').reset();
+            customFieldModal.show();
+        }
+
+        async function submitAddCustomField() {
+            const label = document.getElementById('customFieldLabel').value;
+            const name = document.getElementById('customFieldName').value;
+            const type = document.getElementById('customFieldType').value;
+            
+            if (!label || !name) {
+                alert("Label and Variable Name are required");
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_URL}/custom-fields`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ label, name, field_type: type })
+                });
+                
+                if (res.ok) {
+                    alert("Custom field added successfully");
+                    if (customFieldModal) customFieldModal.hide();
+                    loadCustomFieldsUI();
+                } else {
+                    const err = await res.json();
+                    alert("Error: " + (err.detail || "Failed to add field"));
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Request failed");
+            }
+        }
+
+        async function loadCustomFieldsUI() {
+            const tbody = document.getElementById('customFieldsTableBody');
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center">Loading...</td></tr>';
+            
+            try {
+                const res = await fetch(`${API_URL}/custom-fields`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    const fields = await res.json();
+                    tbody.innerHTML = '';
+                    if (fields.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-center">No custom fields defined</td></tr>';
+                        return;
+                    }
+                    
+                    fields.forEach(f => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${f.label}</td>
+                            <td>${f.name}</td>
+                            <td>${f.field_type}</td>
+                            <td>
+                                <span class="badge ${f.is_active ? 'bg-success' : 'bg-secondary'}">
+                                    ${f.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteCustomField(${f.id})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Failed to load fields</td></tr>';
+                }
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading fields</td></tr>';
+            }
+        }
+
+        async function deleteCustomField(id) {
+            if (!confirm("Are you sure? This will hide the field from forms, but existing data will remain in database.")) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/custom-fields/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    loadCustomFieldsUI();
+                } else {
+                    alert("Failed to delete field");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Request failed");
+            }
+        }
+
         async function loadExitRequests() {
             try {
                 const res = await fetch(`${API_URL}/admin/exit-requests`, {

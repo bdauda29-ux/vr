@@ -75,6 +75,16 @@ def to_dict_staff(obj) -> Dict[str, Any]:
         "role": obj.role,
         "allow_edit_rank": bool(getattr(obj, "allow_edit_rank", 0)),
         "allow_edit_dopp": bool(getattr(obj, "allow_edit_dopp", 0)),
+        "custom_data": obj.custom_data, # JSON string
+    }
+
+def to_dict_custom_field_definition(obj) -> Dict[str, Any]:
+    return {
+        "id": obj.id,
+        "name": obj.name,
+        "label": obj.label,
+        "field_type": obj.field_type,
+        "is_active": obj.is_active,
     }
 
 def to_dict_leave(obj) -> Dict[str, Any]:

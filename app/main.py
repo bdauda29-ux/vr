@@ -1540,6 +1540,45 @@ def list_staff_endpoint():
         traceback.print_exc()
         return jsonify({"detail": f"Server Error: {str(e)}", "trace": traceback.format_exc()}), 500
 
+@app.get("/custom-fields")
+def list_custom_fields():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    with next(get_db()) as db:
+        fields = crud.get_custom_field_definitions(db)
+        return jsonify([schemas.to_dict_custom_field_definition(f) for f in fields])
+
+@app.post("/custom-fields")
+def create_custom_field():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, error_response, code = require_role(["special_admin"])
+    if error_response: return error_response, code
+    
+    data = request.get_json(force=True)
+    if "name" not in data or "label" not in data:
+        return jsonify({"detail": "name and label are required"}), 400
+        
+    with next(get_db()) as db:
+        try:
+            obj = crud.create_custom_field_definition(db, name=data["name"], label=data["label"], field_type=data.get("field_type", "text"))
+            return jsonify(schemas.to_dict_custom_field_definition(obj)), 201
+        except ValueError as e:
+            return jsonify({"detail": str(e)}), 400
+
+@app.delete("/custom-fields/<int:field_id>")
+def delete_custom_field(field_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, error_response, code = require_role(["special_admin"])
+    if error_response: return error_response, code
+    
+    with next(get_db()) as db:
+        success = crud.delete_custom_field_definition(db, field_id)
+        if not success:
+            return jsonify({"detail": "Not found"}), 404
+        return jsonify({"detail": "Deleted"}), 200
+
 @app.post("/staff")
 def create_staff():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
@@ -1556,6 +1595,10 @@ def create_staff():
             data[k] = parsed
     if "gender" not in data or data["gender"] is None: data["gender"] = ""
     
+    # Handle custom fields serialization
+    if "custom_data" in data and isinstance(data["custom_data"], (dict, list)):
+        data["custom_data"] = json.dumps(data["custom_data"])
+
     formation_id = user.get("formation_id")
     if formation_id:
         data["formation_id"] = formation_id
@@ -1594,6 +1637,11 @@ def update_staff(staff_id: int):
     data = request.get_json(force=True)
     for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
         if k in data: data[k] = parse_date_value(data.get(k))
+
+    # Handle custom fields serialization
+    if "custom_data" in data and isinstance(data["custom_data"], (dict, list)):
+        data["custom_data"] = json.dumps(data["custom_data"])
+
     with next(get_db()) as db:
         existing = crud.get_staff(db, staff_id)
         if not existing: return jsonify({"detail": "Not found"}), 404
