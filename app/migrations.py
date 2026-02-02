@@ -115,6 +115,13 @@ def run_migrations():
         if 'staff' in table_names:
             columns = [c['name'] for c in inspector.get_columns('staff')]
             
+            if 'custom_data' not in columns:
+                print("Column 'custom_data' missing in 'staff'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE staff ADD COLUMN custom_data TEXT"))
+                print("Column 'custom_data' added successfully.")
+
             if 'login_count' not in columns:
                 print("Column 'login_count' missing. Adding it...")
                 with engine.connect() as conn:
@@ -164,6 +171,14 @@ def run_migrations():
             print("Table 'staff_edit_requests' created successfully.")
         else:
             print("Table 'staff_edit_requests' already exists.")
+
+        # Check for custom_field_definitions table
+        if 'custom_field_definitions' not in table_names:
+            print("Table 'custom_field_definitions' missing. Creating it...")
+            models.CustomFieldDefinition.__table__.create(engine)
+            print("Table 'custom_field_definitions' created successfully.")
+        else:
+            print("Table 'custom_field_definitions' already exists.")
             
     except Exception as e:
         print(f"Migration Error: {e}")
