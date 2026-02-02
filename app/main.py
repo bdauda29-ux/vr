@@ -155,8 +155,8 @@ def login():
                         return jsonify({"detail": "Login is currently disabled for staff users."}), 403
 
                     # Check login limit (skip for admins)
-                    if staff.role not in ("office_admin", "super_admin", "main_admin") and staff.login_count >= 10:
-                        return jsonify({"detail": "Login limit exceeded. Please contact Super Admin to reset."}), 403
+                    if staff.role not in ("office_admin", "main_admin") and staff.login_count >= 10:
+                        return jsonify({"detail": "Login limit exceeded. Please contact Main Admin to reset."}), 403
 
                     verification_success = False
                     if staff.password_hash:
@@ -335,8 +335,8 @@ def create_formation_endpoint():
 @app.get("/formations")
 def list_formations_endpoint():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    # Allow special_admin, super_admin, main_admin, and formation_admin
-    user, err, code = require_role(["special_admin", "super_admin", "main_admin", "formation_admin"])
+    # Allow special_admin, main_admin, and formation_admin
+    user, err, code = require_role(["special_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
@@ -545,7 +545,7 @@ def create_formation_admin(formation_id):
         new_admin = models.User(
             username=username,
             password_hash=pwd_hash,
-            role="formation_admin", # Formation super admin
+            role="formation_admin", # Formation admin
             formation_id=formation_id
         )
         db.add(new_admin)
@@ -570,7 +570,7 @@ def list_formation_admins(formation_id):
 @app.get("/formations/<int:formation_id>/offices")
 def list_formation_offices(formation_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin", "super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["special_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
@@ -811,7 +811,7 @@ def dashboard_sub_formation_stats():
 @app.get("/admin/exit-requests")
 def list_exit_requests():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -850,10 +850,7 @@ def require_role(allowed_roles):
     user = get_current_user()
     if not user: return None, jsonify({"detail": "Not authenticated"}), 401
     role = user.get("role")
-    # Treat main_admin as equivalent to super_admin for permissions
     effective_role = role
-    if role == "main_admin" and "super_admin" in allowed_roles:
-        effective_role = "super_admin"
     if effective_role not in allowed_roles: 
         print(f"PERMISSION DENIED: User role '{role}' not in {allowed_roles}")
         return None, jsonify({"detail": f"Permission denied (Role: {role})"}), 403
@@ -867,7 +864,7 @@ def index():
     try:
         return send_from_directory(app.static_folder, "index.html")
     except Exception as e:
-        return f"<h1>VSS API is Running</h1><p>Static file error: {e}</p><p>Static Folder: {app.static_folder}</p><p>CWD: {os.getcwd()}</p><p><a href='/login.html'>Login Page</a></p>"
+        return f"<h1>NIS PIMS API is Running</h1><p>Static file error: {e}</p><p>Static Folder: {app.static_folder}</p><p>CWD: {os.getcwd()}</p><p><a href='/login.html'>Login Page</a></p>"
 
 @app.route("/debug-db")
 def debug_db():
@@ -926,7 +923,7 @@ def download_template():
 @app.post("/import/excel")
 def import_excel():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["office_admin", "super_admin"])
+    user, err, code = require_role(["office_admin", "main_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -1057,17 +1054,7 @@ if engine:
                             existing_lgas.add((st.id, lga_name))
             db.commit()
 
-        def seed_super_admin(db: Session):
-            admin = db.query(models.User).filter(models.User.username == "admin").first()
-            if not admin:
-                pwd_hash = auth.get_password_hash("admin")
-                admin = models.User(username="admin", password_hash=pwd_hash, role="super_admin")
-                db.add(admin)
-                db.commit()
-            elif admin.role != "super_admin":
-                print(f"UPGRADING admin user from {admin.role} to super_admin")
-                admin.role = "super_admin"
-                db.commit()
+
 
         from .database import SessionLocal
         db = SessionLocal()
@@ -1078,7 +1065,6 @@ if engine:
                 print(f"MIGRATION ERROR: {mig_err}")
 
             seed_states_lgas(db)
-            seed_super_admin(db)
             from .seeds import seed_special_admin, seed_vr_formation
             seed_special_admin(db)
             seed_vr_formation(db)
@@ -1240,7 +1226,7 @@ def get_office_rank_stats():
 @app.post("/offices")
 def create_office_route():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     data = request.get_json(force=True)
@@ -1282,7 +1268,7 @@ def create_office_route():
 @app.put("/offices/<int:office_id>")
 def update_office_route(office_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "admin", "formation_admin"])
     if err: return err, code
     
     data = request.get_json(force=True)
@@ -1386,7 +1372,7 @@ def update_office_route(office_id: int):
 @app.delete("/offices/<int:office_id>")
 def delete_office_route(office_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
@@ -1482,8 +1468,8 @@ def list_staff_endpoint():
         
         formation_id = user.get("formation_id")
         
-        # Allow special_admin and super_admin/main_admin to filter by formation
-        if user["role"] in ["special_admin", "super_admin", "main_admin"]:
+        # Allow special_admin and main_admin to filter by formation
+        if user["role"] in ["special_admin", "main_admin"]:
              req_org_ids = [int(x) for x in request.args.getlist("formation_id") if x.strip().isdigit()]
              if req_org_ids:
                  formation_id = req_org_ids
@@ -1557,7 +1543,7 @@ def list_staff_endpoint():
 @app.post("/staff")
 def create_staff():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, error_response, code = require_role(["office_admin", "super_admin", "formation_admin"])
+    user, error_response, code = require_role(["office_admin", "main_admin", "formation_admin"])
     if error_response: return error_response, code
 
     data = request.get_json(force=True)
@@ -1694,7 +1680,7 @@ def update_staff(staff_id: int):
                     )
                     db.add(req)
                     
-                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
+                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=formation_id, office_id=None, user_id=user["id"], username=user["sub"])
                     db.commit()
                     
                     return jsonify(schemas.to_dict_staff(obj))
@@ -1704,8 +1690,9 @@ def update_staff(staff_id: int):
         
         # Admin Update (Direct Update)
         
-        # Restriction for non-super admins on sensitive fields
-        if user["role"] not in ["super_admin", "main_admin", "special_admin"]:
+        # Restriction for non-formation/special admins on sensitive fields
+        # MODIFIED: Formation Admin is now restricted from editing Formation DOPP on update
+        if user["role"] not in ["formation_admin", "special_admin"]:
              restricted_fields = ["rank", "office", "dopp", "formation_dopp", "dofa", "dopa", "nis_no"]
              for f in restricted_fields:
                  # Check if field is present and changed
@@ -1720,6 +1707,38 @@ def update_staff(staff_id: int):
                          
                      if old_val != new_val:
                           return jsonify({"detail": f"Permission denied: Cannot directly edit {f}. Use Posting/Promotion workflows."}), 403
+        
+        # Specific restriction for Formation Admin on Formation DOPP
+        if user["role"] == "formation_admin":
+            if "formation_dopp" in data:
+                old_val = getattr(existing, "formation_dopp")
+                new_val = data["formation_dopp"]
+                
+                # Normalize old_val (date) to string for comparison if new_val is string (ISO format)
+                old_val_str = old_val.isoformat() if old_val else None
+                
+                # new_val is likely already a date object because line 1606 logic (Wait, line 1606 was staff logic)
+                # Let's check where data parsing happens. 
+                # Lines 1641 handles parsing for staff, but for admin direct update?
+                # The data comes from request.get_json(). It's raw strings unless parsed.
+                # But wait, line 1641 was inside the `if user["role"] in ["staff", "office_admin"]` block.
+                # So for Admin, data is RAW.
+                # We need to parse dates if we want to save them correctly in update_staff call?
+                # crud.update_staff handles parsing?
+                # Let's check crud.py later or assume it handles strings if main.py doesn't parse.
+                # Actually, standard update usually expects matching types or handles it in CRUD.
+                # But for comparison here:
+                
+                if new_val != old_val_str and new_val != old_val:
+                     # Check if it's just a type mismatch or actual value change
+                     # If old is date(2023, 1, 1) and new is "2023-01-01", they are effectively same.
+                     is_changed = True
+                     if isinstance(old_val, (date, datetime)) and isinstance(new_val, str):
+                         if old_val.isoformat() == new_val:
+                             is_changed = False
+                     
+                     if is_changed:
+                        return jsonify({"detail": "Permission denied: Formation Admin cannot edit Formation DOPP after creation. Please contact Special Admin."}), 403
 
         try:
             obj = crud.update_staff(db, existing, data)
@@ -1739,7 +1758,7 @@ def update_staff(staff_id: int):
 @app.delete("/staff/<int:staff_id>")
 def delete_staff(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin"])
+    user, err, code = require_role(["special_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -1760,7 +1779,7 @@ def delete_staff(staff_id: int):
 @app.post("/staff/<int:staff_id>/reset-login")
 def reset_login_count(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "formation_admin"])
+    user, err, code = require_role(["special_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -1781,7 +1800,7 @@ def reset_login_count(staff_id: int):
 @app.post("/staff/<int:staff_id>/reset-password")
 def reset_staff_password(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "formation_admin"])
+    user, err, code = require_role(["special_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -1802,33 +1821,45 @@ def reset_staff_password(staff_id: int):
 @app.put("/staff/<int:staff_id>/role")
 def update_staff_role(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "formation_admin"])
+    user, err, code = require_role(["special_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
     
     data = request.get_json(force=True)
     new_role = data.get("role")
-    if new_role not in ("staff", "office_admin", "super_admin", "main_admin"):
+    if new_role not in ("staff", "office_admin", "main_admin"):
         return jsonify({"detail": "Invalid role"}), 400
     with next(get_db()) as db:
         obj = crud.get_staff(db, staff_id)
         if not obj: return jsonify({"detail": "Not found"}), 404
         
-        if formation_id and obj.formation_id != formation_id:
+        # Permission Check (Updated for Zonal Admin)
+        allowed_access = False
+        if not formation_id or obj.formation_id == formation_id:
+            allowed_access = True
+        else:
+            # Check if user is Zonal Admin and staff is in sub-formation
+            user_fmt = crud.get_formation(db, formation_id)
+            if user_fmt and user_fmt.formation_type == "Zonal Command":
+                 zonal_descendants = crud.get_all_descendant_ids(db, formation_id)
+                 if obj.formation_id in zonal_descendants:
+                     allowed_access = True
+        
+        if not allowed_access:
             return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
         obj.role = new_role
         db.add(obj)
         db.commit()
         db.refresh(obj)
-        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(obj))
 
 @app.post("/staff/<int:staff_id>/move")
 def move_staff(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -2003,7 +2034,7 @@ def move_staff(staff_id: int):
 @app.get("/staff/<int:staff_id>/history")
 def get_staff_history(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "staff", "office_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "special_admin", "staff", "office_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
@@ -2098,7 +2129,7 @@ def get_staff_history(staff_id: int):
 @app.get("/staff/<int:staff_id>/promotions")
 def get_staff_promotions(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "staff", "office_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "special_admin", "staff", "office_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
@@ -2160,7 +2191,7 @@ def get_staff_promotions(staff_id: int):
 @app.post("/staff/<int:staff_id>/posting")
 def posting_staff(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin", "super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["special_admin", "main_admin", "formation_admin"])
     if err: return err, code
     
     data = request.get_json(force=True)
@@ -2269,7 +2300,7 @@ def posting_staff(staff_id: int):
 @app.get("/settings/staff-edit")
 def get_staff_edit_settings():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "formation_admin"])
+    user, err, code = require_role(["special_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -2308,7 +2339,7 @@ def get_staff_edit_settings():
 @app.put("/settings/staff-edit")
 def update_staff_edit_settings():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "formation_admin"])
+    user, err, code = require_role(["special_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -2391,7 +2422,7 @@ def change_password():
 @app.get("/audit-logs")
 def get_audit_logs():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "special_admin", "formation_admin", "office_admin"])
+    user, err, code = require_role(["main_admin", "special_admin", "formation_admin", "office_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -3142,7 +3173,7 @@ def request_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/exit-approve")
 def approve_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -3183,7 +3214,7 @@ def approve_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/exit-reject")
 def reject_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -3207,7 +3238,7 @@ def reject_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/undo-exit")
 def undo_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin"])
+    user, err, code = require_role(["main_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
@@ -3242,7 +3273,7 @@ def undo_exit(staff_id: int):
 @app.get("/admin/edit-requests")
 def list_edit_requests():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -3273,7 +3304,7 @@ def list_edit_requests():
 @app.post("/admin/edit-requests/<int:req_id>/approve")
 def approve_edit_request(req_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -3307,7 +3338,7 @@ def approve_edit_request(req_id):
 @app.post("/admin/edit-requests/<int:req_id>/reject")
 def reject_edit_request(req_id):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")
@@ -3361,7 +3392,7 @@ def reject_edit_request(req_id):
 @app.delete("/admin/edit-requests")
 def clear_edit_requests():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["super_admin", "main_admin", "formation_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     formation_id = user.get("formation_id")

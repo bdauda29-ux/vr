@@ -1,6 +1,6 @@
-# Visa/Residency Staff Management System (VSS)
+# NIS Personnel Information Management System
 
-A Flask-based application for managing staff records, leaves, and office assignments within the Visa/Residency Directorate.
+A Flask-based application for managing staff records, leaves, and office assignments within the Nigeria Immigration Service (NIS).
 
 ## Features
 

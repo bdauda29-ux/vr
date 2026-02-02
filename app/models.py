@@ -48,7 +48,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(64), unique=True, index=True, nullable=False)
     password_hash = Column(String(128), nullable=False)
-    role = Column(String(32), nullable=False, default="admin") # admin, super_admin, special_admin
+    role = Column(String(32), nullable=False, default="admin") # admin, special_admin
     formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True)
     formation = relationship("Formation", back_populates="users")
 
@@ -97,7 +97,7 @@ class Staff(Base):
     out_request_reason = Column(String(64), nullable=True)
 
     password_hash = Column(String(128), nullable=True) # For custom passwords
-    role = Column(String(32), nullable=False, default="staff") # staff, office_admin, super_admin, main_admin
+    role = Column(String(32), nullable=False, default="staff") # staff, office_admin, main_admin
     login_count = Column(Integer, default=0, nullable=False)
     allow_login = Column(Integer, default=1, nullable=False)
     allow_edit_rank = Column(Integer, default=0, nullable=False)
