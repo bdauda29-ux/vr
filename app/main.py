@@ -1655,11 +1655,15 @@ def create_staff():
     except OperationalError as e:
         if "custom_data" in str(e) and "column" in str(e):
              return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
-        raise e
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Database Error: {str(e)}"}), 500
     except ProgrammingError as e:
         if "custom_data" in str(e) and "column" in str(e):
              return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
-        raise e
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Database Error: {str(e)}"}), 500
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1836,12 +1840,16 @@ def update_staff(staff_id: int):
         # Handle missing column error specifically
         if "custom_data" in str(e) and "column" in str(e):
              return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
-        raise e
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Database Error: {str(e)}"}), 500
     except ProgrammingError as e:
         # Handle missing column error specifically
         if "custom_data" in str(e) and "column" in str(e):
              return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
-        raise e
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Database Error: {str(e)}"}), 500
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1928,216 +1936,226 @@ def reset_staff_password(staff_id: int):
 
 @app.put("/staff/<int:staff_id>/role")
 def update_staff_role(staff_id: int):
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin", "formation_admin"])
-    if err: return err, code
-    
-    formation_id = user.get("formation_id")
-    
-    data = request.get_json(force=True)
-    new_role = data.get("role")
-    if new_role not in ("staff", "office_admin", "main_admin"):
-        return jsonify({"detail": "Invalid role"}), 400
-    with next(get_db()) as db:
-        obj = crud.get_staff(db, staff_id)
-        if not obj: return jsonify({"detail": "Not found"}), 404
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["special_admin", "formation_admin"])
+        if err: return err, code
         
-        # Permission Check (Updated for Zonal Admin)
-        allowed_access = False
-        if not formation_id or obj.formation_id == formation_id:
-            allowed_access = True
-        else:
-            # Check if user is Zonal Admin and staff is in sub-formation
-            user_fmt = crud.get_formation(db, formation_id)
-            if user_fmt and user_fmt.formation_type == "Zonal Command":
-                 zonal_descendants = crud.get_all_descendant_ids(db, formation_id)
-                 if obj.formation_id in zonal_descendants:
-                     allowed_access = True
+        formation_id = user.get("formation_id")
         
-        if not allowed_access:
-            return jsonify({"detail": "Permission denied: Different Formation"}), 403
+        data = request.get_json(force=True)
+        new_role = data.get("role")
+        if new_role not in ("staff", "office_admin", "main_admin"):
+            return jsonify({"detail": "Invalid role"}), 400
+        with next(get_db()) as db:
+            obj = crud.get_staff(db, staff_id)
+            if not obj: return jsonify({"detail": "Not found"}), 404
             
-        obj.role = new_role
-        db.add(obj)
-        db.commit()
-        db.refresh(obj)
-        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
-        return jsonify(schemas.to_dict_staff(obj))
+            # Permission Check (Updated for Zonal Admin)
+            allowed_access = False
+            if not formation_id or obj.formation_id == formation_id:
+                allowed_access = True
+            else:
+                # Check if user is Zonal Admin and staff is in sub-formation
+                user_fmt = crud.get_formation(db, formation_id)
+                if user_fmt and user_fmt.formation_type == "Zonal Command":
+                     zonal_descendants = crud.get_all_descendant_ids(db, formation_id)
+                     if obj.formation_id in zonal_descendants:
+                         allowed_access = True
+            
+            if not allowed_access:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+                
+            obj.role = new_role
+            db.add(obj)
+            db.commit()
+            db.refresh(obj)
+            crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+            return jsonify(schemas.to_dict_staff(obj))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.post("/staff/<int:staff_id>/move")
 def move_staff(staff_id: int):
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["main_admin", "formation_admin"])
-    if err: return err, code
-    
-    formation_id = user.get("formation_id")
-    
-    data = request.get_json(force=True)
-    new_office_name = data.get("office")
-    new_office_id = data.get("office_id")
-    effective_date_str = data.get("date") # Optional effective date, default today?
-    remarks = data.get("remarks", "")
-
-    if not new_office_name and not new_office_id:
-        return jsonify({"detail": "New office is required"}), 400
-    
-    effective_date = date.today()
-    if effective_date_str:
-        effective_date = parse_date_value(effective_date_str) or date.today()
-
-    with next(get_db()) as db:
-        staff = crud.get_staff(db, staff_id)
-        if not staff: return jsonify({"detail": "Not found"}), 404
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["main_admin", "formation_admin"])
+        if err: return err, code
         
-        # Permission Check:
-        # 1. Standard: Must be in same formation
-        # 2. Zonal Admin Exception: Can access staff in sub-formations
-        allowed_access = False
-        if not formation_id or staff.formation_id == formation_id:
-            allowed_access = True
-        else:
-            # Check if user is Zonal Admin and staff is in sub-formation
-            user_fmt = crud.get_formation(db, formation_id)
-            if user_fmt and user_fmt.formation_type == "Zonal Command":
-                 zonal_descendants = crud.get_all_descendant_ids(db, formation_id)
-                 if staff.formation_id in zonal_descendants:
-                     allowed_access = True
+        formation_id = user.get("formation_id")
         
-        if not allowed_access:
-            return jsonify({"detail": "Permission denied: Different Formation"}), 403
+        data = request.get_json(force=True)
+        new_office_name = data.get("office")
+        new_office_id = data.get("office_id")
+        effective_date_str = data.get("date") # Optional effective date, default today?
+        remarks = data.get("remarks", "")
+
+        if not new_office_name and not new_office_id:
+            return jsonify({"detail": "New office is required"}), 400
+        
+        effective_date = date.today()
+        if effective_date_str:
+            effective_date = parse_date_value(effective_date_str) or date.today()
+
+        with next(get_db()) as db:
+            staff = crud.get_staff(db, staff_id)
+            if not staff: return jsonify({"detail": "Not found"}), 404
             
-        # Resolve New Office
-        if new_office_id:
-             target_office_obj = crud.get_office(db, new_office_id)
-        else:
-             stmt = select(models.Office).where(func.lower(models.Office.name) == new_office_name.lower())
-             target_office_obj = db.scalar(stmt)
-             
-        if not target_office_obj:
-             return jsonify({"detail": "Office not found"}), 404
-             
-        new_office = target_office_obj.name
-             
-        target_fmt_id = target_office_obj.formation_id
-        current_fmt_id = staff.formation_id
-        
-        # Formation Admin Restrictions
-        if user["role"] == "formation_admin":
-            user_fmt = crud.get_formation(db, formation_id)
-            if not user_fmt: return jsonify({"detail": "Formation error"}), 500
-            
-            if user_fmt.formation_type == "Zonal Command":
-                # Zonal Admin:
-                # 1. Internal Move: Can only move personnel directly under its formation
-                if target_fmt_id == current_fmt_id: # Internal Move
-                     if current_fmt_id != formation_id:
-                         return jsonify({"detail": "Permission denied: Zonal Admins can only internally move staff directly under the Zonal Command formation."}), 403
-                
-                # 2. Posting (handled here if target differs):
-                # "post out personnel within it or formations under it" -> "to formations under it"
-                else:
-                    children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
-                    allowed_target_ids = [c.id for c in children] # Can post TO children
-                    allowed_target_ids.append(formation_id) # Can post TO self (if for some reason moving back to HQ from child?)
-
-                    # Check source permission (relaxed for Zonal Admin)
-                    # Zonal Admin can move/post staff from self or any child
-                    allowed_source_ids = [c.id for c in children]
-                    allowed_source_ids.append(formation_id)
-                    
-                    if staff.formation_id not in allowed_source_ids:
-                         return jsonify({"detail": "Permission denied: Zonal Admins can only manage staff under their command."}), 403
-                    
-                    if target_fmt_id not in allowed_target_ids:
-                        return jsonify({"detail": "Permission denied: Zonal Admins can only post TO formations under their command."}), 403
-
+            # Permission Check:
+            # 1. Standard: Must be in same formation
+            # 2. Zonal Admin Exception: Can access staff in sub-formations
+            allowed_access = False
+            if not formation_id or staff.formation_id == formation_id:
+                allowed_access = True
             else:
-                # State Command / Others: Can ONLY move within same formation
-                if target_fmt_id != formation_id:
-                     return jsonify({"detail": "Permission denied: You can only move staff within your formation. Postings must be done by Zonal/SHQ."}), 403
-
-        old_office = staff.office
-        if old_office == new_office:
-             return jsonify({"detail": "Staff is already in this office"}), 400
-
-        # Determine Action Type
-        action_type = "MOVE"
-        to_office_val = new_office
-        
-        # Get Current Formation Name for History
-        current_fmt = staff.formation
-        current_fmt_name = current_fmt.name if current_fmt else "Unknown"
-        if current_fmt and current_fmt.formation_type == "Directorate":
-            current_fmt_name = f"SHQ ({current_fmt.code})"
+                # Check if user is Zonal Admin and staff is in sub-formation
+                user_fmt = crud.get_formation(db, formation_id)
+                if user_fmt and user_fmt.formation_type == "Zonal Command":
+                     zonal_descendants = crud.get_all_descendant_ids(db, formation_id)
+                     if staff.formation_id in zonal_descendants:
+                         allowed_access = True
             
-        # Check if Formation Change
-        if target_fmt_id != current_fmt_id:
-            action_type = "POSTING"
-            from_office_val = f"{current_fmt_name} - {old_office}"
+            if not allowed_access:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+                
+            # Resolve New Office
+            if new_office_id:
+                 target_office_obj = crud.get_office(db, new_office_id)
+            else:
+                 stmt = select(models.Office).where(func.lower(models.Office.name) == new_office_name.lower())
+                 target_office_obj = db.scalar(stmt)
+                 
+            if not target_office_obj:
+                 return jsonify({"detail": "Office not found"}), 404
+                 
+            new_office = target_office_obj.name
+                 
+            target_fmt_id = target_office_obj.formation_id
+            current_fmt_id = staff.formation_id
             
-            # If posting, include Formation Name
-            target_fmt = crud.get_formation(db, target_fmt_id)
-            if target_fmt:
-                 fmt_name = target_fmt.name
-                 if target_fmt.formation_type == "Directorate":
-                     fmt_name = f"SHQ ({target_fmt.code})"
-                 to_office_val = fmt_name # Store only Formation Name as requested
-        else:
-            # Intra-formation move
-            from_office_val = old_office
-            to_office_val = new_office # Store only Office Name for internal move
+            # Formation Admin Restrictions
+            if user["role"] == "formation_admin":
+                user_fmt = crud.get_formation(db, formation_id)
+                if not user_fmt: return jsonify({"detail": "Formation error"}), 500
+                
+                if user_fmt.formation_type == "Zonal Command":
+                    # Zonal Admin:
+                    # 1. Internal Move: Can only move personnel directly under its formation
+                    if target_fmt_id == current_fmt_id: # Internal Move
+                         if current_fmt_id != formation_id:
+                             return jsonify({"detail": "Permission denied: Zonal Admins can only internally move staff directly under the Zonal Command formation."}), 403
+                    
+                    # 2. Posting (handled here if target differs):
+                    # "post out personnel within it or formations under it" -> "to formations under it"
+                    else:
+                        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+                        allowed_target_ids = [c.id for c in children] # Can post TO children
+                        allowed_target_ids.append(formation_id) # Can post TO self (if for some reason moving back to HQ from child?)
 
-        # Prepare Remarks with History Info
-        history_remarks = remarks
-        if action_type == "POSTING":
-             prev_dopp_str = staff.formation_dopp.isoformat() if staff.formation_dopp else "N/A"
-             history_remarks = f"{remarks} | Prev Formation DOPP: {prev_dopp_str}".strip(" |")
+                        # Check source permission (relaxed for Zonal Admin)
+                        # Zonal Admin can move/post staff from self or any child
+                        allowed_source_ids = [c.id for c in children]
+                        allowed_source_ids.append(formation_id)
+                        
+                        if staff.formation_id not in allowed_source_ids:
+                             return jsonify({"detail": "Permission denied: Zonal Admins can only manage staff under their command."}), 403
+                        
+                        if target_fmt_id not in allowed_target_ids:
+                            return jsonify({"detail": "Permission denied: Zonal Admins can only post TO formations under their command."}), 403
 
-        # Create History Record
-        # User request: "date should be previous Office DOPP"
-        # We use staff.dopp (which is the DOPP for the office being left) as the history date.
-        history_date = staff.dopp if staff.dopp else effective_date
-        
-        history = models.PostingHistory(
-            staff_id=staff.id,
-            action_type=action_type,
-            from_office=from_office_val,
-            to_office=to_office_val,
-            action_date=history_date, 
-            remarks=history_remarks
-        )
-        db.add(history)
-        
-        # Update Staff
-        staff.office = new_office
-        # staff.office_id = target_office_obj.id  # Ensure office_id is updated - REMOVED: Staff model has no office_id
-        if action_type == "POSTING":
-             staff.formation_id = target_fmt_id
-             staff.formation_dopp = effective_date
-             staff.dopp = effective_date
-             
-        # Usually a move implies updating DOPP (Date of Present Posting)
-        # But we only update DOPP for Inter-Formation Posting per user request
-        # staff.dopp = effective_date 
-        # Update: User requested "when personnel is moved, the office DOPP automatically changes to the effective date of move"
-        staff.dopp = effective_date 
-        
-        # Notifications
-        # Notify Office Admin of target office
-        db.add(models.Notification(
-             office_name=new_office,
-             message=f"Staff Moved: {staff.nis_no} ({staff.rank}) to your office"
-        ))
-        # If Posting, Notify Formation Admin
-        if action_type == "POSTING":
-             db.add(models.Notification(
-                 formation_id=target_fmt_id,
-                 message=f"New Staff Posted: {staff.nis_no} ({staff.rank}) from {current_fmt_name}"
-             ))
-        
-        db.commit()
-        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=staff.formation_id, office_id=target_office_obj.id, user_id=user["id"], username=user["sub"])
-        return jsonify(schemas.to_dict_staff(staff))
+                else:
+                    # State Command / Others: Can ONLY move within same formation
+                    if target_fmt_id != formation_id:
+                         return jsonify({"detail": "Permission denied: You can only move staff within your formation. Postings must be done by Zonal/SHQ."}), 403
+
+            old_office = staff.office
+            if old_office == new_office:
+                 return jsonify({"detail": "Staff is already in this office"}), 400
+
+            # Determine Action Type
+            action_type = "MOVE"
+            to_office_val = new_office
+            
+            # Get Current Formation Name for History
+            current_fmt = staff.formation
+            current_fmt_name = current_fmt.name if current_fmt else "Unknown"
+            if current_fmt and current_fmt.formation_type == "Directorate":
+                current_fmt_name = f"SHQ ({current_fmt.code})"
+                
+            # Check if Formation Change
+            if target_fmt_id != current_fmt_id:
+                action_type = "POSTING"
+                from_office_val = f"{current_fmt_name} - {old_office}"
+                
+                # If posting, include Formation Name
+                target_fmt = crud.get_formation(db, target_fmt_id)
+                if target_fmt:
+                     fmt_name = target_fmt.name
+                     if target_fmt.formation_type == "Directorate":
+                         fmt_name = f"SHQ ({target_fmt.code})"
+                     to_office_val = fmt_name # Store only Formation Name as requested
+            else:
+                # Intra-formation move
+                from_office_val = old_office
+                to_office_val = new_office # Store only Office Name for internal move
+
+            # Prepare Remarks with History Info
+            history_remarks = remarks
+            if action_type == "POSTING":
+                 prev_dopp_str = staff.formation_dopp.isoformat() if staff.formation_dopp else "N/A"
+                 history_remarks = f"{remarks} | Prev Formation DOPP: {prev_dopp_str}".strip(" |")
+
+            # Create History Record
+            # User request: "date should be previous Office DOPP"
+            # We use staff.dopp (which is the DOPP for the office being left) as the history date.
+            history_date = staff.dopp if staff.dopp else effective_date
+            
+            history = models.PostingHistory(
+                staff_id=staff.id,
+                action_type=action_type,
+                from_office=from_office_val,
+                to_office=to_office_val,
+                action_date=history_date, 
+                remarks=history_remarks
+            )
+            db.add(history)
+            
+            # Update Staff
+            staff.office = new_office
+            # staff.office_id = target_office_obj.id  # Ensure office_id is updated - REMOVED: Staff model has no office_id
+            if action_type == "POSTING":
+                 staff.formation_id = target_fmt_id
+                 staff.formation_dopp = effective_date
+                 staff.dopp = effective_date
+                 
+            # Usually a move implies updating DOPP (Date of Present Posting)
+            # But we only update DOPP for Inter-Formation Posting per user request
+            # staff.dopp = effective_date 
+            # Update: User requested "when personnel is moved, the office DOPP automatically changes to the effective date of move"
+            staff.dopp = effective_date 
+            
+            # Notifications
+            # Notify Office Admin of target office
+            db.add(models.Notification(
+                 office_name=new_office,
+                 message=f"Staff Moved: {staff.nis_no} ({staff.rank}) to your office"
+            ))
+            # If Posting, Notify Formation Admin
+            if action_type == "POSTING":
+                 db.add(models.Notification(
+                     formation_id=target_fmt_id,
+                     message=f"New Staff Posted: {staff.nis_no} ({staff.rank}) from {current_fmt_name}"
+                 ))
+            
+            db.commit()
+            crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=staff.formation_id, office_id=target_office_obj.id, user_id=user["id"], username=user["sub"])
+            return jsonify(schemas.to_dict_staff(staff))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.get("/staff/<int:staff_id>/history")
 def get_staff_history(staff_id: int):
