@@ -93,6 +93,20 @@ def run_migrations():
                         conn.execute(text("ALTER TABLE audit_logs ADD COLUMN office_id INTEGER"))
                 print("Column 'office_id' added to 'audit_logs' successfully.")
 
+            if 'user_id' not in columns:
+                print("Column 'user_id' missing in 'audit_logs'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE audit_logs ADD COLUMN user_id INTEGER"))
+                print("Column 'user_id' added to 'audit_logs' successfully.")
+
+            if 'username' not in columns:
+                print("Column 'username' missing in 'audit_logs'. Adding it...")
+                with engine.connect() as conn:
+                    with conn.begin():
+                        conn.execute(text("ALTER TABLE audit_logs ADD COLUMN username VARCHAR(64)"))
+                print("Column 'username' added to 'audit_logs' successfully.")
+
         # --- Existing Migrations ---
 
         if 'offices' in table_names:
