@@ -5190,11 +5190,14 @@
                     } catch (_) {
                         err = null;
                     }
-                    alert('Error: ' + (err && err.detail ? err.detail : (res.statusText || 'Request failed')));
+                    let msg = res.statusText || 'Request failed';
+                    if (err && err.detail) msg = err.detail;
+                    
+                    alert('Error (' + res.status + '): ' + msg);
                 }
             } catch (err) {
                 console.error(err);
-                alert('Request failed: ' + (err.message || 'Unknown error'));
+                alert('Request failed (Exception): ' + (err.message || 'Unknown error'));
             }
         }
 
