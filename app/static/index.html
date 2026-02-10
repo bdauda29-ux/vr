@@ -5190,11 +5190,11 @@
                     } catch (_) {
                         err = null;
                     }
-                    alert('Error: ' + (err && err.detail ? err.detail : 'Request failed'));
+                    alert('Error: ' + (err && err.detail ? err.detail : (res.statusText || 'Request failed')));
                 }
             } catch (err) {
                 console.error(err);
-                alert('Request failed');
+                alert('Request failed: ' + (err.message || 'Unknown error'));
             }
         }
 
@@ -7808,6 +7808,33 @@
 
             populateRanks();
             loadOffices();
+
+            // IMPROVEMENT: Auto-collapse navbar on mobile when link is clicked or outside click
+            const navCollapse = document.getElementById('navbarNav');
+            if (navCollapse) {
+                // Collapse when a nav link is clicked
+                document.querySelectorAll('.navbar-nav .nav-link').forEach(l => {
+                    l.addEventListener('click', () => {
+                        // Check if mobile view (< 992px for navbar-expand-lg) and currently shown
+                        if (window.getComputedStyle(document.querySelector('.navbar-toggler')).display !== 'none' && navCollapse.classList.contains('show')) {
+                            const bsCollapse = bootstrap.Collapse.getInstance(navCollapse) || new bootstrap.Collapse(navCollapse, {toggle: false});
+                            bsCollapse.hide();
+                        }
+                    });
+                });
+
+                // Collapse when clicking outside the navbar
+                document.addEventListener('click', function(event) {
+                    // Check if mobile view
+                    if (window.getComputedStyle(document.querySelector('.navbar-toggler')).display !== 'none' && navCollapse.classList.contains('show')) {
+                        // Check if click is OUTSIDE the navbar collapse and OUTSIDE the toggler
+                        if (!navCollapse.contains(event.target) && !document.querySelector('.navbar-toggler').contains(event.target)) {
+                            const bsCollapse = bootstrap.Collapse.getInstance(navCollapse) || new bootstrap.Collapse(navCollapse, {toggle: false});
+                            bsCollapse.hide();
+                        }
+                    }
+                });
+            }
         });
 
 

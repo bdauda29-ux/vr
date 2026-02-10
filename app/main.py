@@ -1031,7 +1031,7 @@ def import_excel():
                     db_session.rollback()
                     errors.append(f"Row {row_idx}: {str(e)}")
             
-            if success_count > 0: crud.create_audit_log(db_session, "IMPORT", filename, f"Imported {success_count} records", user_id=user["id"], username=user["sub"])
+            if success_count > 0: crud.create_audit_log(db_session, "IMPORT", filename, f"Imported {success_count} records", formation_id=formation_id, user_id=user["id"], username=user["sub"])
             db_session.commit()
         return jsonify({"message": f"Imported {success_count} records", "errors": errors[:10]})
 
@@ -1781,7 +1781,7 @@ def update_staff(staff_id: int):
                     )
                     db.add(req)
                     
-                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
                     db.commit()
                     
                     return jsonify(schemas.to_dict_staff(obj))
@@ -2398,7 +2398,7 @@ def posting_staff(staff_id: int):
              ))
 
         db.commit()
-        crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id, office_id=staff.office_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/settings/staff-edit")
@@ -2542,9 +2542,14 @@ def get_audit_logs():
          # Get staff record to find office_id
          with next(get_db()) as db:
               staff = crud.get_staff(db, user["id"])
-              if staff:
-                  office_id = staff.office_id
-                  # formation_id is already in user, but let's rely on office_id filter primarily for office scope
+              if staff and staff.office:
+                  # Resolve Office ID from name
+                  stmt = select(models.Office).where(
+                      func.lower(models.Office.name) == staff.office.lower(),
+                      models.Office.formation_id == staff.formation_id
+                  )
+                  off_obj = db.scalar(stmt)
+                  office_id = off_obj.id if off_obj else None
               else:
                   return jsonify([]), 200
 
@@ -2575,7 +2580,16 @@ def export_excel():
             if not office:
                 office = None
 
-            completeness = request.args.get("completeness")
+            # Restriction: Office Admin can only export their own office
+            if user["role"] == "office_admin":
+                admin_staff = crud.get_staff(db, user["id"])
+                if admin_staff and admin_staff.office:
+                    office = [admin_staff.office]
+                else:
+                    office = ["__NO_OFFICE__"]
+
+            # Force completeness to None to include both completed and incomplete as requested
+            completeness = None
             status = request.args.get("status", "active")
             dopp_order = request.args.get("dopp_order")
             columns_raw = request.args.get("columns")
@@ -3312,7 +3326,7 @@ def approve_exit(staff_id: int):
         staff.out_request_reason = None
         
         db.commit()
-        crud.create_audit_log(db, "EXIT_APPROVE", f"Staff: {staff.nis_no}", "Approved exit request")
+        crud.create_audit_log(db, "EXIT_APPROVE", f"Staff: {staff.nis_no}", "Approved exit request", formation_id=staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.post("/staff/<int:staff_id>/exit-reject")
@@ -3336,7 +3350,7 @@ def reject_exit(staff_id: int):
         staff.out_request_reason = None
         
         db.commit()
-        crud.create_audit_log(db, "EXIT_REJECT", f"Staff: {staff.nis_no}", "Rejected exit request", formation_id=staff.formation_id, office_id=staff.office_id)
+        crud.create_audit_log(db, "EXIT_REJECT", f"Staff: {staff.nis_no}", "Rejected exit request", formation_id=staff.formation_id, office_id=None)
         return jsonify({"detail": "Request rejected"})
 
 @app.post("/staff/<int:staff_id>/undo-exit")
@@ -3371,7 +3385,7 @@ def undo_exit(staff_id: int):
         staff.out_request_reason = None
         
         db.commit()
-        crud.create_audit_log(db, "UNDO_EXIT", f"Staff: {staff.nis_no}", "Undid exit/posting out")
+        crud.create_audit_log(db, "UNDO_EXIT", f"Staff: {staff.nis_no}", "Undid exit/posting out", formation_id=staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/admin/edit-requests")
@@ -3431,7 +3445,7 @@ def approve_edit_request(req_id):
             req.reviewed_by = user.get("sub")
             req.reviewed_at = func.now()
             
-            crud.create_audit_log(db, "REVIEW_KEEP", f"Staff: {req.staff.nis_no}", f"Kept updates (Request {req_id})", formation_id=formation_id, office_id=req.staff.office_id)
+            crud.create_audit_log(db, "REVIEW_KEEP", f"Staff: {req.staff.nis_no}", f"Kept updates (Request {req_id})", formation_id=req.staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
             db.commit()
             return jsonify({"detail": "Updates kept (Approved)"})
         except Exception as e:
@@ -3485,7 +3499,7 @@ def reject_edit_request(req_id):
             req.reviewed_by = user.get("sub")
             req.reviewed_at = func.now()
             
-            crud.create_audit_log(db, "REVIEW_REVERT", f"Staff: {req.staff.nis_no}", f"Reverted updates (Request {req_id})", formation_id=formation_id, office_id=req.staff.office_id)
+            crud.create_audit_log(db, "REVIEW_REVERT", f"Staff: {req.staff.nis_no}", f"Reverted updates (Request {req_id})", formation_id=req.staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
             db.commit()
             return jsonify({"detail": "Updates reverted (Rejected)"})
         except Exception as e:
