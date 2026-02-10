@@ -907,6 +907,18 @@ def debug_db():
             "traceback": traceback.format_exc()
         }), 500
 
+@app.get("/system/migrate")
+def trigger_migration():
+    user = get_current_user()
+    if not user or user.get("role") != "special_admin":
+        return jsonify({"detail": "Permission denied"}), 403
+    try:
+        migrations.run_migrations()
+        return jsonify({"detail": "Migrations executed successfully"})
+    except Exception as e:
+        import traceback
+        return jsonify({"detail": f"Migration failed: {e}", "trace": traceback.format_exc()}), 500
+
 @app.get("/download/template")
 def download_template():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
@@ -1639,8 +1651,14 @@ def update_staff(staff_id: int):
         if k in data: data[k] = parse_date_value(data.get(k))
 
     # Handle custom fields serialization
-    if "custom_data" in data and isinstance(data["custom_data"], (dict, list)):
-        data["custom_data"] = json.dumps(data["custom_data"])
+    if "custom_data" in data:
+        # If it's a dict/list, serialize it
+        if isinstance(data["custom_data"], (dict, list)):
+             data["custom_data"] = json.dumps(data["custom_data"])
+        # If it's None or empty string, ensure it's None or valid JSON?
+        # If the column is missing, this will fail in crud.
+        # We can't easily check for column existence here without overhead.
+        # But we can try/except the crud operation and give a better error.
 
     with next(get_db()) as db:
         existing = crud.get_staff(db, staff_id)
@@ -1762,31 +1780,9 @@ def update_staff(staff_id: int):
                 old_val = getattr(existing, "formation_dopp")
                 new_val = data["formation_dopp"]
                 
-                # Normalize old_val (date) to string for comparison if new_val is string (ISO format)
-                old_val_str = old_val.isoformat() if old_val else None
-                
-                # new_val is likely already a date object because line 1606 logic (Wait, line 1606 was staff logic)
-                # Let's check where data parsing happens. 
-                # Lines 1641 handles parsing for staff, but for admin direct update?
-                # The data comes from request.get_json(). It's raw strings unless parsed.
-                # But wait, line 1641 was inside the `if user["role"] in ["staff", "office_admin"]` block.
-                # So for Admin, data is RAW.
-                # We need to parse dates if we want to save them correctly in update_staff call?
-                # crud.update_staff handles parsing?
-                # Let's check crud.py later or assume it handles strings if main.py doesn't parse.
-                # Actually, standard update usually expects matching types or handles it in CRUD.
-                # But for comparison here:
-                
-                if new_val != old_val_str and new_val != old_val:
-                     # Check if it's just a type mismatch or actual value change
-                     # If old is date(2023, 1, 1) and new is "2023-01-01", they are effectively same.
-                     is_changed = True
-                     if isinstance(old_val, (date, datetime)) and isinstance(new_val, str):
-                         if old_val.isoformat() == new_val:
-                             is_changed = False
-                     
-                     if is_changed:
-                        return jsonify({"detail": "Permission denied: Formation Admin cannot edit Formation DOPP after creation. Please contact Special Admin."}), 403
+                # new_val is already a date object (or None) from parsing
+                if new_val != old_val:
+                     return jsonify({"detail": "Permission denied: Formation Admin cannot edit Formation DOPP after creation. Please contact Special Admin."}), 403
 
         try:
             obj = crud.update_staff(db, existing, data)
@@ -1802,6 +1798,11 @@ def update_staff(staff_id: int):
             return jsonify({"detail": "Not found"}), 404
         except ValueError as e:
             return jsonify({"detail": str(e)}), 400
+        except OperationalError as e:
+            # Handle missing column error specifically
+            if "custom_data" in str(e) and "column" in str(e):
+                 return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+            raise e
 
 @app.delete("/staff/<int:staff_id>")
 def delete_staff(staff_id: int):
