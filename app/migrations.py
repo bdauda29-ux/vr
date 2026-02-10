@@ -117,10 +117,17 @@ def run_migrations():
             
             if 'custom_data' not in columns:
                 print("Column 'custom_data' missing in 'staff'. Adding it...")
-                with engine.connect() as conn:
-                    with conn.begin():
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN custom_data TEXT"))
-                print("Column 'custom_data' added successfully.")
+                try:
+                    with engine.connect() as conn:
+                        with conn.begin():
+                            conn.execute(text("ALTER TABLE staff ADD COLUMN custom_data TEXT"))
+                    print("Column 'custom_data' added successfully.")
+                except Exception as e:
+                    print(f"Failed to add 'custom_data' column: {e}")
+                    # Don't raise here, let other migrations try to run? 
+                    # Or raise so STARTUP_ERROR catches it?
+                    # Better to raise so admin knows.
+                    raise e
 
             if 'login_count' not in columns:
                 print("Column 'login_count' missing. Adding it...")

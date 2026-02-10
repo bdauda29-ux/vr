@@ -56,7 +56,8 @@ try:
         with next(get_db()) as db:
             seed_special_admin(db)
     except Exception as e:
-        print(f"Startup tasks failed: {e}")
+        STARTUP_ERROR = f"Startup tasks failed: {e}\n{traceback.format_exc()}"
+        print(STARTUP_ERROR)
 
 
 except Exception as e:
