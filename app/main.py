@@ -1606,38 +1606,38 @@ def delete_custom_field(field_id: int):
 
 @app.post("/staff")
 def create_staff():
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, error_response, code = require_role(["office_admin", "main_admin", "formation_admin"])
-    if error_response: return error_response, code
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, error_response, code = require_role(["office_admin", "main_admin", "formation_admin"])
+        if error_response: return error_response, code
 
-    data = request.get_json(force=True)
-    for k in ["nis_no","surname","other_names","rank"]:
-        if k not in data or not str(data[k]).strip(): return jsonify({"detail": f"{k} is required"}), 400
-    for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
-        if k in data:
-            parsed = parse_date_value(data.get(k))
-            if data.get(k) not in (None, "") and parsed is None: return jsonify({"detail": f"Invalid date for {k}"}), 400
-            data[k] = parsed
-    if "gender" not in data or data["gender"] is None: data["gender"] = ""
-    
-    # Handle custom fields serialization
-    if "custom_data" in data and isinstance(data["custom_data"], (dict, list)):
-        data["custom_data"] = json.dumps(data["custom_data"])
-
-    formation_id = user.get("formation_id")
-    if formation_id:
-        data["formation_id"] = formation_id
+        data = request.get_json(force=True)
+        for k in ["nis_no","surname","other_names","rank"]:
+            if k not in data or not str(data[k]).strip(): return jsonify({"detail": f"{k} is required"}), 400
+        for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
+            if k in data:
+                parsed = parse_date_value(data.get(k))
+                if data.get(k) not in (None, "") and parsed is None: return jsonify({"detail": f"Invalid date for {k}"}), 400
+                data[k] = parsed
+        if "gender" not in data or data["gender"] is None: data["gender"] = ""
         
-    with next(get_db()) as db:
-        if user["role"] == "office_admin":
-             staff_user = crud.get_staff(db, user["id"])
-             if not staff_user or not staff_user.office:
-                 return jsonify({"detail": "Admin has no assigned office"}), 403
-             data["office"] = staff_user.office
-             data["allow_edit_rank"] = 0
-             data["allow_edit_dopp"] = 0
+        # Handle custom fields serialization
+        if "custom_data" in data and isinstance(data["custom_data"], (dict, list)):
+            data["custom_data"] = json.dumps(data["custom_data"])
 
-        try:
+        formation_id = user.get("formation_id")
+        if formation_id:
+            data["formation_id"] = formation_id
+            
+        with next(get_db()) as db:
+            if user["role"] == "office_admin":
+                 staff_user = crud.get_staff(db, user["id"])
+                 if not staff_user or not staff_user.office:
+                     return jsonify({"detail": "Admin has no assigned office"}), 403
+                 data["office"] = staff_user.office
+                 data["allow_edit_rank"] = 0
+                 data["allow_edit_dopp"] = 0
+
             obj = crud.create_staff(db, data)
             # Log with the staff's formation_id so the formation admin can see it
             crud.create_audit_log(
@@ -1651,19 +1651,19 @@ def create_staff():
                 username=user["sub"]
             )
             return jsonify(schemas.to_dict_staff(obj)), 201
-        except ValueError as e: return jsonify({"detail": str(e)}), 400
-        except OperationalError as e:
-            if "custom_data" in str(e) and "column" in str(e):
-                 return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
-            raise e
-        except ProgrammingError as e:
-            if "custom_data" in str(e) and "column" in str(e):
-                 return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
-            raise e
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+    except ValueError as e: return jsonify({"detail": str(e)}), 400
+    except OperationalError as e:
+        if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+        raise e
+    except ProgrammingError as e:
+        if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+        raise e
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.get("/staff/<int:staff_id>")
 def get_staff(staff_id: int):
@@ -1675,97 +1675,89 @@ def get_staff(staff_id: int):
 
 @app.put("/staff/<int:staff_id>")
 def update_staff(staff_id: int):
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user = get_current_user()
-    if not user: return jsonify({"detail": "Not authenticated"}), 401
-    
-    formation_id = user.get("formation_id")
-    
-    data = request.get_json(force=True)
-    for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
-        if k in data: data[k] = parse_date_value(data.get(k))
-
-    # Handle custom fields serialization
-    if "custom_data" in data:
-        # If it's a dict/list, serialize it
-        if isinstance(data["custom_data"], (dict, list)):
-             data["custom_data"] = json.dumps(data["custom_data"])
-        # If it's None or empty string, ensure it's None or valid JSON?
-        # If the column is missing, this will fail in crud.
-        # We can't easily check for column existence here without overhead.
-        # But we can try/except the crud operation and give a better error.
-
-    with next(get_db()) as db:
-        existing = crud.get_staff(db, staff_id)
-        if not existing: return jsonify({"detail": "Not found"}), 404
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user = get_current_user()
+        if not user: return jsonify({"detail": "Not authenticated"}), 401
         
-        # Formation check
-        if formation_id and existing.formation_id != formation_id:
-            return jsonify({"detail": "Permission denied: Different Formation"}), 403
+        formation_id = user.get("formation_id")
         
-        if user["role"] in ["staff", "office_admin"]:
-            # Check ownership for staff, or office match for office_admin
-            if user["role"] == "staff" and user["id"] != staff_id:
-                return jsonify({"detail": "Permission denied"}), 403
-            if user["role"] == "office_admin":
-                 admin_staff = crud.get_staff(db, user["id"])
-                 if not admin_staff or admin_staff.office != existing.office:
-                     return jsonify({"detail": "Permission denied"}), 403
+        data = request.get_json(force=True)
+        for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
+            if k in data: data[k] = parse_date_value(data.get(k))
 
-            for restricted in ["office", "role", "exit_date", "exit_mode", "out_request_status"]:
-                if restricted in data and data[restricted] != getattr(existing, restricted):
-                    return jsonify({"detail": f"Permission denied: Cannot change {restricted}"}), 403
+        # Handle custom fields serialization
+        if "custom_data" in data:
+            # If it's a dict/list, serialize it
+            if isinstance(data["custom_data"], (dict, list)):
+                 data["custom_data"] = json.dumps(data["custom_data"])
+
+        with next(get_db()) as db:
+            existing = crud.get_staff(db, staff_id)
+            if not existing: return jsonify({"detail": "Not found"}), 404
             
-            # Staff specific restrictions
-            if user["role"] == "staff":
-                # User requested restriction: office dopp, formation dopp, rank, office
-                # 'office' is already restricted above.
-                staff_restricted = ["rank", "dopp", "formation_dopp"]
-                for f in staff_restricted:
-                    if f in data and data[f] != getattr(existing, f):
-                         # Exception: if allow_edit_rank or allow_edit_dopp is enabled?
-                         # The logic below (lines 1633-1636) handled exceptions.
-                         # But user request says "restricted".
-                         # I will merge logic.
-                         is_allowed = False
-                         if f == "rank" and getattr(existing, "allow_edit_rank", 0): is_allowed = True
-                         if f == "dopp" and getattr(existing, "allow_edit_dopp", 0): is_allowed = True
-                         
-                         if not is_allowed:
-                             return jsonify({"detail": f"Permission denied: Cannot change {f}"}), 403
-
-            # Post-moderation: Update Immediately, but Log for Review
-            # Calculate changes
-            changes = {}
-            original_values = {}
-            for k, v in data.items():
-                if k in ["dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"]:
-                     # Date handling
-                     old_val = getattr(existing, k)
-                     if old_val != v:
-                         changes[k] = v.isoformat() if v else None
-                         original_values[k] = old_val.isoformat() if old_val else None
-                else:
-                     old_val = getattr(existing, k)
-                     
-                     # Normalize for comparison (treat empty string and None as same)
-                     norm_v = v
-                     if isinstance(v, str) and not v.strip():
-                         norm_v = None
-                     
-                     norm_old = old_val
-                     if isinstance(old_val, str) and not old_val.strip():
-                         norm_old = None
-                         
-                     if norm_old != norm_v:
-                         changes[k] = v
-                         original_values[k] = old_val
+            # Formation check
+            if formation_id and existing.formation_id != formation_id:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
-            if not changes:
-                 return jsonify({"detail": "No changes detected"}), 200
+            if user["role"] in ["staff", "office_admin"]:
+                # Check ownership for staff, or office match for office_admin
+                if user["role"] == "staff" and user["id"] != staff_id:
+                    return jsonify({"detail": "Permission denied"}), 403
+                if user["role"] == "office_admin":
+                     admin_staff = crud.get_staff(db, user["id"])
+                     if not admin_staff or admin_staff.office != existing.office:
+                         return jsonify({"detail": "Permission denied"}), 403
 
-            # Apply changes to Staff object
-            try:
+                for restricted in ["office", "role", "exit_date", "exit_mode", "out_request_status"]:
+                    if restricted in data and data[restricted] != getattr(existing, restricted):
+                        return jsonify({"detail": f"Permission denied: Cannot change {restricted}"}), 403
+                
+                # Staff specific restrictions
+                if user["role"] == "staff":
+                    # User requested restriction: office dopp, formation dopp, rank, office
+                    # 'office' is already restricted above.
+                    staff_restricted = ["rank", "dopp", "formation_dopp"]
+                    for f in staff_restricted:
+                        if f in data and data[f] != getattr(existing, f):
+                             is_allowed = False
+                             if f == "rank" and getattr(existing, "allow_edit_rank", 0): is_allowed = True
+                             if f == "dopp" and getattr(existing, "allow_edit_dopp", 0): is_allowed = True
+                             
+                             if not is_allowed:
+                                 return jsonify({"detail": f"Permission denied: Cannot change {f}"}), 403
+
+                # Post-moderation: Update Immediately, but Log for Review
+                # Calculate changes
+                changes = {}
+                original_values = {}
+                for k, v in data.items():
+                    if k in ["dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"]:
+                         # Date handling
+                         old_val = getattr(existing, k)
+                         if old_val != v:
+                             changes[k] = v.isoformat() if v else None
+                             original_values[k] = old_val.isoformat() if old_val else None
+                    else:
+                         old_val = getattr(existing, k)
+                         
+                         # Normalize for comparison (treat empty string and None as same)
+                         norm_v = v
+                         if isinstance(v, str) and not v.strip():
+                             norm_v = None
+                         
+                         norm_old = old_val
+                         if isinstance(old_val, str) and not old_val.strip():
+                             norm_old = None
+                             
+                         if norm_old != norm_v:
+                             changes[k] = v
+                             original_values[k] = old_val
+                
+                if not changes:
+                     return jsonify({"detail": "No changes detected"}), 200
+
+                # Apply changes to Staff object
                 obj = crud.update_staff(db, existing, data)
                 if obj:
                     # Create Edit Request (Log) with status "review_pending"
@@ -1786,40 +1778,37 @@ def update_staff(staff_id: int):
                     
                     return jsonify(schemas.to_dict_staff(obj))
                 return jsonify({"detail": "Not found"}), 404
-            except ValueError as e:
-                return jsonify({"detail": str(e)}), 400
-        
-        # Admin Update (Direct Update)
-        
-        # Restriction for non-formation/special admins on sensitive fields
-        # MODIFIED: Formation Admin is now restricted from editing Formation DOPP on update
-        if user["role"] not in ["formation_admin", "special_admin"]:
-             restricted_fields = ["rank", "office", "dopp", "formation_dopp", "dofa", "dopa", "nis_no"]
-             for f in restricted_fields:
-                 # Check if field is present and changed
-                 if f in data:
-                     old_val = getattr(existing, f)
-                     new_val = data[f]
-                     
-                     # Normalize for comparison
-                     if isinstance(old_val, (date, datetime)) and isinstance(new_val, str):
-                         # parse new_val to date if needed, but data[k] is already parsed in lines 1606-1607 for date fields
-                         pass 
+            
+            # Admin Update (Direct Update)
+            
+            # Restriction for non-formation/special admins on sensitive fields
+            # MODIFIED: Formation Admin is now restricted from editing Formation DOPP on update
+            if user["role"] not in ["formation_admin", "special_admin"]:
+                 restricted_fields = ["rank", "office", "dopp", "formation_dopp", "dofa", "dopa", "nis_no"]
+                 for f in restricted_fields:
+                     # Check if field is present and changed
+                     if f in data:
+                         old_val = getattr(existing, f)
+                         new_val = data[f]
                          
-                     if old_val != new_val:
-                          return jsonify({"detail": f"Permission denied: Cannot directly edit {f}. Use Posting/Promotion workflows."}), 403
-        
-        # Specific restriction for Formation Admin on Formation DOPP
-        if user["role"] == "formation_admin":
-            if "formation_dopp" in data:
-                old_val = getattr(existing, "formation_dopp")
-                new_val = data["formation_dopp"]
-                
-                # new_val is already a date object (or None) from parsing
-                if new_val != old_val:
-                     return jsonify({"detail": "Permission denied: Formation Admin cannot edit Formation DOPP after creation. Please contact Special Admin."}), 403
+                         # Normalize for comparison
+                         if isinstance(old_val, (date, datetime)) and isinstance(new_val, str):
+                             # parse new_val to date if needed, but data[k] is already parsed in lines 1606-1607 for date fields
+                             pass 
+                             
+                         if old_val != new_val:
+                              return jsonify({"detail": f"Permission denied: Cannot directly edit {f}. Use Posting/Promotion workflows."}), 403
+            
+            # Specific restriction for Formation Admin on Formation DOPP
+            if user["role"] == "formation_admin":
+                if "formation_dopp" in data:
+                    old_val = getattr(existing, "formation_dopp")
+                    new_val = data["formation_dopp"]
+                    
+                    # new_val is already a date object (or None) from parsing
+                    if new_val != old_val:
+                         return jsonify({"detail": "Permission denied: Formation Admin cannot edit Formation DOPP after creation. Please contact Special Admin."}), 403
 
-        try:
             obj = crud.update_staff(db, existing, data)
             if obj:
                 # Clear any pending edit requests for this staff as they are now superseded
@@ -1841,86 +1830,101 @@ def update_staff(staff_id: int):
                 )
                 return jsonify(schemas.to_dict_staff(obj))
             return jsonify({"detail": "Not found"}), 404
-        except ValueError as e:
-            return jsonify({"detail": str(e)}), 400
-        except OperationalError as e:
-            # Handle missing column error specifically
-            if "custom_data" in str(e) and "column" in str(e):
-                 return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
-            raise e
-        except ProgrammingError as e:
-            # Handle missing column error specifically
-            if "custom_data" in str(e) and "column" in str(e):
-                 return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
-            raise e
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+    except ValueError as e:
+        return jsonify({"detail": str(e)}), 400
+    except OperationalError as e:
+        # Handle missing column error specifically
+        if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+        raise e
+    except ProgrammingError as e:
+        # Handle missing column error specifically
+        if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+        raise e
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.delete("/staff/<int:staff_id>")
 def delete_staff(staff_id: int):
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin"])
-    if err: return err, code
-    
-    formation_id = user.get("formation_id")
-    
-    with next(get_db()) as db:
-        obj = crud.get_staff(db, staff_id)
-        if not obj:
-            return jsonify({"detail": "Not found"}), 404
-            
-        if formation_id and obj.formation_id != formation_id:
-            return jsonify({"detail": "Permission denied: Different Formation"}), 403
-            
-        staff_office_id = None
-        staff_formation_id = obj.formation_id
-        crud.delete_staff(db, obj)
-        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=staff_formation_id, office_id=staff_office_id, user_id=user["id"], username=user["sub"])
-        return jsonify({"detail": "Deleted"})
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["special_admin"])
+        if err: return err, code
+        
+        formation_id = user.get("formation_id")
+        
+        with next(get_db()) as db:
+            obj = crud.get_staff(db, staff_id)
+            if not obj:
+                return jsonify({"detail": "Not found"}), 404
+                
+            if formation_id and obj.formation_id != formation_id:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+                
+            staff_office_id = None
+            staff_formation_id = obj.formation_id
+            crud.delete_staff(db, obj)
+            crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=staff_formation_id, office_id=staff_office_id, user_id=user["id"], username=user["sub"])
+            return jsonify({"detail": "Deleted"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.post("/staff/<int:staff_id>/reset-login")
 def reset_login_count(staff_id: int):
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin", "formation_admin"])
-    if err: return err, code
-    
-    formation_id = user.get("formation_id")
-    
-    with next(get_db()) as db:
-        obj = crud.get_staff(db, staff_id)
-        if not obj: return jsonify({"detail": "Not found"}), 404
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["special_admin", "formation_admin"])
+        if err: return err, code
         
-        if formation_id and obj.formation_id != formation_id:
-            return jsonify({"detail": "Permission denied: Different Formation"}), 403
+        formation_id = user.get("formation_id")
         
-        obj.login_count = 0
-        db.add(obj)
-        db.commit()
-        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
-        return jsonify({"detail": "Login count reset successfully"})
+        with next(get_db()) as db:
+            obj = crud.get_staff(db, staff_id)
+            if not obj: return jsonify({"detail": "Not found"}), 404
+            
+            if formation_id and obj.formation_id != formation_id:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            
+            obj.login_count = 0
+            db.add(obj)
+            db.commit()
+            crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+            return jsonify({"detail": "Login count reset successfully"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.post("/staff/<int:staff_id>/reset-password")
 def reset_staff_password(staff_id: int):
-    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["special_admin", "formation_admin"])
-    if err: return err, code
-    
-    formation_id = user.get("formation_id")
-    
-    with next(get_db()) as db:
-        obj = crud.get_staff(db, staff_id)
-        if not obj: return jsonify({"detail": "Not found"}), 404
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["special_admin", "formation_admin"])
+        if err: return err, code
         
-        if formation_id and obj.formation_id != formation_id:
-            return jsonify({"detail": "Permission denied: Different Formation"}), 403
+        formation_id = user.get("formation_id")
         
-        obj.password_hash = None # Reset to use NIS number
-        db.add(obj)
-        db.commit()
-        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
-        return jsonify({"detail": "Password reset successfully"})
+        with next(get_db()) as db:
+            obj = crud.get_staff(db, staff_id)
+            if not obj: return jsonify({"detail": "Not found"}), 404
+            
+            if formation_id and obj.formation_id != formation_id:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            
+            obj.password_hash = None # Reset to use NIS number
+            db.add(obj)
+            db.commit()
+            crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+            return jsonify({"detail": "Password reset successfully"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.put("/staff/<int:staff_id>/role")
 def update_staff_role(staff_id: int):
