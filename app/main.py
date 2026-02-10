@@ -1639,7 +1639,17 @@ def create_staff():
 
         try:
             obj = crud.create_staff(db, data)
-            crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff", formation_id=formation_id, office_id=obj.office_id)
+            # Log with the staff's formation_id so the formation admin can see it
+            crud.create_audit_log(
+                db, 
+                "CREATE", 
+                f"Staff: {obj.nis_no}", 
+                "Created new staff", 
+                formation_id=obj.formation_id, 
+                office_id=obj.office_id,
+                user_id=user["id"],
+                username=user["sub"]
+            )
             return jsonify(schemas.to_dict_staff(obj)), 201
         except ValueError as e: return jsonify({"detail": str(e)}), 400
         except OperationalError as e:
@@ -1650,6 +1660,10 @@ def create_staff():
             if "custom_data" in str(e) and "column" in str(e):
                  return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
             raise e
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.get("/staff/<int:staff_id>")
 def get_staff(staff_id: int):
@@ -1814,7 +1828,17 @@ def update_staff(staff_id: int):
                     models.StaffEditRequest.status == 'pending'
                 ).delete()
                 
-                crud.create_audit_log(db, "UPDATE", f"Staff: {obj.nis_no}", "Updated staff details", formation_id=formation_id, office_id=obj.office_id)
+                # Log with the staff's formation_id so the formation admin can see it
+                crud.create_audit_log(
+                    db, 
+                    "UPDATE", 
+                    f"Staff: {obj.nis_no}", 
+                    "Updated staff details", 
+                    formation_id=obj.formation_id, 
+                    office_id=obj.office_id,
+                    user_id=user["id"],
+                    username=user["sub"]
+                )
                 return jsonify(schemas.to_dict_staff(obj))
             return jsonify({"detail": "Not found"}), 404
         except ValueError as e:
@@ -1829,6 +1853,10 @@ def update_staff(staff_id: int):
             if "custom_data" in str(e) and "column" in str(e):
                  return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
             raise e
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"detail": f"Server Error: {str(e)}"}), 500
 
 @app.delete("/staff/<int:staff_id>")
 def delete_staff(staff_id: int):
@@ -1847,8 +1875,9 @@ def delete_staff(staff_id: int):
             return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
         staff_office_id = obj.office_id
+        staff_formation_id = obj.formation_id
         crud.delete_staff(db, obj)
-        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=formation_id, office_id=staff_office_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=staff_formation_id, office_id=staff_office_id, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Deleted"})
 
 @app.post("/staff/<int:staff_id>/reset-login")
@@ -1869,7 +1898,7 @@ def reset_login_count(staff_id: int):
         obj.login_count = 0
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=obj.formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Login count reset successfully"})
 
 @app.post("/staff/<int:staff_id>/reset-password")
@@ -1890,7 +1919,7 @@ def reset_staff_password(staff_id: int):
         obj.password_hash = None # Reset to use NIS number
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=formation_id, office_id=obj.office_id)
+        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=obj.formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Password reset successfully"})
 
 @app.put("/staff/<int:staff_id>/role")
@@ -1928,7 +1957,7 @@ def update_staff_role(staff_id: int):
         db.add(obj)
         db.commit()
         db.refresh(obj)
-        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(obj))
 
 @app.post("/staff/<int:staff_id>/move")
@@ -2103,7 +2132,7 @@ def move_staff(staff_id: int):
              ))
         
         db.commit()
-        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=formation_id, office_id=staff.office_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=staff.formation_id, office_id=staff.office_id, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/staff/<int:staff_id>/history")
