@@ -41,7 +41,7 @@ try:
     
     # SQLAlchemy
     from sqlalchemy.orm import Session
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import OperationalError, ProgrammingError
     from sqlalchemy import select, distinct, func
 
     # Local Imports
@@ -1548,6 +1548,18 @@ def list_staff_endpoint():
                 "limit": limit,
                 "offset": offset
             })
+    except OperationalError as e:
+         if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+         import traceback
+         traceback.print_exc()
+         return jsonify({"detail": f"Server Error: {str(e)}", "trace": traceback.format_exc()}), 500
+    except ProgrammingError as e:
+         if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+         import traceback
+         traceback.print_exc()
+         return jsonify({"detail": f"Server Error: {str(e)}", "trace": traceback.format_exc()}), 500
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1630,6 +1642,14 @@ def create_staff():
             crud.create_audit_log(db, "CREATE", f"Staff: {obj.nis_no}", "Created new staff", formation_id=formation_id, office_id=obj.office_id)
             return jsonify(schemas.to_dict_staff(obj)), 201
         except ValueError as e: return jsonify({"detail": str(e)}), 400
+        except OperationalError as e:
+            if "custom_data" in str(e) and "column" in str(e):
+                 return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+            raise e
+        except ProgrammingError as e:
+            if "custom_data" in str(e) and "column" in str(e):
+                 return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+            raise e
 
 @app.get("/staff/<int:staff_id>")
 def get_staff(staff_id: int):
@@ -1800,6 +1820,11 @@ def update_staff(staff_id: int):
         except ValueError as e:
             return jsonify({"detail": str(e)}), 400
         except OperationalError as e:
+            # Handle missing column error specifically
+            if "custom_data" in str(e) and "column" in str(e):
+                 return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+            raise e
+        except ProgrammingError as e:
             # Handle missing column error specifically
             if "custom_data" in str(e) and "column" in str(e):
                  return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
