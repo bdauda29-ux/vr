@@ -1646,7 +1646,7 @@ def create_staff():
                 f"Staff: {obj.nis_no}", 
                 "Created new staff", 
                 formation_id=obj.formation_id, 
-                office_id=obj.office_id,
+                office_id=None,
                 user_id=user["id"],
                 username=user["sub"]
             )
@@ -1835,7 +1835,7 @@ def update_staff(staff_id: int):
                     f"Staff: {obj.nis_no}", 
                     "Updated staff details", 
                     formation_id=obj.formation_id, 
-                    office_id=obj.office_id,
+                    office_id=None,
                     user_id=user["id"],
                     username=user["sub"]
                 )
@@ -1874,7 +1874,7 @@ def delete_staff(staff_id: int):
         if formation_id and obj.formation_id != formation_id:
             return jsonify({"detail": "Permission denied: Different Formation"}), 403
             
-        staff_office_id = obj.office_id
+        staff_office_id = None
         staff_formation_id = obj.formation_id
         crud.delete_staff(db, obj)
         crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=staff_formation_id, office_id=staff_office_id, user_id=user["id"], username=user["sub"])
@@ -1898,7 +1898,7 @@ def reset_login_count(staff_id: int):
         obj.login_count = 0
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=obj.formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Login count reset successfully"})
 
 @app.post("/staff/<int:staff_id>/reset-password")
@@ -1919,7 +1919,7 @@ def reset_staff_password(staff_id: int):
         obj.password_hash = None # Reset to use NIS number
         db.add(obj)
         db.commit()
-        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=obj.formation_id, office_id=obj.office_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify({"detail": "Password reset successfully"})
 
 @app.put("/staff/<int:staff_id>/role")
@@ -2106,7 +2106,7 @@ def move_staff(staff_id: int):
         
         # Update Staff
         staff.office = new_office
-        staff.office_id = target_office_obj.id  # Ensure office_id is updated
+        # staff.office_id = target_office_obj.id  # Ensure office_id is updated - REMOVED: Staff model has no office_id
         if action_type == "POSTING":
              staff.formation_id = target_fmt_id
              staff.formation_dopp = effective_date
@@ -2132,7 +2132,7 @@ def move_staff(staff_id: int):
              ))
         
         db.commit()
-        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=staff.formation_id, office_id=staff.office_id, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=staff.formation_id, office_id=target_office_obj.id, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/staff/<int:staff_id>/history")
