@@ -1,5 +1,6 @@
 from typing import Optional, Any, Dict
 from datetime import date
+import json
 
 def to_dict_state(obj) -> Dict[str, Any]:
     if not obj:
@@ -75,7 +76,7 @@ def to_dict_staff(obj) -> Dict[str, Any]:
         "role": obj.role,
         "allow_edit_rank": bool(getattr(obj, "allow_edit_rank", 0)),
         "allow_edit_dopp": bool(getattr(obj, "allow_edit_dopp", 0)),
-        "custom_data": obj.custom_data, # JSON string
+        "custom_data": json.loads(obj.custom_data) if getattr(obj, "custom_data", None) else {}, 
     }
 
 def to_dict_custom_field_definition(obj) -> Dict[str, Any]:
