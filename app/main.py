@@ -2547,8 +2547,22 @@ def change_password():
                     return jsonify({"detail": "Incorrect old password"}), 400
                     
                 staff.password_hash = auth.get_password_hash(new_password)
+                
+                # Resolve office_id for audit log
+                office_id = None
+                if staff.office:
+                    try:
+                        off_obj = db.query(models.Office).filter(
+                            func.lower(models.Office.name) == staff.office.lower(),
+                            models.Office.formation_id == staff.formation_id
+                        ).first()
+                        if off_obj:
+                            office_id = off_obj.id
+                    except:
+                        pass
+                
                 db.commit()
-                crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", formation_id=staff.formation_id, office_id=staff.office_id, user_id=user_info["id"], username=user_info["sub"])
+                crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", formation_id=staff.formation_id, office_id=office_id, user_id=user_info["id"], username=user_info["sub"])
                 return jsonify({"detail": "Password changed successfully"})
 
             return jsonify({"detail": "User record not found"}), 404
@@ -3326,8 +3340,22 @@ def request_exit(staff_id: int):
         staff.out_request_status = "Pending"
         staff.out_request_date = exit_date
         staff.out_request_reason = exit_mode
+        
+        # Resolve office_id
+        office_id = None
+        if staff.office:
+             try:
+                 off_obj = db.query(models.Office).filter(
+                     func.lower(models.Office.name) == staff.office.lower(),
+                     models.Office.formation_id == staff.formation_id
+                 ).first()
+                 if off_obj:
+                     office_id = off_obj.id
+             except:
+                 pass
+                 
         db.commit()
-        crud.create_audit_log(db, "EXIT_REQUEST", f"Staff: {staff.nis_no}", f"Requested exit: {exit_mode} on {exit_date}", formation_id=staff.formation_id, office_id=staff.office_id)
+        crud.create_audit_log(db, "EXIT_REQUEST", f"Staff: {staff.nis_no}", f"Requested exit: {exit_mode} on {exit_date}", formation_id=staff.formation_id, office_id=office_id)
         return jsonify({"detail": "Request submitted"})
 
 @app.post("/staff/<int:staff_id>/exit-approve")
