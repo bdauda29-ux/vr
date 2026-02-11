@@ -1464,7 +1464,7 @@ def list_staff_endpoint():
         
         office = [o for o in request.args.getlist("office") if o.strip()]
         if not office: office = None
-
+        
         completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
         dopp_order = request.args.get("dopp_order")
@@ -1886,7 +1886,7 @@ def delete_staff(staff_id: int):
 def reset_login_count(staff_id: int):
     try:
         if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-        user, err, code = require_role(["special_admin", "formation_admin"])
+        user, err, code = require_role(["special_admin", "formation_admin", "office_admin"])
         if err: return err, code
         
         formation_id = user.get("formation_id")
@@ -1895,8 +1895,14 @@ def reset_login_count(staff_id: int):
             obj = crud.get_staff(db, staff_id)
             if not obj: return jsonify({"detail": "Not found"}), 404
             
-            if formation_id and obj.formation_id != formation_id:
-                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            if user["role"] == "formation_admin":
+                if formation_id and obj.formation_id != formation_id:
+                    return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            
+            if user["role"] == "office_admin":
+                admin_staff = crud.get_staff(db, user["id"])
+                if not admin_staff or admin_staff.office != obj.office:
+                    return jsonify({"detail": "Permission denied: Different Office"}), 403
             
             obj.login_count = 0
             db.add(obj)
@@ -2944,6 +2950,14 @@ def export_pdf():
             office = [o for o in request.args.getlist("office") if o.strip()]
             if not office:
                 office = None
+
+            # Restriction: Office Admin can only export their own office
+            if user["role"] == "office_admin":
+                admin_staff = crud.get_staff(db, user["id"])
+                if admin_staff and admin_staff.office:
+                    office = [admin_staff.office]
+                else:
+                    office = ["__NO_OFFICE__"]
 
             completeness = request.args.get("completeness")
             status = request.args.get("status", "active")
