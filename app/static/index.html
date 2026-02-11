@@ -2806,10 +2806,16 @@
         }
 
         function switchToAdminMode() {
-            // Show admin items
-            document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
-            
-            // Hide switch to admin button
+    // Show admin items based on role
+    document.querySelectorAll('.admin-only').forEach(el => {
+        // If user is office_admin, do NOT show office-restricted items
+        if (role === 'office_admin' && el.classList.contains('office-restricted')) {
+            return; // Keep it hidden
+        }
+        el.classList.remove('d-none');
+    });
+    
+    // Hide switch to admin button
             const switchAdminBtn = document.getElementById('switchToAdminItem');
             if(switchAdminBtn) switchAdminBtn.classList.add('d-none');
             
