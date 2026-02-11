@@ -148,12 +148,12 @@
                             <i class="bi bi-person me-1"></i> Switch to Personal
                         </a>
                     </li>
-                    <li class="nav-item admin-only" id="auditLogsNavItem">
+                    <li class="nav-item admin-only office-restricted d-none" id="auditLogsNavItem">
                         <a class="nav-link" href="#" onclick="showView('audit');" title="Audit Logs">
                             <i class="bi bi-journal-text me-1"></i> Audit Logs
                         </a>
                     </li>
-                    <li class="nav-item admin-only" id="approvalsNavItem">
+                    <li class="nav-item admin-only office-restricted d-none" id="approvalsNavItem">
                         <a class="nav-link" href="#" onclick="showView('approvals');" title="Authorizations">
                             <i class="bi bi-check2-square me-1"></i> Authorizations
                             <span class="badge bg-danger rounded-pill ms-1 d-none" id="approvalsCounterSidebar">0</span>
@@ -703,19 +703,19 @@
                         <li class="nav-item d-none" role="presentation">
                             <button class="nav-link" id="form-tab" data-bs-toggle="tab" data-bs-target="#form-pane" type="button">Add / Edit Personnel</button>
                         </li>
-                        <li class="nav-item admin-only d-none" role="presentation">
+                        <li class="nav-item admin-only office-restricted d-none" role="presentation">
                             <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import-pane" type="button">Bulk Import</button>
                         </li>
-                        <li class="nav-item admin-only super-only d-none" role="presentation">
+                        <li class="nav-item admin-only super-only office-restricted d-none" role="presentation">
                             <button class="nav-link" id="privileges-tab" data-bs-toggle="tab" data-bs-target="#privileges-pane" type="button" onclick="loadPrivileges()">Privileges</button>
                         </li>
-                        <li class="nav-item admin-only d-none" role="presentation">
+                        <li class="nav-item admin-only office-restricted d-none" role="presentation">
                             <button class="nav-link" id="password-reset-tab" data-bs-toggle="tab" data-bs-target="#password-reset-pane" type="button">Password Reset</button>
                         </li>
-                        <li class="nav-item admin-only d-none" role="presentation">
+                        <li class="nav-item admin-only office-restricted d-none" role="presentation">
                             <button class="nav-link" id="edit-requests-tab" data-bs-toggle="tab" data-bs-target="#edit-requests-pane" type="button">Edit Approvals</button>
                         </li>
-                        <li class="nav-item admin-only special-only d-none" role="presentation">
+                        <li class="nav-item admin-only special-only office-restricted d-none" role="presentation">
                             <button class="nav-link" id="custom-fields-tab" data-bs-toggle="tab" data-bs-target="#custom-fields-pane" type="button" onclick="loadCustomFieldsUI()">Custom Fields</button>
                         </li>
                     </ul>
@@ -2628,8 +2628,16 @@
                     
                     // Admins: Go straight to Admin Dashboard
                     
-                    // 1. Show admin items
-                    document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+                    // 1. Show admin items, respecting office restrictions
+                    document.querySelectorAll('.admin-only').forEach(el => {
+                        if (role === 'office_admin' && el.classList.contains('office-restricted')) {
+                            // Keep hidden for office admin
+                            el.classList.add('d-none');
+                        } else {
+                            el.classList.remove('d-none');
+                        }
+                    });
+
                     populateFormationFilter();
 
                     // Show switch to personal button
@@ -2638,26 +2646,6 @@
                     
                     // 2. Background Admin Init
                     if (role === 'office_admin') {
-                        // Hide restricted tabs for Office Admin
-                        const restrictedTabs = [
-                            'privileges-tab', 
-                            'password-reset-tab', 
-                            'import-tab', 
-                            'edit-requests-tab', 
-                            'custom-fields-tab'
-                        ];
-                        restrictedTabs.forEach(id => {
-                            const tab = document.getElementById(id);
-                            if(tab && tab.parentElement) tab.parentElement.classList.add('d-none');
-                        });
-                        
-                        // Hide Audit and Authorization
-                        const auditNav = document.getElementById('auditLogsNavItem');
-                        if(auditNav) auditNav.classList.add('d-none');
-                        
-                        const approvalsNav = document.getElementById('approvalsNavItem');
-                        if(approvalsNav) approvalsNav.classList.add('d-none');
-
                         await fetchUserOffice();
                     } else if (role === 'main_admin') {
                         const importTab = document.getElementById('import-tab')?.parentElement;
@@ -5582,7 +5570,7 @@
                 }
             } catch(e) {
                 console.error(e);
-                alert("Request failed");
+                alert("Request failed: " + e.message);
             }
         }
 
@@ -7780,13 +7768,15 @@
                         changePasswordModal = new bootstrap.Modal(cpEl);
                     }
                 } else {
-                    alert("Error: " + (data.detail || "Failed to change password"));
-                }
-            } catch(e) {
-                console.error(e);
-                alert("Request failed");
-            }
+            const errorMsg = data.detail || "Failed to change password";
+            console.error("Change password error:", errorMsg);
+            alert("Error: " + errorMsg);
         }
+    } catch(e) {
+        console.error("Change password exception:", e);
+        alert("Request failed: " + e.message);
+    }
+}
 
         // --- Formation Management (Special Admin) ---
 
