@@ -1463,18 +1463,10 @@ def list_staff_endpoint():
         if not rank: rank = None
         
         office = [o for o in request.args.getlist("office") if o.strip()]
-            if not office:
-                office = None
+        if not office:
+            office = None
 
-            # Restriction: Office Admin can only export their own office
-            if user["role"] == "office_admin":
-                admin_staff = crud.get_staff(db, user["id"])
-                if admin_staff and admin_staff.office:
-                    office = [admin_staff.office]
-                else:
-                    office = ["__NO_OFFICE__"]
-
-            completeness = request.args.get("completeness")
+        completeness = request.args.get("completeness")
         status = request.args.get("status", "active")
         dopp_order = request.args.get("dopp_order")
         exit_from_raw = request.args.get("exit_from")
