@@ -99,7 +99,7 @@ def run_migrations():
                     with conn.begin():
                         conn.execute(text("ALTER TABLE audit_logs ADD COLUMN user_id INTEGER"))
                 print("Column 'user_id' added to 'audit_logs' successfully.")
-
+                
             if 'username' not in columns:
                 print("Column 'username' missing in 'audit_logs'. Adding it...")
                 with engine.connect() as conn:
@@ -107,104 +107,58 @@ def run_migrations():
                         conn.execute(text("ALTER TABLE audit_logs ADD COLUMN username VARCHAR(64)"))
                 print("Column 'username' added to 'audit_logs' successfully.")
 
-        # --- Existing Migrations ---
-
-        if 'offices' in table_names:
-            columns = [c['name'] for c in inspector.get_columns('offices')]
+        # 5. Create notifications table if missing, or update it
+        if 'notifications' not in table_names:
+            print("Table 'notifications' missing. Creating it...")
+            models.Notification.__table__.create(engine)
+            print("Table 'notifications' created successfully.")
+        else:
+            print("Table 'notifications' exists. Checking columns...")
+            columns = [c['name'] for c in inspector.get_columns('notifications')]
             
-            if 'office_type' not in columns:
-                print("Column 'office_type' missing in 'offices'. Adding it...")
+            if 'user_id' not in columns:
+                print("Column 'user_id' missing in 'notifications'. Adding it...")
                 with engine.connect() as conn:
                     with conn.begin():
-                        conn.execute(text("ALTER TABLE offices ADD COLUMN office_type VARCHAR(32)"))
-                print("Column 'office_type' added successfully.")
+                        conn.execute(text("ALTER TABLE notifications ADD COLUMN user_id INTEGER"))
             
-            if 'parent_id' not in columns:
-                print("Column 'parent_id' missing in 'offices'. Adding it...")
+            if 'staff_id' not in columns:
+                print("Column 'staff_id' missing in 'notifications'. Adding it...")
                 with engine.connect() as conn:
                     with conn.begin():
-                        conn.execute(text("ALTER TABLE offices ADD COLUMN parent_id INTEGER"))
-                print("Column 'parent_id' added successfully.")
+                        conn.execute(text("ALTER TABLE notifications ADD COLUMN staff_id INTEGER"))
+                        
+            if 'timestamp' not in columns:
+                 # Check if created_at exists, maybe alias or just add timestamp
+                 if 'created_at' in columns:
+                     # We can just use created_at, but model has timestamp. Let's add timestamp for consistency or alias it.
+                     # But since we defined timestamp in model, let's add it.
+                     pass # Assuming created_at covers it, but model has both? 
+                     # Wait, model says: timestamp = Column(..., server_default=func.now())
+                     # And created_at = Column(...)
+                     # If created_at exists, we might not need timestamp if we map them.
+                     # But better to match model.
+                     print("Column 'timestamp' missing in 'notifications'. Adding it...")
+                     with engine.connect() as conn:
+                        with conn.begin():
+                            # Default to now
+                            conn.execute(text("ALTER TABLE notifications ADD COLUMN timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP"))
 
+        # 6. Custom Data column for Staff
         if 'staff' in table_names:
             columns = [c['name'] for c in inspector.get_columns('staff')]
-            
             if 'custom_data' not in columns:
                 print("Column 'custom_data' missing in 'staff'. Adding it...")
-                try:
-                    with engine.connect() as conn:
-                        with conn.begin():
-                            conn.execute(text("ALTER TABLE staff ADD COLUMN custom_data TEXT"))
-                    print("Column 'custom_data' added successfully.")
-                except Exception as e:
-                    print(f"Failed to add 'custom_data' column: {e}")
-                    # Don't raise here, let other migrations try to run? 
-                    # Or raise so STARTUP_ERROR catches it?
-                    # Better to raise so admin knows.
-                    raise e
-
-            if 'login_count' not in columns:
-                print("Column 'login_count' missing. Adding it...")
                 with engine.connect() as conn:
                     with conn.begin():
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN login_count INTEGER DEFAULT 0 NOT NULL"))
-                print("Column 'login_count' added successfully.")
-            
-            if 'email' not in columns:
-                print("Column 'email' missing. Adding it...")
-                with engine.connect() as conn:
-                    with conn.begin():
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN email VARCHAR(128)"))
-                print("Column 'email' added successfully.")
-            
-            if 'allow_edit_rank' not in columns:
-                print("Column 'allow_edit_rank' missing. Adding it...")
-                with engine.connect() as conn:
-                    with conn.begin():
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN allow_edit_rank INTEGER DEFAULT 0 NOT NULL"))
-                print("Column 'allow_edit_rank' added successfully.")
+                        # Text or JSON/JSONB depending on DB. using Text/String for compatibility
+                        conn.execute(text("ALTER TABLE staff ADD COLUMN custom_data TEXT"))
+                print("Column 'custom_data' added to 'staff' successfully.")
 
-            if 'allow_login' not in columns:
-                print("Column 'allow_login' missing. Adding it...")
-                with engine.connect() as conn:
-                    with conn.begin():
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN allow_login INTEGER DEFAULT 1 NOT NULL"))
-                print("Column 'allow_login' added successfully.")
-
-            if 'allow_edit_dopp' not in columns:
-                print("Column 'allow_edit_dopp' missing. Adding it...")
-                with engine.connect() as conn:
-                    with conn.begin():
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN allow_edit_dopp INTEGER DEFAULT 0 NOT NULL"))
-                print("Column 'allow_edit_dopp' added successfully.")
-
-            if 'formation_dopp' not in columns:
-                print("Column 'formation_dopp' missing in 'staff'. Adding it...")
-                with engine.connect() as conn:
-                    with conn.begin():
-                        conn.execute(text("ALTER TABLE staff ADD COLUMN formation_dopp DATE"))
-                print("Column 'formation_dopp' added successfully.")
-
-        # Check for staff_edit_requests table
-        if 'staff_edit_requests' not in table_names:
-            print("Table 'staff_edit_requests' missing. Creating it...")
-            models.StaffEditRequest.__table__.create(engine)
-            print("Table 'staff_edit_requests' created successfully.")
-        else:
-            print("Table 'staff_edit_requests' already exists.")
-
-        # Check for custom_field_definitions table
-        if 'custom_field_definitions' not in table_names:
-            print("Table 'custom_field_definitions' missing. Creating it...")
-            models.CustomFieldDefinition.__table__.create(engine)
-            print("Table 'custom_field_definitions' created successfully.")
-        else:
-            print("Table 'custom_field_definitions' already exists.")
-            
     except Exception as e:
-        print(f"Migration Error: {e}")
+        print(f"Migration failed: {e}")
         import traceback
         traceback.print_exc()
-            
+
 if __name__ == "__main__":
     run_migrations()

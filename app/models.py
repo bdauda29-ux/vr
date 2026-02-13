@@ -52,6 +52,20 @@ class User(Base):
     formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True)
     formation = relationship("Formation", back_populates="users")
 
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    message = Column(String(512), nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    is_read = Column(Boolean, default=False)
+    
+    # Target can be a User (Special/Formation Admin) or Staff (Office/Main Admin)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    staff_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
+    
+    user = relationship("User")
+    staff = relationship("Staff")
+
 class Office(Base):
     __tablename__ = "offices"
     id = Column(Integer, primary_key=True, index=True)
@@ -162,11 +176,19 @@ class StaffEditRequest(Base):
 class Notification(Base):
     __tablename__ = "notifications"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("staff.id"), nullable=True) # For specific user
-    formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True) # For formation admins
-    office_name = Column(String(128), nullable=True) # For office admins
-    message = Column(String(256), nullable=False)
+    message = Column(String(512), nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
     is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    user = relationship("Staff")
+    # Target can be a User (Special/Formation Admin) or Staff (Office/Main Admin)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    staff_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
+    
+    # Deprecated fields (kept for migration safety if needed, but we prefer new fields)
+    formation_id = Column(Integer, ForeignKey("formations.id"), nullable=True) 
+    office_name = Column(String(128), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now()) # Alias for timestamp if code uses it
+    
+    user = relationship("User")
+    staff = relationship("Staff")

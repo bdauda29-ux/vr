@@ -133,6 +133,13 @@ def login():
                              fmt = crud.get_formation(db, user.formation_id)
                              if fmt: formation_type = fmt.formation_type
 
+                        # Trigger auto-retirement check for Special Admin
+                        if user.role == "special_admin":
+                            try:
+                                crud.process_due_retirements(db)
+                            except Exception as e:
+                                print(f"Auto-retirement check failed: {e}")
+
                         token = auth.create_access_token(data={
                             "sub": user.username, 
                             "role": user.role, 
@@ -181,6 +188,13 @@ def login():
                         if staff.formation_id:
                              fmt = crud.get_formation(db, staff.formation_id)
                              if fmt: formation_type = fmt.formation_type
+
+                        # Trigger auto-retirement check for Main Admin
+                        if staff.role == "main_admin":
+                            try:
+                                crud.process_due_retirements(db)
+                            except Exception as e:
+                                print(f"Auto-retirement check failed: {e}")
 
                         token = auth.create_access_token(data={
                             "sub": staff.nis_no, 
@@ -1475,6 +1489,12 @@ def list_staff_endpoint():
         exit_to = parse_date_value(exit_to_raw) if exit_to_raw else None
         dopa_from_raw = request.args.get("dopa_from")
         dopa_to_raw = request.args.get("dopa_to")
+        retirement_year = request.args.get("retirement_year")
+        if retirement_year and retirement_year.strip().isdigit():
+            retirement_year = int(retirement_year.strip())
+        else:
+            retirement_year = None
+        
         dopa_from = parse_date_value(dopa_from_raw) if dopa_from_raw else None
         dopa_to = parse_date_value(dopa_to_raw) if dopa_to_raw else None
         limit = request.args.get("limit", 50, type=int)
@@ -1541,7 +1561,8 @@ def list_staff_endpoint():
                 dopa_to=dopa_to,
                 formation_id=formation_id,
                 include_count=True,
-                gender=gender
+                gender=gender,
+                retirement_year=retirement_year
             )
             return jsonify({
                 "items": [schemas.to_dict_staff(item) for item in items],
@@ -2144,17 +2165,19 @@ def move_staff(staff_id: int):
             staff.dopp = effective_date 
             
             # Notifications
-            # Notify Office Admin of target office
-            db.add(models.Notification(
-                 office_name=new_office,
-                 message=f"Staff Moved: {staff.nis_no} ({staff.rank}) to your office"
-            ))
-            # If Posting, Notify Formation Admin
-            if action_type == "POSTING":
-                 db.add(models.Notification(
-                     formation_id=target_fmt_id,
-                     message=f"New Staff Posted: {staff.nis_no} ({staff.rank}) from {current_fmt_name}"
-                 ))
+            notif_msg = f"Staff {action_type.title()}: {staff.nis_no} ({staff.rank}) to {new_office}"
+            
+            # 1. Notify Target Office Admin
+            if target_office_obj:
+                crud.broadcast_notification(db, notif_msg, office_id=target_office_obj.id)
+            
+            # 2. Notify Main Admin
+            crud.broadcast_notification(db, notif_msg, role="main_admin")
+            
+            # 3. Notify Formation Admin
+            # If Posting, target formation. If Move, current formation.
+            target_fmt_notif = target_fmt_id if action_type == "POSTING" else staff.formation_id
+            crud.broadcast_notification(db, notif_msg, formation_id=target_fmt_notif)
             
             db.commit()
             crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=staff.formation_id, office_id=target_office_obj.id, user_id=user["id"], username=user["sub"])
@@ -2413,22 +2436,40 @@ def posting_staff(staff_id: int):
         staff.formation_dopp = effective_date
         
         # Notifications
-        # Notify Formation Admin
-        db.add(models.Notification(
-            formation_id=new_formation_id,
-            message=f"New Staff Posted: {staff.nis_no} ({staff.rank}) from {old_fmt_name}"
-        ))
-        
-        # Notify Office Admin if office is assigned
+        notif_msg = f"Staff Posted: {staff.nis_no} ({staff.rank}) to {new_fmt_name} - {new_office}"
+
+        # 1. Notify Target Formation Admin
+        crud.broadcast_notification(db, notif_msg, formation_id=new_formation_id)
+
+        # 2. Notify Main Admin
+        crud.broadcast_notification(db, notif_msg, role="main_admin")
+
+        # 3. Notify Target Office Admin (if office is known and valid)
         if new_office:
-             db.add(models.Notification(
-                 office_name=new_office,
-                 message=f"New Staff Posted: {staff.nis_no} ({staff.rank}) to your office"
-             ))
+            target_off = db.query(models.Office).filter(
+                models.Office.formation_id == new_formation_id,
+                func.lower(models.Office.name) == new_office.lower()
+            ).first()
+            if target_off:
+                 crud.broadcast_notification(db, notif_msg, office_id=target_off.id)
 
         db.commit()
         crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
+
+@app.post("/api/process-retirements")
+def process_retirements_endpoint():
+    """
+    Manually trigger the retirement check process.
+    Typically this would be a cron job, but we expose it for admin usage.
+    """
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin", "main_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        count = crud.process_due_retirements(db)
+        return jsonify({"detail": f"Processed {count} retirements successfully."})
 
 @app.get("/settings/staff-edit")
 def get_staff_edit_settings():
@@ -3615,29 +3656,20 @@ def get_notifications():
     formation_id = user.get("formation_id")
     
     with next(get_db()) as db:
-        # Build query
-        # 1. User specific
-        conditions = [models.Notification.user_id == user_id]
-        
-        # 2. Formation Admin
-        if role == "formation_admin" and formation_id:
-            conditions.append(models.Notification.formation_id == formation_id)
-            
-        # 3. Office Admin
+        # Resolve office name for office_admin if needed for legacy/broadcast support
+        office_name = None
         if role == "office_admin":
-             # Get user's office name
              staff = crud.get_staff(db, user_id)
-             if staff and staff.office:
-                 conditions.append(models.Notification.office_name == staff.office)
-        
-        stmt = select(models.Notification).where(or_(*conditions)).order_by(models.Notification.created_at.desc())
-        notifications = db.scalars(stmt).all()
+             if staff:
+                 office_name = staff.office
+
+        notifications = crud.get_user_notifications(db, user_id, role, formation_id, office_name)
         
         return jsonify([{
             "id": n.id,
             "message": n.message,
             "is_read": n.is_read,
-            "created_at": n.created_at.isoformat() if n.created_at else None
+            "created_at": n.timestamp.isoformat() if n.timestamp else None
         } for n in notifications])
 
 @app.post("/notifications/<int:notif_id>/read")
