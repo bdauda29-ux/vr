@@ -1,6 +1,6 @@
 from typing import Optional, List, Union, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import select, or_, case, func, distinct
+from sqlalchemy import select, or_, case, func, distinct, text
 from . import models
 
 # Rank order mapping (Highest to Lowest)
@@ -169,17 +169,40 @@ def list_staff(
             models.Staff.nis_no
         )
     elif dopp_order in ("retirement_asc", "retirement_desc"):
-        # Calculate retirement date: MIN(DOB+60, DOFA+35)
-        # Handle missing dates by defaulting to high date (9999-12-31) so they don't block MIN
-        ret_date = func.min(
-            func.coalesce(func.date(models.Staff.dob, '+60 years'), '9999-12-31'),
-            func.coalesce(func.date(models.Staff.dofa, '+35 years'), '9999-12-31')
-        )
-        # CGI Exempt (infinite retirement)
-        sort_expr = case(
-            (models.Staff.rank == 'CGI', '9999-12-31'),
-            else_=ret_date
-        )
+        # Check dialect
+        dialect = db.bind.dialect.name
+        
+        if dialect == "postgresql":
+            # Postgres specific: Use INTERVAL and LEAST
+            # Cast literal to Date for coalesce compatibility
+            high_date = func.cast('9999-12-31', models.Date)
+            
+            dob_plus_60 = models.Staff.dob + text("INTERVAL '60 years'")
+            dofa_plus_35 = models.Staff.dofa + text("INTERVAL '35 years'")
+            
+            ret_date = func.least(
+                func.coalesce(dob_plus_60, high_date),
+                func.coalesce(dofa_plus_35, high_date)
+            )
+             # CGI Exempt (infinite retirement)
+            sort_expr = case(
+                (models.Staff.rank == 'CGI', high_date),
+                else_=ret_date
+            )
+        else:
+            # SQLite fallback (existing logic)
+            # Calculate retirement date: MIN(DOB+60, DOFA+35)
+            # Handle missing dates by defaulting to high date (9999-12-31) so they don't block MIN
+            ret_date = func.min(
+                func.coalesce(func.date(models.Staff.dob, '+60 years'), '9999-12-31'),
+                func.coalesce(func.date(models.Staff.dofa, '+35 years'), '9999-12-31')
+            )
+            # CGI Exempt (infinite retirement)
+            sort_expr = case(
+                (models.Staff.rank == 'CGI', '9999-12-31'),
+                else_=ret_date
+            )
+            
         stmt = stmt.order_by(
             sort_expr.asc() if dopp_order == "retirement_asc" else sort_expr.desc(),
             models.Staff.nis_no
