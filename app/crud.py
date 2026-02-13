@@ -2,7 +2,6 @@ from typing import Optional, List, Union, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import select, or_, case, func, distinct, text
 from datetime import date, datetime
-import bcrypt
 from . import models
 
 # Rank order mapping (Highest to Lowest)
