@@ -757,6 +757,9 @@
                                                     <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="toggleFilterPanel('dopa', event)">
                                                         Date of First Appointment
                                                     </a>
+                                                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="toggleFilterPanel('retirement', event)">
+                                                        Retirement Year
+                                                    </a>
                                                     <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="toggleFilterPanel('sort', event)">
                                                         Sort Order
                                                     </a>
@@ -830,6 +833,21 @@
                                                 <div id="filterFormationListContainer" class="d-flex flex-wrap gap-3" style="max-height: 150px; overflow-y: auto;">
                                                     <!-- Checkboxes populated by JS -->
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Retirement Year Filter Panel -->
+                                        <div class="card mb-2 filter-panel d-none" id="panel-retirement">
+                                            <div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">
+                                                <small class="fw-bold">Retirement Year</small>
+                                                <button type="button" class="btn-close btn-close-white" style="filter: grayscale(1);" onclick="closeFilterPanel('retirement')"></button>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" id="filterRetirementYear" class="form-control" placeholder="e.g. 2026" onchange="loadStaff()">
+                                                    <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('filterRetirementYear').value=''; loadStaff();">Clear</button>
+                                                </div>
+                                                <small class="text-muted d-block mt-1">Shows personnel retiring in this year.</small>
                                             </div>
                                         </div>
 
@@ -4303,6 +4321,12 @@
                 document.querySelectorAll('.filter-formation-cb:checked').forEach(cb => params.append('formation_id', cb.value));
             }
 
+            // Retirement Year
+            const retYear = document.getElementById('filterRetirementYear');
+            if (retYear && retYear.value) {
+                params.append('retirement_year', retYear.value);
+            }
+
             try {
                 const res = await fetch(`${API_URL}/staff?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` }});
                 if (!res.ok) {
@@ -5870,6 +5894,7 @@
                             ${renderField('Date of Present Appt', isoToDmy(s.dopa))}
                             ${renderField('Office DOPP', isoToDmy(s.dopp))}
                             ${renderField('DOPP to Formation', isoToDmy(s.formation_dopp))}
+                            ${renderField('Retirement Date', isoToDmy(s.retirement_date))}
                             <div class="col-12"><hr></div>
                             ${renderField('State of Origin', s.state ? s.state.name : '')}
                             ${renderField('LGA', s.lga ? s.lga.name : '')}

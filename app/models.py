@@ -126,6 +126,31 @@ class Staff(Base):
     formation_dopp = Column(Date, nullable=True)
     custom_data = Column(Text, nullable=True) # JSON string for custom fields
 
+    @property
+    def retirement_date(self):
+        if self.rank == 'CGI':
+            return None # Exempt
+            
+        dates = []
+        if self.dob:
+            # 60 years from DOB
+            try:
+                dates.append(self.dob.replace(year=self.dob.year + 60))
+            except ValueError: # Feb 29
+                dates.append(self.dob.replace(year=self.dob.year + 60, day=28))
+                
+        if self.dofa:
+            # 35 years from DOFA
+            try:
+                dates.append(self.dofa.replace(year=self.dofa.year + 35))
+            except ValueError:
+                dates.append(self.dofa.replace(year=self.dofa.year + 35, day=28))
+        
+        if not dates:
+            return None
+            
+        return min(dates)
+
 class CustomFieldDefinition(Base):
     __tablename__ = "custom_field_definitions"
     id = Column(Integer, primary_key=True, index=True)
