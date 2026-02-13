@@ -168,6 +168,22 @@ def list_staff(
             models.Staff.dopp.asc() if dopp_order == "asc" else models.Staff.dopp.desc(),
             models.Staff.nis_no
         )
+    elif dopp_order in ("retirement_asc", "retirement_desc"):
+        # Calculate retirement date: MIN(DOB+60, DOFA+35)
+        # Handle missing dates by defaulting to high date (9999-12-31) so they don't block MIN
+        ret_date = func.min(
+            func.coalesce(func.date(models.Staff.dob, '+60 years'), '9999-12-31'),
+            func.coalesce(func.date(models.Staff.dofa, '+35 years'), '9999-12-31')
+        )
+        # CGI Exempt (infinite retirement)
+        sort_expr = case(
+            (models.Staff.rank == 'CGI', '9999-12-31'),
+            else_=ret_date
+        )
+        stmt = stmt.order_by(
+            sort_expr.asc() if dopp_order == "retirement_asc" else sort_expr.desc(),
+            models.Staff.nis_no
+        )
     else:
         stmt = stmt.order_by(
             rank_sort, 
