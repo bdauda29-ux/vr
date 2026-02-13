@@ -176,6 +176,7 @@ class StaffEditRequest(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = {'extend_existing': True}
     id = Column(Integer, primary_key=True, index=True)
     message = Column(String(512), nullable=False)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
