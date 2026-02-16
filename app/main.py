@@ -2431,7 +2431,7 @@ def posting_staff(staff_id: int):
         db.add(history)
         
         staff.formation_id = new_formation_id
-        staff.office = new_office
+        staff.office = new_office if new_office else "Not Assigned"
         staff.dopp = effective_date
         staff.formation_dopp = effective_date
         
@@ -3686,4 +3686,3 @@ def mark_notification_read(notif_id: int):
         notif.is_read = True
         db.commit()
         return jsonify({"detail": "Marked as read"})
-

@@ -244,6 +244,8 @@ def create_staff(db: Session, data: dict) -> models.Staff:
     exists = get_staff_by_nis(db, data["nis_no"])
     if exists:
         raise ValueError("NIS/No already exists")
+    if not data.get("office"):
+        data["office"] = "Not Assigned"
     obj = models.Staff(**data)
     db.add(obj)
     db.commit()
