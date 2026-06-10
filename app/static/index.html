@@ -4548,6 +4548,7 @@
                         <th>NIS/No</th>
                         <th>Name</th>
                         <th>Rank</th>
+                        <th>Gender</th>
                         <th>DOFA / DOPA</th>
                         <th>Office</th>
                         <th>State/LGA</th>
@@ -4984,6 +4985,7 @@
                         <td><a href="#" onclick="openViewModal(${s.id}); return false;" class="text-decoration-none fw-bold text-dark">${s.nis_no}</a></td>
                         <td>${formatStaffName(s.rank, s.surname, s.other_names)}</td>
                         <td>${rankBadge(s.rank)}</td>
+                        <td>${s.gender || ''}</td>
                         <td>${dates}</td>
                         <td>${s.office || ''}</td>
                         <td>${location}</td>
