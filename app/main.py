@@ -2852,6 +2852,11 @@ def export_excel():
                     return staff.remark
                 return ""
 
+            def uppercase_export_value(value):
+                if isinstance(value, str):
+                    return value.upper()
+                return value
+
             label_map = {
                 "nis_no": "NIS No",
                 "surname": "Surname",
@@ -2930,7 +2935,8 @@ def export_excel():
             elif rank_title:
                 main_title = rank_title
                 subtitle_text = formation_full_name
-            main_title = str(main_title)
+            main_title = str(main_title).upper()
+            subtitle_text = str(subtitle_text).upper() if subtitle_text else ""
             safe_filename = "".join([c for c in main_title if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
 
             wb = openpyxl.Workbook()
@@ -2970,9 +2976,9 @@ def export_excel():
                     if col_key == "sn":
                         row.append(idx)
                     elif col_key == "__name__":
-                        row.append(merged_name_by_rank(staff))
+                        row.append(uppercase_export_value(merged_name_by_rank(staff)))
                     else:
-                        row.append(get_value(staff, col_key))
+                        row.append(uppercase_export_value(get_value(staff, col_key)))
                 ws.append(row)
                 row_idx = idx + header_row_idx
                 if row_idx % 2 == 0:
@@ -2982,7 +2988,7 @@ def export_excel():
                 for cell in ws[row_idx]:
                     cell.font = font_style
             ws.append([])
-            footer_cell = ws.cell(row=ws.max_row + 1, column=1, value=f"Generated on {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+            footer_cell = ws.cell(row=ws.max_row + 1, column=1, value=f"GENERATED ON {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
             footer_cell.font = Font(name='Liberation Sans', size=8, italic=True)
             out = io.BytesIO()
             wb.save(out)
@@ -3142,6 +3148,11 @@ def export_pdf():
                     return staff.remark or ""
                 return ""
 
+            def uppercase_export_value(value):
+                if isinstance(value, str):
+                    return value.upper()
+                return value
+
             label_map = {
                 "nis_no": "NIS No",
                 "surname": "Surname",
@@ -3182,9 +3193,9 @@ def export_pdf():
                     if k == "sn":
                         row.append(str(idx))
                     elif k == "__name__":
-                        row.append(merged_name_by_rank(staff))
+                        row.append(uppercase_export_value(merged_name_by_rank(staff)))
                     else:
-                        row.append(get_value(staff, k))
+                        row.append(uppercase_export_value(get_value(staff, k)))
                 data_table.append(row)
 
             out = io.BytesIO()
@@ -3231,7 +3242,8 @@ def export_pdf():
             elif rank_title:
                 main_title = rank_title
                 subtitle_text = formation_full_name
-            main_title = str(main_title)
+            main_title = str(main_title).upper()
+            subtitle_text = str(subtitle_text).upper() if subtitle_text else ""
             title_style = styles["Title"]
             title_style.fontSize = 14
             elements.append(Paragraph(main_title, title_style))
@@ -3275,9 +3287,9 @@ def export_pdf():
                     if k == "sn":
                         s = ""
                     elif k == "__name__":
-                        s = merged_name_by_rank(staff)
+                        s = str(uppercase_export_value(merged_name_by_rank(staff)))
                     else:
-                        s = str(get_value(staff, k))
+                        s = str(uppercase_export_value(get_value(staff, k)))
                     max_len_map[k] = max(max_len_map.get(k, 0), len(s or ""))
             raw_widths = []
             for k in headers_keys:
@@ -3312,9 +3324,9 @@ def export_pdf():
                     if k == "sn":
                         val = str(idx)
                     elif k == "__name__":
-                        val = merged_name_by_rank(staff)
+                        val = str(uppercase_export_value(merged_name_by_rank(staff)))
                     else:
-                        val = str(get_value(staff, k))
+                        val = str(uppercase_export_value(get_value(staff, k)))
                     if val:
                         row.append(Paragraph(val, cell_style))
                     else:
@@ -3345,7 +3357,7 @@ def export_pdf():
                 canvas.saveState()
                 canvas.setFont('Helvetica-Oblique', 8)
                 page_num = canvas.getPageNumber()
-                text = f"Page {page_num} | Generated on {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+                text = f"PAGE {page_num} | GENERATED ON {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
                 canvas.drawRightString(landscape(letter)[0] - 30, 20, text)
                 canvas.restoreState()
 
