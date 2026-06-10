@@ -1,0 +1,3689 @@
+import sys
+import os
+import traceback
+from flask import Flask, request, jsonify, send_from_directory, send_file
+
+# 1. Initialize Flask App IMMEDIATELY
+app = Flask(__name__, static_folder='static')
+app.config["JSON_SORT_KEYS"] = False
+
+# 2. Define Global Error State
+STARTUP_ERROR = None
+cors_enabled = False
+
+# 3. Safe Imports
+try:
+    # Flask CORS
+    try:
+        from flask_cors import CORS
+        CORS(app)
+        cors_enabled = True
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # Standard Libs
+    from datetime import date, datetime
+    import io
+    import csv
+    import json
+    import tempfile
+    
+    # Third Party
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter, landscape, A3
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    
+    # SQLAlchemy
+    from sqlalchemy.orm import Session
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+    from sqlalchemy import select, distinct, func
+
+    # Local Imports
+    from .database import Base, engine, get_db
+    from . import models, schemas, crud, auth, database, migrations
+    from .seeds import NIGERIA_STATES_LGAS, seed_special_admin
+
+    # Run migrations on startup
+    try:
+        migrations.run_migrations()
+        # Ensure special admin exists
+        with next(get_db()) as db:
+            seed_special_admin(db)
+    except Exception as e:
+        STARTUP_ERROR = f"Startup tasks failed: {e}\n{traceback.format_exc()}"
+        print(STARTUP_ERROR)
+
+
+except Exception as e:
+    STARTUP_ERROR = f"Startup Error: {str(e)}\n{traceback.format_exc()}"
+    print(STARTUP_ERROR)
+    
+    Base = None
+    engine = None
+    get_db = lambda: (yield None)
+    models = None
+    schemas = None
+    crud = None
+    auth = None
+    database = None
+    NIGERIA_STATES_LGAS = {}
+    class Font: pass
+    class Alignment: pass
+    class PatternFill: pass
+
+@app.route("/ping")
+def ping():
+    if STARTUP_ERROR:
+        return jsonify({"status": "error", "message": STARTUP_ERROR}), 500
+    return "pong"
+
+# --- AUTH ---
+@app.route("/login.html")
+def login_page():
+    # Robust static file serving
+    try:
+        return send_from_directory(app.static_folder, "login.html")
+    except Exception as e:
+        return f"Static file error: {e}. Static folder: {app.static_folder}, CWD: {os.getcwd()}", 404
+
+@app.route("/success.html")
+def success_page():
+    return send_from_directory(app.static_folder, "success.html")
+
+@app.post("/login")
+def login():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    try:
+        data = request.get_json(force=True)
+        username = data.get("username")
+        password = data.get("password")
+        
+        if not username or not password:
+            return jsonify({"detail": "Username and password required"}), 400
+
+        def attempt_login():
+            with next(get_db()) as db:
+                if not db: raise Exception("Database connection failed")
+                user = db.query(models.User).filter(models.User.username == username).first()
+                if user:
+                    # Robust password verification with auto-fix for legacy/bad hashes
+                    verification_success = False
+                    try:
+                        if auth.verify_password(password, user.password_hash):
+                            verification_success = True
+                    except ValueError:
+                        # Handle "hash could not be identified" (e.g. legacy bcrypt vs pbkdf2)
+                        # If it's the admin user, we auto-heal the password
+                        if user.username == "admin":
+                            print(f"WARNING: fixing invalid password hash for admin")
+                            user.password_hash = auth.get_password_hash("admin")
+                            db.commit()
+                            if auth.verify_password(password, user.password_hash):
+                                verification_success = True
+                    
+                    if verification_success:
+                        formation_type = None
+                        if user.formation_id:
+                             fmt = crud.get_formation(db, user.formation_id)
+                             if fmt: formation_type = fmt.formation_type
+
+                        # Trigger auto-retirement check for Special Admin
+                        if user.role == "special_admin":
+                            try:
+                                crud.process_due_retirements(db)
+                            except Exception as e:
+                                print(f"Auto-retirement check failed: {e}")
+
+                        token = auth.create_access_token(data={
+                            "sub": user.username, 
+                            "role": user.role, 
+                            "id": user.id,
+                            "formation_id": user.formation_id
+                        })
+                        return jsonify({
+                            "access_token": token, 
+                            "token_type": "bearer", 
+                            "role": user.role, 
+                            "username": user.username, 
+                            "id": user.id,
+                            "formation_id": user.formation_id,
+                            "formation_type": formation_type
+                        })
+                
+                staff = crud.get_staff_by_nis(db, username)
+                if staff:
+                    # Check global login permission for staff role
+                    if staff.role == "staff" and not getattr(staff, "allow_login", 1):
+                        return jsonify({"detail": "Login is currently disabled for staff users."}), 403
+
+                    # Check login limit (skip for admins)
+                    if staff.role not in ("office_admin", "main_admin") and staff.login_count >= 10:
+                        return jsonify({"detail": "Login limit exceeded. Please contact Main Admin to reset."}), 403
+
+                    verification_success = False
+                    if staff.password_hash:
+                         try:
+                             if auth.verify_password(password, staff.password_hash):
+                                 verification_success = True
+                         except ValueError:
+                             pass
+                    elif password == staff.nis_no:
+                         verification_success = True
+
+                    if verification_success:
+                        # Check for default password (force change)
+                        must_change_password = (not staff.password_hash and password == staff.nis_no)
+
+                        # Increment login count
+                        staff.login_count += 1
+                        db.commit()
+                        
+                        formation_type = None
+                        if staff.formation_id:
+                             fmt = crud.get_formation(db, staff.formation_id)
+                             if fmt: formation_type = fmt.formation_type
+
+                        # Trigger auto-retirement check for Main Admin
+                        if staff.role == "main_admin":
+                            try:
+                                crud.process_due_retirements(db)
+                            except Exception as e:
+                                print(f"Auto-retirement check failed: {e}")
+
+                        token = auth.create_access_token(data={
+                            "sub": staff.nis_no, 
+                            "role": staff.role, 
+                            "id": staff.id,
+                            "formation_id": staff.formation_id
+                        })
+                        return jsonify({
+                            "access_token": token, 
+                            "token_type": "bearer", 
+                            "role": staff.role, 
+                            "username": staff.nis_no, 
+                            "id": staff.id,
+                            "formation_id": staff.formation_id,
+                            "formation_type": formation_type,
+                            "is_staff": True,
+                            "must_change_password": must_change_password
+                        })
+                
+                return jsonify({"detail": "Invalid credentials"}), 401
+
+        try:
+            return attempt_login()
+        except Exception as e:
+            msg = str(e).lower()
+            if "no such table" in msg or ("relation" in msg and "does not exist" in msg):
+                if engine:
+                    Base.metadata.create_all(bind=engine)
+                    with next(get_db()) as temp_db:
+                         from .seeds import seed_default_admin, seed_special_admin
+                         seed_default_admin(temp_db)
+                         seed_special_admin(temp_db)
+                    return attempt_login()
+            raise e
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # Return the actual error in 'detail' so it's visible in the UI
+        return jsonify({
+            "detail": f"Server Error: {str(e)}",
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }), 500
+
+@app.get("/me")
+def get_current_user_info():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({"detail": "Not authenticated"}), 401
+    
+    token = auth_header.split(" ")[1]
+    payload = auth.decode_access_token(token)
+    if not payload:
+        return jsonify({"detail": "Invalid token"}), 401
+    
+    # Enrich with formation name
+    formation_id = payload.get("formation_id")
+    formation_name = None
+    if formation_id:
+        with next(get_db()) as db:
+             org = crud.get_formation(db, formation_id)
+             if org:
+                 formation_name = org.name
+                 payload["formation_code"] = org.code
+                 payload["formation_type"] = org.formation_type
+    
+    payload["formation_name"] = formation_name
+    return jsonify(payload)
+
+# --- FORMATION MANAGEMENT (Special Admin) ---
+
+@app.post("/formations")
+def create_formation_endpoint():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json()
+    name = data.get("name")
+    code_val = data.get("code")
+    formation_type = data.get("formation_type")
+    parent_id = data.get("parent_id")
+    
+    if not name or not code_val:
+        return jsonify({"detail": "Name and Code are required"}), 400
+        
+    with next(get_db()) as db:
+        try:
+            # Hierarchy Validation
+            if formation_type == "Directorate" and code_val != "SHQ":
+                 # Enforce SHQ as parent for all Directorates
+                 shq = db.query(models.Formation).filter(models.Formation.code == "SHQ").first()
+                 if shq:
+                     parent_id = shq.id
+            
+            elif formation_type == "State Command":
+                if not parent_id:
+                    return jsonify({"detail": "State Command must be under a Zonal Command"}), 400
+                
+                parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                if not parent:
+                    return jsonify({"detail": "Invalid parent formation"}), 400
+                
+                # Allow Zonal Command only
+                if parent.formation_type != "Zonal Command":
+                     return jsonify({"detail": "State Command must be under Zonal Command"}), 400
+
+            elif formation_type == "Zonal Command":
+                parent_id = None
+            
+            elif formation_type in ["FTZ", "Special Command", "Other"] or (formation_type not in ["Directorate", "State Command", "Zonal Command", "Airport", "Border Command"]):
+                # FTZ, Special Command, Other (and any fallback) -> Zonal Command or SHQ
+                
+                if not parent_id:
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
+                
+                parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                if not parent:
+                    return jsonify({"detail": "Invalid parent formation"}), 400
+                
+                if parent.code != "SHQ" and parent.formation_type != "Zonal Command":
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
+
+            elif formation_type == "Airport" or formation_type == "Border Command":
+                if not parent_id:
+                    return jsonify({"detail": f"{formation_type} must be under a Zonal Command"}), 400
+                
+                parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                if not parent:
+                    return jsonify({"detail": "Invalid parent formation"}), 400
+                
+                if parent.formation_type != "Zonal Command":
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command"}), 400
+
+            # Check if code exists
+            existing = db.query(models.Formation).filter(models.Formation.code == code_val).first()
+            if existing:
+                return jsonify({"detail": "Formation code already exists"}), 400
+                
+            formation = crud.create_formation(db, name, code_val, formation_type, parent_id)
+            return jsonify({
+                "id": formation.id, 
+                "name": formation.name, 
+                "code": formation.code, 
+                "formation_type": formation.formation_type,
+                "parent_id": formation.parent_id
+            })
+        except Exception as e:
+            return jsonify({"detail": str(e)}), 400
+
+@app.get("/formations")
+def list_formations_endpoint():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    # Allow special_admin, main_admin, and formation_admin
+    user, err, code = require_role(["special_admin", "main_admin", "formation_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        formations = crud.list_formations(db)
+        
+        # Filter logic based on role
+        if user["role"] == "formation_admin":
+            f_id = user.get("formation_id")
+            if f_id:
+                user_fmt = crud.get_formation(db, f_id)
+                # If SHQ, show all (except NIS root if needed)
+                if user_fmt and (user_fmt.code == "SHQ" or user_fmt.formation_type == "Service Headquarters"):
+                    pass # Show all
+                elif user_fmt and user_fmt.formation_type == "Zonal Command":
+                    # Show self and descendants
+                    descendant_ids = crud.get_all_descendant_ids(db, f_id)
+                    formations = [f for f in formations if f.id in descendant_ids]
+                else:
+                    # Show only self? Or self and descendants? 
+                    # Generally formation admin manages their formation.
+                    # If they have sub-formations (unlikely for non-Zone/SHQ), show them.
+                    descendant_ids = crud.get_all_descendant_ids(db, f_id)
+                    formations = [f for f in formations if f.id in descendant_ids]
+
+        
+        # Get personnel counts (Direct)
+        count_rows = db.query(models.Staff.formation_id, func.count(models.Staff.id))\
+            .filter(models.Staff.exit_date.is_(None))\
+            .group_by(models.Staff.formation_id).all()
+        counts = {row[0]: row[1] for row in count_rows}
+
+        # Filter out NIS
+        filtered = [o for o in formations if o.code != "NIS"]
+        
+        # Build Hierarchy for Sorting
+        # Goal: SHQ -> Directorates (children of SHQ) -> Zonal Commands -> Others
+        
+        # 1. Identify Roots and Map ID to Children
+        children_map = {}
+        roots = []
+        
+        # Helper to find SHQ
+        shq = next((f for f in filtered if f.code == "SHQ"), None)
+        
+        for f in filtered:
+            pid = f.parent_id
+            
+            # Virtual Link: Treat orphan Directorates as children of SHQ for display
+            if not pid and f.formation_type == "Directorate" and f.code != "SHQ" and shq:
+                pid = shq.id
+            
+            if pid:
+                if pid not in children_map: children_map[pid] = []
+                children_map[pid].append(f)
+            else:
+                if f.code != "SHQ": # Treat SHQ separately to ensure it's first
+                    roots.append(f)
+        
+        # Memoize recursive counts
+        memo_counts = {}
+        def get_recursive_count(node_id):
+            if node_id in memo_counts: return memo_counts[node_id]
+            total = counts.get(node_id, 0)
+            for child in children_map.get(node_id, []):
+                total += get_recursive_count(child.id)
+            memo_counts[node_id] = total
+            return total
+
+        # Sort roots: Zonal Commands first among non-SHQ roots
+        def get_sort_key(f):
+            if f.formation_type == "Directorate": return 0
+            if f.formation_type == "Zonal Command": return 1
+            return 2
+
+        roots.sort(key=lambda x: (get_sort_key(x), x.name))
+        
+        sorted_formations = []
+        
+        def add_node(node, depth=0):
+            # Add node with recursive count
+            total_count = get_recursive_count(node.id)
+            
+            node_dict = {
+                "id": node.id, 
+                "name": node.name, 
+                "code": node.code, 
+                "formation_type": node.formation_type,
+                "parent_id": node.parent_id,
+                "parent_name": node.parent.name if node.parent else None,
+                "personnel_count": total_count,
+                "depth": depth
+            }
+            sorted_formations.append(node_dict)
+            
+            # Add children
+            kids = children_map.get(node.id, [])
+            # Sort children: Directorates first, then Zonal, then Others
+            kids.sort(key=lambda x: (get_sort_key(x), x.name))
+            for k in kids:
+                add_node(k, depth + 1)
+        
+        if shq:
+            add_node(shq, 0)
+            
+        for r in roots:
+            add_node(r, 0)
+            
+        return jsonify(sorted_formations)
+
+@app.put("/formations/<int:formation_id>")
+def update_formation_endpoint(formation_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json()
+    name = data.get("name")
+    formation_type = data.get("formation_type")
+    parent_id = data.get("parent_id")
+    
+    if not name:
+        return jsonify({"detail": "Name is required"}), 400
+        
+    with next(get_db()) as db:
+        # Hierarchy Validation
+        current_formation = crud.get_formation(db, formation_id)
+        if current_formation and current_formation.code != "SHQ":
+             if formation_type == "Directorate":
+                  # Enforce SHQ as parent
+                  shq = db.query(models.Formation).filter(models.Formation.code == "SHQ").first()
+                  if shq:
+                      parent_id = shq.id
+             
+             elif formation_type == "State Command":
+                 if not parent_id:
+                     return jsonify({"detail": "State Command must be under a Zonal Command"}), 400
+                 
+                 parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                 if not parent:
+                     return jsonify({"detail": "Invalid parent formation"}), 400
+                 
+                 if parent.formation_type != "Zonal Command":
+                      return jsonify({"detail": "State Command must be under Zonal Command"}), 400
+ 
+             elif formation_type == "Zonal Command":
+                 parent_id = None
+
+             elif formation_type in ["FTZ", "Special Command", "Other"] or (formation_type not in ["Directorate", "State Command", "Zonal Command", "Airport", "Border Command"]):
+                if not parent_id:
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
+                
+                parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                if not parent:
+                    return jsonify({"detail": "Invalid parent formation"}), 400
+                
+                if parent.code != "SHQ" and parent.formation_type != "Zonal Command":
+                     return jsonify({"detail": f"{formation_type} must be under Zonal Command or SHQ"}), 400
+
+             elif formation_type == "Airport" or formation_type == "Border Command":
+                 if not parent_id:
+                     return jsonify({"detail": f"{formation_type} must be under a Zonal Command"}), 400
+                 
+                 parent = db.query(models.Formation).filter(models.Formation.id == parent_id).first()
+                 if not parent:
+                     return jsonify({"detail": "Invalid parent formation"}), 400
+                 
+                 if parent.formation_type != "Zonal Command":
+                      return jsonify({"detail": f"{formation_type} must be under Zonal Command"}), 400
+
+        formation = crud.update_formation(db, formation_id, name, formation_type, parent_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
+            
+        return jsonify({
+            "id": formation.id, 
+            "name": formation.name, 
+            "code": formation.code, 
+            "formation_type": formation.formation_type,
+            "parent_id": formation.parent_id
+        })
+
+@app.post("/formations/<int:formation_id>/admin")
+def create_formation_admin(formation_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    
+    if not username or not password:
+        return jsonify({"detail": "Username and password required"}), 400
+        
+    with next(get_db()) as db:
+        formation = crud.get_formation(db, formation_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
+            
+        # Check if user exists
+        existing = db.query(models.User).filter(models.User.username == username).first()
+        if existing:
+            return jsonify({"detail": "Username already taken"}), 400
+            
+        pwd_hash = auth.get_password_hash(password)
+        new_admin = models.User(
+            username=username,
+            password_hash=pwd_hash,
+            role="formation_admin", # Formation admin
+            formation_id=formation_id
+        )
+        db.add(new_admin)
+        db.commit()
+        
+        return jsonify({"detail": f"Admin created for {formation.name}", "username": username})
+
+@app.get("/formations/<int:formation_id>/admins")
+def list_formation_admins(formation_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        formation = crud.get_formation(db, formation_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
+            
+        users = crud.get_users_by_formation(db, formation_id)
+        return jsonify([{"id": u.id, "username": u.username, "role": u.role} for u in users])
+
+@app.get("/formations/<int:formation_id>/offices")
+def list_formation_offices(formation_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin", "main_admin", "formation_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        formation = crud.get_formation(db, formation_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
+        
+        # Recursive check for Zonal Command and SHQ
+        target_ids = [formation_id]
+        if formation.formation_type in ["Zonal Command", "Service Headquarters"] or formation.code == "SHQ":
+             descendants = crud.get_all_descendant_ids(db, formation_id)
+             # If SHQ, also include Directorates if they are not already in descendants (orphan check)
+             if formation.code == "SHQ":
+                 directorates = db.scalars(select(models.Formation).where(models.Formation.formation_type == "Directorate")).all()
+                 current_ids = set(descendants)
+                 for d in directorates:
+                     if d.id not in current_ids:
+                         current_ids.add(d.id)
+                         d_descendants = crud.get_all_descendant_ids(db, d.id)
+                         for dd in d_descendants:
+                             current_ids.add(dd)
+                 descendants = list(current_ids)
+             
+             target_ids.extend(descendants)
+             target_ids = list(set(target_ids))
+
+        offices = crud.list_offices_model(db, formation_id=target_ids)
+        return jsonify([schemas.to_dict_office(o) for o in offices])
+
+@app.post("/users/<int:user_id>/reset-password")
+def reset_user_password(user_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    data = request.get_json()
+    new_password = data.get("password")
+    
+    if not new_password:
+        return jsonify({"detail": "Password is required"}), 400
+        
+    with next(get_db()) as db:
+        pwd_hash = auth.get_password_hash(new_password)
+        updated_user = crud.update_user_password(db, user_id, pwd_hash)
+        if not updated_user:
+            return jsonify({"detail": "User not found"}), 404
+            
+        return jsonify({"detail": "Password reset successfully"})
+
+@app.delete("/users/<int:user_id>")
+def delete_user_endpoint(user_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        target_user = crud.get_user(db, user_id)
+        if not target_user:
+             return jsonify({"detail": "User not found"}), 404
+             
+        if target_user.role == "special_admin":
+             return jsonify({"detail": "Cannot delete special admin"}), 403
+             
+        success = crud.delete_user(db, user_id)
+        if not success:
+            return jsonify({"detail": "Failed to delete user"}), 500
+            
+        return jsonify({"detail": "User deleted successfully"})
+
+@app.get("/formations/<int:formation_id>/stats")
+def get_formation_rank_stats(formation_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        formation = crud.get_formation(db, formation_id)
+        if not formation:
+            return jsonify({"detail": "Formation not found"}), 404
+            
+        stats = crud.get_dashboard_stats(db, formation_id=formation_id)
+        # Ensure we have rank_counts even if empty
+        if "rank_counts" not in stats:
+            stats["rank_counts"] = {}
+            
+        return jsonify(stats)
+
+@app.get("/dashboard/stats")
+def dashboard_stats():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        if user.get("role") == "office_admin":
+            staff_user = crud.get_staff(db, user.get("id"))
+            office_name = staff_user.office if staff_user else None
+            if not office_name:
+                return jsonify({"total_staff": 0, "office_name": None, "rank_counts": {}})
+
+            total_staff = db.scalar(
+                select(func.count(models.Staff.id)).where(
+                    models.Staff.exit_date.is_(None),
+                    models.Staff.office == office_name,
+                    models.Staff.formation_id == formation_id
+                )
+            )
+
+            rank_rows = db.execute(
+                select(models.Staff.rank, func.count(models.Staff.id))
+                .where(
+                    models.Staff.exit_date.is_(None),
+                    models.Staff.office == office_name,
+                    models.Staff.formation_id == formation_id
+                )
+                .group_by(models.Staff.rank)
+            ).all()
+            rank_counts = {}
+            for rank, count in rank_rows:
+                key = rank or ""
+                rank_counts[key] = rank_counts.get(key, 0) + count
+
+            return jsonify({
+                "total_staff": total_staff,
+                "office_name": office_name,
+                "rank_counts": rank_counts,
+            })
+            
+        # Zonal Command Check for Aggregated Stats
+        target_ids = formation_id
+        if user.get("role") == "formation_admin" and formation_id:
+             fmt = crud.get_formation(db, formation_id)
+             # SHQ and Zonal Command aggregate ALL descendants
+             if fmt and (fmt.code == "SHQ" or fmt.formation_type in ["Service Headquarters", "Zonal Command"]):
+                 target_ids = crud.get_all_descendant_ids(db, formation_id)
+                 
+                 # If SHQ, include Directorates and their descendants
+                 if fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters":
+                     directorates = db.scalars(select(models.Formation).where(models.Formation.formation_type == "Directorate")).all()
+                     current_ids = set(target_ids)
+                     for d in directorates:
+                         if d.id not in current_ids:
+                             current_ids.add(d.id)
+                             d_descendants = crud.get_all_descendant_ids(db, d.id)
+                             for dd in d_descendants:
+                                 current_ids.add(dd)
+                     target_ids = list(current_ids)
+
+        # Auto-Retirement Check (Triggered on Dashboard Load)
+        # "when a personnel retirement date reaches, the system should automatically out him as retired, except for the rank of CGI"
+        try:
+            today = date.today()
+            # Update active staff who have reached retirement date and are not CGI
+            db.execute(
+                update(models.Staff)
+                .where(
+                    models.Staff.exit_date.is_(None),
+                    models.Staff.retirement_date <= today,
+                    models.Staff.rank != "CGI"
+                )
+                .values(
+                    exit_date=models.Staff.retirement_date,
+                    exit_mode="Statutory Retirement",
+                    remarks="System Auto-Retirement"
+                )
+            )
+            db.commit()
+        except Exception as e:
+            print(f"Auto-retirement error: {e}")
+            db.rollback()
+
+        stats = crud.get_dashboard_stats(db, formation_id=target_ids)
+        stats["office_name"] = None
+        return jsonify(stats)
+
+@app.get("/dashboard/sub-formation-stats")
+def dashboard_sub_formation_stats():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    formation_id = user.get("formation_id")
+    if not formation_id: return jsonify([])
+    
+    with next(get_db()) as db:
+        # Check Formation
+        fmt = crud.get_formation(db, formation_id)
+        if not fmt:
+            return jsonify([])
+            
+        # Get Direct Children
+        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+        # Ensure children is a list
+        children = list(children)
+
+        # If SHQ, also include Directorates (orphans)
+        if fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters":
+             directorates = db.scalars(select(models.Formation).where(models.Formation.formation_type == "Directorate")).all()
+             existing_ids = {c.id for c in children}
+             for d in directorates:
+                 if d.id not in existing_ids:
+                     children.append(d)
+        
+        # Zonal Command should not list itself under its sub-formations
+        # Filter out self (Formation ID) just in case
+        # Also filter out Service Headquarters from children list as requested
+        children = [c for c in children if c.id != formation_id and c.formation_type != "Service Headquarters"]
+
+        results = []
+        for child in children:
+            # For each child, get its recursive subtree IDs
+            child_ids = {child.id}
+            queue = [child.id]
+            while queue:
+                curr_id = queue.pop(0)
+                sub_children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr_id)).all()
+                for sc in sub_children:
+                    if sc.id not in child_ids:
+                        child_ids.add(sc.id)
+                        queue.append(sc.id)
+            
+            # Count staff in these IDs
+            count = db.scalar(
+                select(func.count(models.Staff.id))
+                .where(
+                    models.Staff.exit_date.is_(None),
+                    models.Staff.formation_id.in_(list(child_ids))
+                )
+            )
+            results.append({"name": child.name, "count": count, "formation_id": child.id})
+            
+        # Sort by name
+        results.sort(key=lambda x: x["name"])
+        return jsonify(results)
+
+@app.get("/admin/exit-requests")
+def list_exit_requests():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        stmt = select(models.Staff).where(models.Staff.out_request_status == "Pending")
+        if formation_id is not None:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
+        stmt = stmt.order_by(models.Staff.out_request_date.asc())
+        items = db.scalars(stmt).all()
+        return jsonify([schemas.to_dict_staff(item) for item in items])
+
+# --- END AUTH ---
+
+def parse_date_value(value):
+    if value is None: return None
+    if isinstance(value, date) and not isinstance(value, datetime): return value
+    if isinstance(value, datetime): return value.date()
+    if isinstance(value, str):
+        s = value.strip()
+        if not s: return None
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+            try: return datetime.strptime(s, fmt).date()
+            except ValueError: continue
+        try: return date.fromisoformat(s.split("T", 1)[0])
+        except ValueError: return None
+    return None
+
+def get_current_user():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '): return None
+    token = auth_header.split(" ")[1]
+    return auth.decode_access_token(token)
+
+def require_role(allowed_roles):
+    user = get_current_user()
+    if not user: return None, jsonify({"detail": "Not authenticated"}), 401
+    role = user.get("role")
+    effective_role = role
+    if effective_role not in allowed_roles: 
+        print(f"PERMISSION DENIED: User role '{role}' not in {allowed_roles}")
+        return None, jsonify({"detail": f"Permission denied (Role: {role})"}), 403
+    return user, None, None
+
+@app.route("/")
+def index():
+    if STARTUP_ERROR:
+        return f"<h1>System Error</h1><pre>{STARTUP_ERROR}</pre>"
+    # Try to serve index.html, but fall back to debug info if missing
+    try:
+        return send_from_directory(app.static_folder, "index.html")
+    except Exception as e:
+        return f"<h1>NIS PIMS API is Running</h1><p>Static file error: {e}</p><p>Static Folder: {app.static_folder}</p><p>CWD: {os.getcwd()}</p><p><a href='/login.html'>Login Page</a></p>"
+
+@app.route("/debug-db")
+def debug_db():
+    if STARTUP_ERROR: return jsonify({"status": "error", "message": STARTUP_ERROR}), 500
+    if not engine:
+        return jsonify({"status": "error", "detail": "Database engine not initialized. Check logs."}), 500
+        
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        try:
+            with next(get_db()) as db:
+                version = db.execute(text("SELECT version()")).scalar()
+                if "users" not in tables:
+                    Base.metadata.create_all(bind=engine)
+                    from .seeds import seed_default_admin, seed_special_admin
+                    seed_default_admin(db)
+                    seed_special_admin(db)
+                    tables = inspector.get_table_names()
+        except Exception as query_err:
+             return jsonify({
+                "status": "error",
+                "detail": "Connection successful but query failed",
+                "error": str(query_err)
+            }), 500
+
+        return jsonify({
+            "status": "ok",
+            "db_version": version,
+            "tables": tables,
+            "message": "Connected successfully"
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "status": "error",
+            "detail": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+@app.get("/system/migrate")
+def trigger_migration():
+    user = get_current_user()
+    if not user or user.get("role") != "special_admin":
+        return jsonify({"detail": "Permission denied"}), 403
+    try:
+        migrations.run_migrations()
+        return jsonify({"detail": "Migrations executed successfully"})
+    except Exception as e:
+        import traceback
+        return jsonify({"detail": f"Migration failed: {e}", "trace": traceback.format_exc()}), 500
+
+@app.get("/download/template")
+def download_template():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Staff Import Template"
+    headers = ["NIS/No", "Surname", "Other Names", "Rank", "Gender", "State of Origin", "LGA", "Office", "Phone No", "Qualification", "Home Town", "Next of Kin", "NOK Phone", "Remark", "DOFA", "DOPA", "DOPP", "DOB"]
+    ws.append(headers)
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="staff_import_template.xlsx")
+
+@app.post("/import/excel")
+def import_excel():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["office_admin", "main_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+
+    if 'file' not in request.files: return jsonify({"detail": "No file uploaded"}), 400
+    file = request.files['file']
+    filename = file.filename.lower()
+    
+    if not filename.endswith(('.xlsx', '.xls')): return jsonify({"detail": "Invalid file type."}), 400
+    
+    tmp_dir = tempfile.gettempdir()
+    tmp_path = os.path.join(tmp_dir, filename)
+    file.save(tmp_path)
+
+    try:
+        data_rows = []
+        wb = None
+        if filename.endswith(('.xlsx', '.xls')):
+            wb = openpyxl.load_workbook(tmp_path)
+            ws = wb.active
+            headers = [cell.value for cell in ws[1]]
+            col_map = {h: i for i, h in enumerate(headers) if h}
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                row_dict = {}
+                for h, i in col_map.items(): row_dict[h] = row[i]
+                data_rows.append(row_dict)
+                            
+        success_count = 0
+        errors = []
+
+        with next(get_db()) as db_session:
+            states_cache = {s.name.lower(): s.id for s in db_session.query(models.State).all()}
+            for row_idx, row_dict in enumerate(data_rows, start=1):
+                try:
+                    def get_val(target_key):
+                        if target_key in row_dict: return row_dict[target_key]
+                        for k, v in row_dict.items():
+                            if k.lower() == target_key.lower(): return v
+                        if target_key == "NIS/No":
+                            for k in row_dict.keys():
+                                if k.lower().replace("_", "").replace("/", "") == "nisno" or k.lower() == "nis": return row_dict[k]
+                        return None
+                    def get_text_val(key):
+                        val = get_val(key)
+                        if val is None: return None
+                        s = str(val).strip()
+                        return s if s else None
+
+                    nis = get_text_val("NIS/No")
+                    if not nis: continue
+                    
+                    data = {
+                        "nis_no": nis,
+                        "surname": get_text_val("Surname"),
+                        "other_names": get_text_val("Other Names"),
+                        "rank": get_text_val("Rank"),
+                        "gender": get_text_val("Gender"),
+                        "office": get_text_val("Office"),
+                        "phone_no": get_text_val("Phone No") or get_text_val("Phone"),
+                        "qualification": get_text_val("Qualification"),
+                        "home_town": get_text_val("Home Town"),
+                        "next_of_kin": get_text_val("Next of Kin"),
+                        "nok_phone": get_text_val("NOK Phone"),
+                        "remark": get_text_val("Remark"),
+                        "dofa": parse_date_value(get_val("DOFA")),
+                        "dopa": parse_date_value(get_val("DOPA")),
+                        "dopp": parse_date_value(get_val("DOPP")),
+                        "dob": parse_date_value(get_val("DOB")),
+                    }
+                    
+                    if not data["surname"] or not data["rank"]: raise ValueError("Missing Surname or Rank")
+                    if not data["gender"]: raise ValueError("Missing Gender")
+                        
+                    s_name = get_text_val("State of Origin") or get_text_val("State")
+                    if s_name and s_name.lower() in states_cache:
+                        data["state_id"] = states_cache[s_name.lower()]
+                        l_name = get_text_val("LGA")
+                        if l_name:
+                            lga_obj = db_session.query(models.LGA).filter(models.LGA.state_id == data["state_id"], models.LGA.name == l_name).first()
+                            if not lga_obj:
+                                lga_obj = models.LGA(name=l_name, state_id=data["state_id"])
+                                db_session.add(lga_obj)
+                                db_session.flush()
+                            data["lga_id"] = lga_obj.id
+                                
+                    if formation_id is not None:
+                        data["formation_id"] = formation_id
+
+                    crud.create_staff(db_session, data)
+                    success_count += 1
+                except Exception as e:
+                    db_session.rollback()
+                    errors.append(f"Row {row_idx}: {str(e)}")
+            
+            if success_count > 0: crud.create_audit_log(db_session, "IMPORT", filename, f"Imported {success_count} records", formation_id=formation_id, user_id=user["id"], username=user["sub"])
+            db_session.commit()
+        return jsonify({"message": f"Imported {success_count} records", "errors": errors[:10]})
+
+    except Exception as e:
+        return jsonify({"detail": f"Failed to process file: {str(e)}"}), 500
+    finally:
+        if 'wb' in locals() and wb: wb.close()
+        if 'tmp_path' in locals() and os.path.exists(tmp_path):
+            try: os.remove(tmp_path)
+            except Exception: pass
+
+# Init DB on startup if possible
+if engine:
+    try:
+        Base.metadata.create_all(bind=engine)
+        def seed_states_lgas(db: Session):
+            existing_states = {s.name: s for s in db.query(models.State).all()}
+            for state_name in NIGERIA_STATES_LGAS:
+                if state_name not in existing_states:
+                    s = models.State(name=state_name)
+                    db.add(s)
+                    existing_states[state_name] = s
+            db.flush()
+            existing_states = {s.name: s for s in db.query(models.State).all()}
+            existing_lgas = set()
+            for l in db.query(models.LGA).all(): existing_lgas.add((l.state_id, l.name))
+            for state_name, lgas in NIGERIA_STATES_LGAS.items():
+                if state_name in existing_states:
+                    st = existing_states[state_name]
+                    for lga_name in lgas:
+                        if (st.id, lga_name) not in existing_lgas:
+                            db.add(models.LGA(name=lga_name, state_id=st.id))
+                            existing_lgas.add((st.id, lga_name))
+            db.commit()
+
+
+
+        from .database import SessionLocal
+        db = SessionLocal()
+        try:
+            try:
+                migrations.run_migrations()
+            except Exception as mig_err:
+                print(f"MIGRATION ERROR: {mig_err}")
+
+            seed_states_lgas(db)
+            from .seeds import seed_special_admin, seed_vr_formation
+            seed_special_admin(db)
+            seed_vr_formation(db)
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"DB Init Warning: {e}")
+
+@app.get("/offices")
+def list_offices_route():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    # Optional: if not authenticated, return empty or global?
+    # Let's assume offices are protected now, or if public, return only public ones?
+    # For now, let's try to get org from user if logged in.
+    formation_id = user.get("formation_id") if user else None
+    
+    with next(get_db()) as db:
+        search_formation_ids = formation_id
+        if formation_id:
+             fmt = crud.get_formation(db, formation_id)
+             if fmt and fmt.formation_type == "Zonal Command":
+                 # Add children
+                 children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+                 search_formation_ids = [formation_id] + [c.id for c in children]
+
+        items = crud.list_offices_model(db, formation_id=search_formation_ids)
+        existing_names = {i.name.strip().lower() for i in items if i and i.name and i.name.strip()}
+        
+        # Only sync staff offices if user is logged in and belongs to an org (or is special admin)
+        if user:
+             stmt = select(distinct(models.Staff.office)).where(models.Staff.office.is_not(None), models.Staff.office != "")
+             if formation_id:
+                 # If Zonal, we might want to sync from children too?
+                 # For now, keep sync restricted to own formation to avoid pollution, 
+                 # or sync if we really want to see them.
+                 # Let's keep it simple: sync mainly for own formation.
+                 stmt = stmt.where(models.Staff.formation_id == formation_id)
+             stmt = stmt.order_by(models.Staff.office)
+             
+             staff_office_names = list(db.scalars(stmt))
+             added = False
+             for name in staff_office_names:
+                if not name: continue
+                clean = str(name).strip()
+                if not clean: continue
+                key = clean.lower()
+                if key in existing_names: continue
+                db.add(models.Office(name=clean, formation_id=formation_id))
+                existing_names.add(key)
+                added = True
+             if added:
+                db.commit()
+                # Re-fetch with potentially new offices (though we only added to own formation)
+                items = crud.list_offices_model(db, formation_id=search_formation_ids)
+                
+        return jsonify([schemas.to_dict_office(i) for i in items])
+
+@app.get("/stats/office-ranks")
+def get_office_rank_stats():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Unauthorized"}), 401
+    
+    office_name = request.args.get("office")
+    if not office_name: return jsonify({"detail": "Office name required"}), 400
+    
+    formation_id = user.get("formation_id")
+    
+    # Define Rank Metadata (Priority and Colors)
+    # Priority 0 is highest
+    # Colors updated based on Cadre:
+    # Comptroller Cadre (CGI-ACI): Red
+    # Superintendent Cadre (CSI-ASI 2): Blue
+    # Inspectorate Cadre (II-AII): Yellow
+    # Assistant Cadre (IA 1-IA 3): Grey
+    
+    COLOR_COMPTROLLER = "#d32f2f" # Red
+    COLOR_SUPERINTENDENT = "#1976d2" # Blue
+    COLOR_INSPECTORATE = "#fbc02d" # Yellow
+    COLOR_ASSISTANT = "#757575" # Grey
+
+    RANK_META = {
+        # Comptroller Cadre
+        "CGI":   {"p": 0, "c": COLOR_COMPTROLLER},
+        "DCG":   {"p": 1, "c": COLOR_COMPTROLLER},
+        "ACG":   {"p": 2, "c": COLOR_COMPTROLLER},
+        "CIS":   {"p": 3, "c": COLOR_COMPTROLLER},
+        "DCI":   {"p": 4, "c": COLOR_COMPTROLLER},
+        "ACI":   {"p": 5, "c": COLOR_COMPTROLLER},
+        
+        # Superintendent Cadre
+        "CSI":   {"p": 6, "c": COLOR_SUPERINTENDENT},
+        "SI":    {"p": 7, "c": COLOR_SUPERINTENDENT},
+        "DSI":   {"p": 8, "c": COLOR_SUPERINTENDENT},
+        "ASI 1": {"p": 9, "c": COLOR_SUPERINTENDENT},
+        "ASI1":  {"p": 9, "c": COLOR_SUPERINTENDENT},
+        "ASI 2": {"p": 10, "c": COLOR_SUPERINTENDENT},
+        "ASI2":  {"p": 10, "c": COLOR_SUPERINTENDENT},
+        
+        # Inspectorate Cadre
+        "II":    {"p": 11, "c": COLOR_INSPECTORATE},
+        "AII":   {"p": 12, "c": COLOR_INSPECTORATE},
+        
+        # Assistant Cadre
+        "IA 1":  {"p": 13, "c": COLOR_ASSISTANT},
+        "IA1":   {"p": 13, "c": COLOR_ASSISTANT},
+        "IA 2":  {"p": 14, "c": COLOR_ASSISTANT},
+        "IA2":   {"p": 14, "c": COLOR_ASSISTANT},
+        "IA 3":  {"p": 15, "c": COLOR_ASSISTANT},
+        "IA3":   {"p": 15, "c": COLOR_ASSISTANT},
+    }
+    DEFAULT_COLOR = "#95a5a6" # Concrete Grey
+    DEFAULT_PRIORITY = 999
+
+    with next(get_db()) as db:
+        stmt = (
+            select(models.Staff.rank, func.count(models.Staff.id))
+            .where(models.Staff.office == office_name)
+        )
+        if formation_id:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
+            
+        stmt = stmt.group_by(models.Staff.rank)
+        results = db.execute(stmt).all()
+        
+        # Process results
+        data = []
+        for r in results:
+            rank_name = r[0]
+            if not rank_name: continue
+            
+            count = r[1]
+            meta = RANK_META.get(rank_name.upper(), {})
+            # Try normalizing if not found (e.g. adding/removing spaces)
+            if not meta:
+                 # Minimal normalization attempt
+                 norm = rank_name.upper().replace(" ", "")
+                 if "ASI" in norm: norm = norm.replace("ASI", "ASI ")
+                 elif "IA" in norm and not "I" in norm[2:]: norm = norm.replace("IA", "IA ") # IA1 -> IA 1
+                 meta = RANK_META.get(norm, {})
+            
+            priority = meta.get("p", DEFAULT_PRIORITY)
+            color = meta.get("c", DEFAULT_COLOR)
+            
+            data.append({
+                "rank": rank_name,
+                "count": count,
+                "color": color,
+                "priority": priority
+            })
+        
+        # Sort by priority (asc), then by count (desc) as tiebreaker? 
+        # Usually purely by seniority is best.
+        data.sort(key=lambda x: x["priority"])
+        
+        return jsonify(data)
+
+@app.post("/offices")
+def create_office_route():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    data = request.get_json(force=True)
+    name = data.get("name")
+    office_type = data.get("office_type")
+    parent_id = data.get("parent_id")
+    if not name: return jsonify({"detail": "Name is required"}), 400
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        # Validate Office Hierarchy Rules
+        if formation_id:
+            formation = crud.get_formation(db, formation_id)
+            if formation:
+                # Rule 1: Non-Directorate Formations cannot have Division/Directorate offices
+                is_directorate_level = formation.formation_type in ["Directorate", "Service Headquarters"]
+                if not is_directorate_level and office_type in ["Division", "Directorate"]:
+                     return jsonify({"detail": f"Formations of type '{formation.formation_type}' cannot have offices of type '{office_type}'. Only 'Section' and 'Unit' are allowed."}), 400
+
+        # Rule 2: 'Unit' must have a parent of type Section, Division, or Directorate
+        if office_type == "Unit":
+            if not parent_id:
+                return jsonify({"detail": "An office of type 'Unit' must have a parent office (Section, Division, or Directorate)."}), 400
+            
+            parent_office = crud.get_office(db, parent_id)
+            if not parent_office:
+                return jsonify({"detail": "Selected parent office not found."}), 400
+            
+            if parent_office.office_type not in ["Section", "Division", "Directorate"]:
+                return jsonify({"detail": f"A 'Unit' must be under a Section, Division, or Directorate. Selected parent is '{parent_office.office_type}'."}), 400
+
+        try:
+            obj = crud.create_office(db, name, formation_id=formation_id, office_type=office_type, parent_id=parent_id)
+            return jsonify(schemas.to_dict_office(obj)), 201
+        except Exception as e:
+            return jsonify({"detail": str(e)}), 400
+
+@app.put("/offices/<int:office_id>")
+def update_office_route(office_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "admin", "formation_admin"])
+    if err: return err, code
+    
+    data = request.get_json(force=True)
+    name = data.get("name")
+    office_type = data.get("office_type")
+    parent_id = data.get("parent_id")
+    if not name: return jsonify({"detail": "Name is required"}), 400
+    
+    with next(get_db()) as db:
+        # Check permissions for formation_admin
+        current_office = crud.get_office(db, office_id)
+        if not current_office:
+             return jsonify({"detail": "Not found"}), 404
+             
+        if user["role"] == "formation_admin":
+             if current_office.formation_id != user["formation_id"]:
+                 return jsonify({"detail": "Permission denied"}), 403
+
+        # Validate Office Hierarchy Rules
+        formation_id = current_office.formation_id
+        if formation_id:
+            formation = crud.get_formation(db, formation_id)
+            if formation:
+                # Rule 1: Non-Directorate Formations cannot have Division/Directorate offices
+                is_directorate_level = formation.formation_type in ["Directorate", "Service Headquarters"]
+                if not is_directorate_level and office_type in ["Division", "Directorate"]:
+                     return jsonify({"detail": f"Formations of type '{formation.formation_type}' cannot have offices of type '{office_type}'. Only 'Section' and 'Unit' are allowed."}), 400
+
+        # Rule 2: 'Unit' must have a parent of type Section, Division, or Directorate
+        if office_type == "Unit":
+            if not parent_id:
+                # Check if it already has a parent that isn't being changed?
+                # The update might not send parent_id if it's not changing.
+                # However, typically PUT updates send full object or specific fields.
+                # If parent_id is None in data, does it mean "remove parent" or "no change"?
+                # crud.update_office uses default=None but usually updates if provided.
+                # Let's assume the frontend sends the current parent_id if not changed, or we should check existing.
+                
+                # If parent_id is explicitly None (meaning remove parent), that's invalid for Unit.
+                # If parent_id is missing from payload, we should check current_office.parent_id.
+                
+                # But here data.get("parent_id") returns None if missing OR if null.
+                # If the user intends to KEEP the current parent, they should send it.
+                # If they send null, it means remove.
+                
+                # Let's check crud.update_office behavior.
+                pass
+            
+            # Use provided parent_id or fall back to existing if not provided?
+            # Actually, standard PUT/PATCH: if field is missing, might mean no change.
+            # But here `data.get("parent_id")` is ambiguous.
+            
+            # Let's assume if parent_id is provided (truthy), we check it.
+            # If parent_id is falsy (None or 0):
+            # If it's strictly None and key exists -> clearing parent -> Error.
+            # If key missing -> might be okay if existing parent is valid.
+            
+            # To be safe and strict:
+            check_parent_id = parent_id if parent_id else current_office.parent_id
+            
+            if not check_parent_id:
+                 return jsonify({"detail": "An office of type 'Unit' must have a parent office (Section, Division, or Directorate)."}), 400
+            
+            # Check the parent office type
+            # If parent_id is changing, check new parent.
+            # If parent_id is same, check existing parent (in case it changed type? unlikely but possible).
+            parent_office = crud.get_office(db, check_parent_id)
+            if not parent_office:
+                 return jsonify({"detail": "Parent office not found."}), 400
+            
+            if parent_office.office_type not in ["Section", "Division", "Directorate"]:
+                return jsonify({"detail": f"A 'Unit' must be under a Section, Division, or Directorate. Parent is '{parent_office.office_type}'."}), 400
+
+        old_name = current_office.name
+        
+        try:
+            obj = crud.update_office(db, office_id, name, office_type=office_type, parent_id=parent_id)
+            if not obj: return jsonify({"detail": "Not found"}), 404
+            
+            # If name changed, update all staff records with old office name
+            if old_name and name and old_name != name:
+                from sqlalchemy import update
+                stmt = (
+                    update(models.Staff)
+                    .where(models.Staff.office == old_name)
+                    .values(office=name)
+                )
+                if user["role"] == "formation_admin":
+                    # Restrict update to staff in same formation (though office name should be unique enough usually)
+                    stmt = stmt.where(models.Staff.formation_id == user["formation_id"])
+                elif user.get("formation_id"):
+                     stmt = stmt.where(models.Staff.formation_id == user["formation_id"])
+                     
+                db.execute(stmt)
+                db.commit()
+            
+            return jsonify(schemas.to_dict_office(obj))
+        except ValueError as e:
+            return jsonify({"detail": str(e)}), 400
+
+@app.delete("/offices/<int:office_id>")
+def delete_office_route(office_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "admin", "formation_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        # Check permissions for formation_admin
+        if user["role"] == "formation_admin":
+             office = crud.get_office(db, office_id)
+             if not office or office.formation_id != user["formation_id"]:
+                 return jsonify({"detail": "Permission denied"}), 403
+        
+        # Safety Check: Prevent deletion if office has children or staff
+        office = crud.get_office(db, office_id)
+        if not office:
+             return jsonify({"detail": "Not found"}), 404
+             
+        # Check children
+        child_count = db.query(models.Office).filter(models.Office.parent_id == office_id).count()
+        if child_count > 0:
+             return jsonify({"detail": f"Cannot delete office. It has {child_count} sub-offices."}), 400
+             
+        # Check staff (Match by formation_id and office name)
+        staff_count = db.query(models.Staff).filter(
+            models.Staff.formation_id == office.formation_id, 
+            models.Staff.office == office.name
+        ).count()
+        if staff_count > 0:
+             return jsonify({"detail": f"Cannot delete office. It has {staff_count} active staff members."}), 400
+
+        if crud.delete_office(db, office_id):
+            # Create Audit Log
+            crud.create_audit_log(
+                db, 
+                schemas.AuditLogCreate(
+                    action="DELETE_OFFICE", 
+                    target=f"{office.name} (ID: {office.id})", 
+                    details="Office deleted",
+                    formation_id=office.formation_id,
+                    office_id=office.id
+                ), 
+                user_id=user["id"],
+                username=user["username"]
+            )
+            return jsonify({"detail": "Deleted"}), 200
+        return jsonify({"detail": "Not found"}), 404
+
+@app.get("/states")
+def get_states():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    with next(get_db()) as db: return jsonify([schemas.to_dict_state(s) for s in crud.list_states(db)])
+
+@app.get("/states/<int:state_id>/lgas")
+def get_lgas(state_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    with next(get_db()) as db: return jsonify([schemas.to_dict_lga(l) for l in crud.list_lgas_by_state(db, state_id)])
+
+@app.get("/staff")
+def list_staff_endpoint():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    try:
+        user = get_current_user()
+        if not user: return jsonify({"detail": "Not authenticated"}), 401
+        
+        q = request.args.get("q")
+        
+        state_id = [int(x) for x in request.args.getlist("state_id") if x.strip().isdigit()]
+        if not state_id: state_id = None
+        
+        lga_id = [int(x) for x in request.args.getlist("lga_id") if x.strip().isdigit()]
+        if not lga_id: lga_id = None
+        
+        gender = [g for g in request.args.getlist("gender") if g.strip()]
+        if not gender: gender = None
+        
+        # Handle multi-select for rank and office
+        rank = [r for r in request.args.getlist("rank") if r.strip()]
+        if not rank: rank = None
+        
+        office = [o for o in request.args.getlist("office") if o.strip()]
+        if not office:
+            office = None
+
+        completeness = request.args.get("completeness")
+        status = request.args.get("status", "active")
+        dopp_order = request.args.get("dopp_order")
+        exit_from_raw = request.args.get("exit_from")
+        exit_to_raw = request.args.get("exit_to")
+        exit_from = parse_date_value(exit_from_raw) if exit_from_raw else None
+        exit_to = parse_date_value(exit_to_raw) if exit_to_raw else None
+        dopa_from_raw = request.args.get("dopa_from")
+        dopa_to_raw = request.args.get("dopa_to")
+        retirement_year = request.args.get("retirement_year")
+        if retirement_year and retirement_year.strip().isdigit():
+            retirement_year = int(retirement_year.strip())
+        else:
+            retirement_year = None
+        
+        dopa_from = parse_date_value(dopa_from_raw) if dopa_from_raw else None
+        dopa_to = parse_date_value(dopa_to_raw) if dopa_to_raw else None
+        limit = request.args.get("limit", 50, type=int)
+        offset = request.args.get("offset", 0, type=int)
+        
+        formation_id = user.get("formation_id")
+        
+        # Allow special_admin and main_admin to filter by formation
+        if user["role"] in ["special_admin", "main_admin"]:
+             req_org_ids = [int(x) for x in request.args.getlist("formation_id") if x.strip().isdigit()]
+             if req_org_ids:
+                 formation_id = req_org_ids
+             elif user["role"] == "special_admin":
+                 # If no specific formation requested for special_admin, show all (global view)
+                 formation_id = None
+        
+        with next(get_db()) as db:
+            # Formation Admin: Allow viewing their own personnel + Child Formations if Zonal
+            if user["role"] == "formation_admin":
+                f_id = user.get("formation_id")
+                if f_id:
+                     fmt = crud.get_formation(db, f_id)
+                     if fmt and fmt.formation_type == "Zonal Command":
+                         formation_id = crud.get_all_descendant_ids(db, f_id)
+                     else:
+                         formation_id = f_id
+
+            # SHQ Expansion: If filtering by SHQ, include all Directorates/descendants
+            if formation_id:
+                if not isinstance(formation_id, list):
+                    formation_id = [formation_id]
+                
+                expanded_ids = set(formation_id)
+                # Check for SHQ in the requested IDs
+                # We need to query to check type
+                # Optimization: Only query if not already known?
+                # Just loop and check.
+                for fid in formation_id:
+                    fmt = crud.get_formation(db, fid)
+                    if fmt and (fmt.code == "SHQ" or fmt.formation_type == "Service Headquarters" or fmt.formation_type == "Zonal Command"):
+                        descendants = crud.get_all_descendant_ids(db, fid)
+                        expanded_ids.update(descendants)
+                formation_id = list(expanded_ids)
+
+            if user["role"] == "office_admin":
+                staff_user = crud.get_staff(db, user["id"])
+                if not staff_user or not staff_user.office: return jsonify({"items": [], "total": 0}), 200
+                office = [staff_user.office]
+            items, total_count = crud.list_staff(
+                db,
+                q=q,
+                state_id=state_id,
+                lga_id=lga_id,
+                rank=rank,
+                office=office,
+                completeness=completeness,
+                status=status,
+                dopp_order=dopp_order,
+                limit=limit,
+                offset=offset,
+                exit_from=exit_from,
+                exit_to=exit_to,
+                dopa_from=dopa_from,
+                dopa_to=dopa_to,
+                formation_id=formation_id,
+                include_count=True,
+                gender=gender,
+                retirement_year=retirement_year
+            )
+            return jsonify({
+                "items": [schemas.to_dict_staff(item) for item in items],
+                "total": total_count,
+                "limit": limit,
+                "offset": offset
+            })
+    except OperationalError as e:
+         if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+         import traceback
+         traceback.print_exc()
+         return jsonify({"detail": f"Server Error: {str(e)}", "trace": traceback.format_exc()}), 500
+    except ProgrammingError as e:
+         if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+         import traceback
+         traceback.print_exc()
+         return jsonify({"detail": f"Server Error: {str(e)}", "trace": traceback.format_exc()}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}", "trace": traceback.format_exc()}), 500
+
+@app.get("/custom-fields")
+def list_custom_fields():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    with next(get_db()) as db:
+        fields = crud.get_custom_field_definitions(db)
+        return jsonify([schemas.to_dict_custom_field_definition(f) for f in fields])
+
+@app.post("/custom-fields")
+def create_custom_field():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, error_response, code = require_role(["special_admin"])
+    if error_response: return error_response, code
+    
+    data = request.get_json(force=True)
+    if "name" not in data or "label" not in data:
+        return jsonify({"detail": "name and label are required"}), 400
+        
+    with next(get_db()) as db:
+        try:
+            obj = crud.create_custom_field_definition(db, name=data["name"], label=data["label"], field_type=data.get("field_type", "text"))
+            return jsonify(schemas.to_dict_custom_field_definition(obj)), 201
+        except ValueError as e:
+            return jsonify({"detail": str(e)}), 400
+
+@app.delete("/custom-fields/<int:field_id>")
+def delete_custom_field(field_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, error_response, code = require_role(["special_admin"])
+    if error_response: return error_response, code
+    
+    with next(get_db()) as db:
+        success = crud.delete_custom_field_definition(db, field_id)
+        if not success:
+            return jsonify({"detail": "Not found"}), 404
+        return jsonify({"detail": "Deleted"}), 200
+
+@app.post("/staff")
+def create_staff():
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, error_response, code = require_role(["office_admin", "main_admin", "formation_admin"])
+        if error_response: return error_response, code
+
+        data = request.get_json(force=True)
+        for k in ["nis_no","surname","other_names","rank"]:
+            if k not in data or not str(data[k]).strip(): return jsonify({"detail": f"{k} is required"}), 400
+        for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
+            if k in data:
+                parsed = parse_date_value(data.get(k))
+                if data.get(k) not in (None, "") and parsed is None: return jsonify({"detail": f"Invalid date for {k}"}), 400
+                data[k] = parsed
+        if "gender" not in data or data["gender"] is None: data["gender"] = ""
+        
+        # Handle custom fields serialization
+        if "custom_data" in data and isinstance(data["custom_data"], (dict, list)):
+            data["custom_data"] = json.dumps(data["custom_data"])
+
+        formation_id = user.get("formation_id")
+        if formation_id:
+            data["formation_id"] = formation_id
+            
+        with next(get_db()) as db:
+            if user["role"] == "office_admin":
+                 staff_user = crud.get_staff(db, user["id"])
+                 if not staff_user or not staff_user.office:
+                     return jsonify({"detail": "Admin has no assigned office"}), 403
+                 data["office"] = staff_user.office
+                 data["allow_edit_rank"] = 0
+                 data["allow_edit_dopp"] = 0
+
+            obj = crud.create_staff(db, data)
+            # Log with the staff's formation_id so the formation admin can see it
+            crud.create_audit_log(
+                db, 
+                "CREATE", 
+                f"Staff: {obj.nis_no}", 
+                "Created new staff", 
+                formation_id=obj.formation_id, 
+                office_id=None,
+                user_id=user["id"],
+                username=user["sub"]
+            )
+            return jsonify(schemas.to_dict_staff(obj)), 201
+    except ValueError as e: return jsonify({"detail": str(e)}), 400
+    except OperationalError as e:
+        if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Database Error: {str(e)}"}), 500
+    except ProgrammingError as e:
+        if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Database Error: {str(e)}"}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+
+@app.get("/staff/<int:staff_id>")
+def get_staff(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    with next(get_db()) as db:
+        obj = crud.get_staff(db, staff_id)
+        if not obj: return jsonify({"detail": "Not found"}), 404
+        return jsonify(schemas.to_dict_staff(obj))
+
+@app.put("/staff/<int:staff_id>")
+def update_staff(staff_id: int):
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user = get_current_user()
+        if not user: return jsonify({"detail": "Not authenticated"}), 401
+        
+        formation_id = user.get("formation_id")
+        
+        data = request.get_json(force=True)
+        for k in ("dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"):
+            if k in data: data[k] = parse_date_value(data.get(k))
+
+        # Handle custom fields serialization
+        if "custom_data" in data:
+            # If it's a dict/list, serialize it
+            if isinstance(data["custom_data"], (dict, list)):
+                 data["custom_data"] = json.dumps(data["custom_data"])
+
+        with next(get_db()) as db:
+            existing = crud.get_staff(db, staff_id)
+            if not existing: return jsonify({"detail": "Not found"}), 404
+            
+            # Formation check
+            if formation_id and existing.formation_id != formation_id:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            
+            if user["role"] in ["staff", "office_admin"]:
+                # Check ownership for staff, or office match for office_admin
+                if user["role"] == "staff" and user["id"] != staff_id:
+                    return jsonify({"detail": "Permission denied"}), 403
+                if user["role"] == "office_admin":
+                     admin_staff = crud.get_staff(db, user["id"])
+                     if not admin_staff or admin_staff.office != existing.office:
+                         return jsonify({"detail": "Permission denied"}), 403
+
+                for restricted in ["office", "role", "exit_date", "exit_mode", "out_request_status"]:
+                    if restricted in data and data[restricted] != getattr(existing, restricted):
+                        return jsonify({"detail": f"Permission denied: Cannot change {restricted}"}), 403
+                
+                # Staff specific restrictions
+                if user["role"] == "staff":
+                    # User requested restriction: office dopp, formation dopp, rank, office
+                    # 'office' is already restricted above.
+                    staff_restricted = ["rank", "dopp", "formation_dopp"]
+                    for f in staff_restricted:
+                        if f in data and data[f] != getattr(existing, f):
+                             is_allowed = False
+                             if f == "rank" and getattr(existing, "allow_edit_rank", 0): is_allowed = True
+                             if f == "dopp" and getattr(existing, "allow_edit_dopp", 0): is_allowed = True
+                             
+                             if not is_allowed:
+                                 return jsonify({"detail": f"Permission denied: Cannot change {f}"}), 403
+
+                # Post-moderation: Update Immediately, but Log for Review
+                # Calculate changes
+                changes = {}
+                original_values = {}
+                for k, v in data.items():
+                    if k in ["dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"]:
+                         # Date handling
+                         old_val = getattr(existing, k)
+                         if old_val != v:
+                             changes[k] = v.isoformat() if v else None
+                             original_values[k] = old_val.isoformat() if old_val else None
+                    else:
+                         old_val = getattr(existing, k)
+                         
+                         # Normalize for comparison (treat empty string and None as same)
+                         norm_v = v
+                         if isinstance(v, str) and not v.strip():
+                             norm_v = None
+                         
+                         norm_old = old_val
+                         if isinstance(old_val, str) and not old_val.strip():
+                             norm_old = None
+                             
+                         if norm_old != norm_v:
+                             changes[k] = v
+                             original_values[k] = old_val
+                
+                if not changes:
+                     return jsonify({"detail": "No changes detected"}), 200
+
+                # Apply changes to Staff object
+                obj = crud.update_staff(db, existing, data)
+                if obj:
+                    # Create Edit Request (Log) with status "review_pending"
+                    log_payload = {
+                        "changes": changes,
+                        "original": original_values
+                    }
+                    
+                    req = models.StaffEditRequest(
+                        staff_id=existing.id,
+                        data=json.dumps(log_payload),
+                        status="review_pending"
+                    )
+                    db.add(req)
+                    
+                    crud.create_audit_log(db, "UPDATE_AUTO", f"Staff: {obj.nis_no}", "Updated staff details (Pending Review)", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+                    db.commit()
+                    
+                    return jsonify(schemas.to_dict_staff(obj))
+                return jsonify({"detail": "Not found"}), 404
+            
+            # Admin Update (Direct Update)
+            
+            # Restriction for non-formation/special admins on sensitive fields
+            # MODIFIED: Formation Admin is now restricted from editing Formation DOPP on update
+            if user["role"] not in ["formation_admin", "special_admin"]:
+                 restricted_fields = ["rank", "office", "dopp", "formation_dopp", "dofa", "dopa", "nis_no"]
+                 for f in restricted_fields:
+                     # Check if field is present and changed
+                     if f in data:
+                         old_val = getattr(existing, f)
+                         new_val = data[f]
+                         
+                         # Normalize for comparison
+                         if isinstance(old_val, (date, datetime)) and isinstance(new_val, str):
+                             # parse new_val to date if needed, but data[k] is already parsed in lines 1606-1607 for date fields
+                             pass 
+                             
+                         if old_val != new_val:
+                              return jsonify({"detail": f"Permission denied: Cannot directly edit {f}. Use Posting/Promotion workflows."}), 403
+            
+            # Specific restriction for Formation Admin on Formation DOPP
+            if user["role"] == "formation_admin":
+                if "formation_dopp" in data:
+                    old_val = getattr(existing, "formation_dopp")
+                    new_val = data["formation_dopp"]
+                    
+                    # new_val is already a date object (or None) from parsing
+                    if new_val != old_val:
+                         return jsonify({"detail": "Permission denied: Formation Admin cannot edit Formation DOPP after creation. Please contact Special Admin."}), 403
+
+            obj = crud.update_staff(db, existing, data)
+            if obj:
+                # Clear any pending edit requests for this staff as they are now superseded
+                db.query(models.StaffEditRequest).filter(
+                    models.StaffEditRequest.staff_id == staff_id,
+                    models.StaffEditRequest.status == 'pending'
+                ).delete()
+                
+                # Log with the staff's formation_id so the formation admin can see it
+                crud.create_audit_log(
+                    db, 
+                    "UPDATE", 
+                    f"Staff: {obj.nis_no}", 
+                    "Updated staff details", 
+                    formation_id=obj.formation_id, 
+                    office_id=None,
+                    user_id=user["id"],
+                    username=user["sub"]
+                )
+                return jsonify(schemas.to_dict_staff(obj))
+            return jsonify({"detail": "Not found"}), 404
+    except ValueError as e:
+        return jsonify({"detail": str(e)}), 400
+    except OperationalError as e:
+        # Handle missing column error specifically
+        if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Database Error: {str(e)}"}), 500
+    except ProgrammingError as e:
+        # Handle missing column error specifically
+        if "custom_data" in str(e) and "column" in str(e):
+             return jsonify({"detail": "Database schema mismatch (missing custom_data column). Please run migrations."}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Database Error: {str(e)}"}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+
+@app.delete("/staff/<int:staff_id>")
+def delete_staff(staff_id: int):
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["special_admin"])
+        if err: return err, code
+        
+        formation_id = user.get("formation_id")
+        
+        with next(get_db()) as db:
+            obj = crud.get_staff(db, staff_id)
+            if not obj:
+                return jsonify({"detail": "Not found"}), 404
+                
+            if formation_id and obj.formation_id != formation_id:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+                
+            staff_office_id = None
+            staff_formation_id = obj.formation_id
+            crud.delete_staff(db, obj)
+            crud.create_audit_log(db, "DELETE", f"Staff ID: {staff_id}", "Deleted staff record", formation_id=staff_formation_id, office_id=staff_office_id, user_id=user["id"], username=user["sub"])
+            return jsonify({"detail": "Deleted"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+
+@app.post("/staff/<int:staff_id>/reset-login")
+def reset_login_count(staff_id: int):
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["special_admin", "formation_admin", "office_admin"])
+        if err: return err, code
+        
+        formation_id = user.get("formation_id")
+        
+        with next(get_db()) as db:
+            obj = crud.get_staff(db, staff_id)
+            if not obj: return jsonify({"detail": "Not found"}), 404
+            
+            if user["role"] == "formation_admin":
+                if formation_id and obj.formation_id != formation_id:
+                    return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            
+            if user["role"] == "office_admin":
+                admin_staff = crud.get_staff(db, user["id"])
+                if not admin_staff or admin_staff.office != obj.office:
+                    return jsonify({"detail": "Permission denied: Different Office"}), 403
+            
+            obj.login_count = 0
+            db.add(obj)
+            db.commit()
+            crud.create_audit_log(db, "RESET_LOGIN", f"Staff: {obj.nis_no}", "Reset login count", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+            return jsonify({"detail": "Login count reset successfully"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+
+@app.post("/staff/<int:staff_id>/reset-password")
+def reset_staff_password(staff_id: int):
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["special_admin", "formation_admin"])
+        if err: return err, code
+        
+        formation_id = user.get("formation_id")
+        
+        with next(get_db()) as db:
+            obj = crud.get_staff(db, staff_id)
+            if not obj: return jsonify({"detail": "Not found"}), 404
+            
+            if formation_id and obj.formation_id != formation_id:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+            
+            obj.password_hash = None # Reset to use NIS number
+            db.add(obj)
+            db.commit()
+            crud.create_audit_log(db, "RESET_PASSWORD", f"Staff: {obj.nis_no}", "Reset password to default", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+            return jsonify({"detail": "Password reset successfully"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+
+@app.put("/staff/<int:staff_id>/role")
+def update_staff_role(staff_id: int):
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["special_admin", "formation_admin"])
+        if err: return err, code
+        
+        formation_id = user.get("formation_id")
+        
+        data = request.get_json(force=True)
+        new_role = data.get("role")
+        if new_role not in ("staff", "office_admin", "main_admin"):
+            return jsonify({"detail": "Invalid role"}), 400
+        with next(get_db()) as db:
+            obj = crud.get_staff(db, staff_id)
+            if not obj: return jsonify({"detail": "Not found"}), 404
+            
+            # Permission Check (Updated for Zonal Admin)
+            allowed_access = False
+            if not formation_id or obj.formation_id == formation_id:
+                allowed_access = True
+            else:
+                # Check if user is Zonal Admin and staff is in sub-formation
+                user_fmt = crud.get_formation(db, formation_id)
+                if user_fmt and user_fmt.formation_type == "Zonal Command":
+                     zonal_descendants = crud.get_all_descendant_ids(db, formation_id)
+                     if obj.formation_id in zonal_descendants:
+                         allowed_access = True
+            
+            if not allowed_access:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+                
+            obj.role = new_role
+            db.add(obj)
+            db.commit()
+            db.refresh(obj)
+            crud.create_audit_log(db, "ROLE_UPDATE", f"Staff: {obj.nis_no}", f"Role set to {new_role}", formation_id=obj.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+            return jsonify(schemas.to_dict_staff(obj))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+
+@app.post("/staff/<int:staff_id>/move")
+def move_staff(staff_id: int):
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user, err, code = require_role(["main_admin", "formation_admin"])
+        if err: return err, code
+        
+        formation_id = user.get("formation_id")
+        
+        data = request.get_json(force=True)
+        new_office_name = data.get("office")
+        new_office_id = data.get("office_id")
+        effective_date_str = data.get("date") # Optional effective date, default today?
+        remarks = data.get("remarks", "")
+
+        if not new_office_name and not new_office_id:
+            return jsonify({"detail": "New office is required"}), 400
+        
+        effective_date = date.today()
+        if effective_date_str:
+            effective_date = parse_date_value(effective_date_str) or date.today()
+
+        with next(get_db()) as db:
+            staff = crud.get_staff(db, staff_id)
+            if not staff: return jsonify({"detail": "Not found"}), 404
+            
+            # Permission Check:
+            # 1. Standard: Must be in same formation
+            # 2. Zonal Admin Exception: Can access staff in sub-formations
+            allowed_access = False
+            if not formation_id or staff.formation_id == formation_id:
+                allowed_access = True
+            else:
+                # Check if user is Zonal Admin and staff is in sub-formation
+                user_fmt = crud.get_formation(db, formation_id)
+                if user_fmt and user_fmt.formation_type == "Zonal Command":
+                     zonal_descendants = crud.get_all_descendant_ids(db, formation_id)
+                     if staff.formation_id in zonal_descendants:
+                         allowed_access = True
+            
+            if not allowed_access:
+                return jsonify({"detail": "Permission denied: Different Formation"}), 403
+                
+            # Resolve New Office
+            if new_office_id:
+                 target_office_obj = crud.get_office(db, new_office_id)
+            else:
+                 stmt = select(models.Office).where(func.lower(models.Office.name) == new_office_name.lower())
+                 target_office_obj = db.scalar(stmt)
+                 
+            if not target_office_obj:
+                 return jsonify({"detail": "Office not found"}), 404
+                 
+            new_office = target_office_obj.name
+                 
+            target_fmt_id = target_office_obj.formation_id
+            current_fmt_id = staff.formation_id
+            
+            # Formation Admin Restrictions
+            if user["role"] == "formation_admin":
+                user_fmt = crud.get_formation(db, formation_id)
+                if not user_fmt: return jsonify({"detail": "Formation error"}), 500
+                
+                if user_fmt.formation_type == "Zonal Command":
+                    # Zonal Admin:
+                    # 1. Internal Move: Can only move personnel directly under its formation
+                    if target_fmt_id == current_fmt_id: # Internal Move
+                         if current_fmt_id != formation_id:
+                             return jsonify({"detail": "Permission denied: Zonal Admins can only internally move staff directly under the Zonal Command formation."}), 403
+                    
+                    # 2. Posting (handled here if target differs):
+                    # "post out personnel within it or formations under it" -> "to formations under it"
+                    else:
+                        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == formation_id)).all()
+                        allowed_target_ids = [c.id for c in children] # Can post TO children
+                        allowed_target_ids.append(formation_id) # Can post TO self (if for some reason moving back to HQ from child?)
+
+                        # Check source permission (relaxed for Zonal Admin)
+                        # Zonal Admin can move/post staff from self or any child
+                        allowed_source_ids = [c.id for c in children]
+                        allowed_source_ids.append(formation_id)
+                        
+                        if staff.formation_id not in allowed_source_ids:
+                             return jsonify({"detail": "Permission denied: Zonal Admins can only manage staff under their command."}), 403
+                        
+                        if target_fmt_id not in allowed_target_ids:
+                            return jsonify({"detail": "Permission denied: Zonal Admins can only post TO formations under their command."}), 403
+
+                else:
+                    # State Command / Others: Can ONLY move within same formation
+                    if target_fmt_id != formation_id:
+                         return jsonify({"detail": "Permission denied: You can only move staff within your formation. Postings must be done by Zonal/SHQ."}), 403
+
+            old_office = staff.office
+            if old_office == new_office:
+                 return jsonify({"detail": "Staff is already in this office"}), 400
+
+            # Determine Action Type
+            action_type = "MOVE"
+            to_office_val = new_office
+            
+            # Get Current Formation Name for History
+            current_fmt = staff.formation
+            current_fmt_name = current_fmt.name if current_fmt else "Unknown"
+            if current_fmt and current_fmt.formation_type == "Directorate":
+                current_fmt_name = f"SHQ ({current_fmt.code})"
+                
+            # Check if Formation Change
+            if target_fmt_id != current_fmt_id:
+                action_type = "POSTING"
+                from_office_val = f"{current_fmt_name} - {old_office}"
+                
+                # If posting, include Formation Name
+                target_fmt = crud.get_formation(db, target_fmt_id)
+                if target_fmt:
+                     fmt_name = target_fmt.name
+                     if target_fmt.formation_type == "Directorate":
+                         fmt_name = f"SHQ ({target_fmt.code})"
+                     to_office_val = fmt_name # Store only Formation Name as requested
+            else:
+                # Intra-formation move
+                from_office_val = old_office
+                to_office_val = new_office # Store only Office Name for internal move
+
+            # Prepare Remarks with History Info
+            history_remarks = remarks
+            if action_type == "POSTING":
+                 prev_dopp_str = staff.formation_dopp.isoformat() if staff.formation_dopp else "N/A"
+                 history_remarks = f"{remarks} | Prev Formation DOPP: {prev_dopp_str}".strip(" |")
+
+            # Create History Record
+            # User request: "date should be previous Office DOPP"
+            # We use staff.dopp (which is the DOPP for the office being left) as the history date.
+            history_date = staff.dopp if staff.dopp else effective_date
+            
+            history = models.PostingHistory(
+                staff_id=staff.id,
+                action_type=action_type,
+                from_office=from_office_val,
+                to_office=to_office_val,
+                action_date=history_date, 
+                remarks=history_remarks
+            )
+            db.add(history)
+            
+            # Update Staff
+            staff.office = new_office
+            # staff.office_id = target_office_obj.id  # Ensure office_id is updated - REMOVED: Staff model has no office_id
+            if action_type == "POSTING":
+                 staff.formation_id = target_fmt_id
+                 staff.formation_dopp = effective_date
+                 staff.dopp = effective_date
+                 
+            # Usually a move implies updating DOPP (Date of Present Posting)
+            # But we only update DOPP for Inter-Formation Posting per user request
+            # staff.dopp = effective_date 
+            # Update: User requested "when personnel is moved, the office DOPP automatically changes to the effective date of move"
+            staff.dopp = effective_date 
+            
+            # Notifications
+            notif_msg = f"Staff {action_type.title()}: {staff.nis_no} ({staff.rank}) to {new_office}"
+            
+            # 1. Notify Target Office Admin
+            if target_office_obj:
+                crud.broadcast_notification(db, notif_msg, office_id=target_office_obj.id)
+            
+            # 2. Notify Main Admin
+            crud.broadcast_notification(db, notif_msg, role="main_admin")
+            
+            # 3. Notify Formation Admin
+            # If Posting, target formation. If Move, current formation.
+            target_fmt_notif = target_fmt_id if action_type == "POSTING" else staff.formation_id
+            crud.broadcast_notification(db, notif_msg, formation_id=target_fmt_notif)
+            
+            db.commit()
+            crud.create_audit_log(db, action_type, f"Staff: {staff.nis_no}", f"{action_type} from {old_office} to {new_office}", formation_id=staff.formation_id, office_id=target_office_obj.id, user_id=user["id"], username=user["sub"])
+            return jsonify(schemas.to_dict_staff(staff))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": f"Server Error: {str(e)}"}), 500
+
+@app.get("/staff/<int:staff_id>/history")
+def get_staff_history(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "special_admin", "staff", "office_admin", "formation_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        # Check permission for staff role
+        if user["role"] == "staff" and user["id"] != staff_id:
+             return jsonify({"detail": "Permission denied"}), 403
+        
+        # Check permission for formation_admin
+        if user["role"] == "formation_admin":
+             staff = crud.get_staff(db, staff_id)
+             if not staff: return jsonify({"detail": "Not found"}), 404
+             
+             user_fmt_id = user.get("formation_id")
+             allowed = False
+             
+             if staff.formation_id == user_fmt_id:
+                 allowed = True
+             else:
+                 # Check if Zonal Command and staff is in sub-formation
+                 fmt = crud.get_formation(db, user_fmt_id)
+                 if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
+                     # Recursive check
+                     # We can just check if staff's formation is a descendant
+                     # But traversing down from Zonal might be faster if tree is small, or traversing up from staff.
+                     # Given we have the "collect all ids" logic, let's use that pattern for consistency.
+                     all_ids = {user_fmt_id}
+                     queue = [user_fmt_id]
+                     while queue:
+                        curr_id = queue.pop(0)
+                        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr_id)).all()
+                        for c in children:
+                            if c.id not in all_ids:
+                                all_ids.add(c.id)
+                                queue.append(c.id)
+                     
+                     if staff.formation_id in all_ids:
+                         allowed = True
+             
+             if not allowed:
+                  return jsonify({"detail": "Permission denied"}), 403
+
+        stmt = select(models.PostingHistory).where(models.PostingHistory.staff_id == staff_id)
+        
+        action_type = request.args.get("action_type")
+        if action_type:
+             stmt = stmt.where(models.PostingHistory.action_type == action_type)
+             
+        stmt = stmt.order_by(models.PostingHistory.action_date.desc(), models.PostingHistory.created_at.desc())
+        history = db.scalars(stmt).all()
+        
+        res = []
+        
+        # Add current posting as the first item if not filtered or if looking for POSTING/MOVE
+        if not action_type or action_type in ["POSTING", "MOVE"]:
+            staff = crud.get_staff(db, staff_id)
+            if staff and staff.formation:
+                fmt_name = staff.formation.name
+                if staff.formation.formation_type == "Directorate":
+                    fmt_name = f"SHQ ({staff.formation.code})"
+                
+                # Context-aware Current Row
+                current_target = fmt_name
+                current_date = staff.formation_dopp.isoformat() if staff.formation_dopp else (staff.dopp.isoformat() if staff.dopp else None)
+                
+                if action_type == "MOVE":
+                    # For Internal Posting, show Current Office and Office DOPP
+                    current_target = staff.office or "-"
+                    current_date = staff.dopp.isoformat() if staff.dopp else None
+                
+                res.append({
+                    "id": "current",
+                    "action_type": "CURRENT",
+                    "from_office": "-",
+                    "to_office": current_target,
+                    "action_date": current_date,
+                    "remarks": "Current Posting",
+                    "created_at": None
+                })
+
+        for h in history:
+            res.append({
+                "id": h.id,
+                "action_type": h.action_type,
+                "from_office": h.from_office,
+                "to_office": h.to_office,
+                "action_date": h.action_date.isoformat() if h.action_date else None,
+                "remarks": h.remarks,
+                "created_at": h.created_at.isoformat() if h.created_at else None
+            })
+        return jsonify(res)
+
+@app.get("/staff/<int:staff_id>/promotions")
+def get_staff_promotions(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "special_admin", "staff", "office_admin", "formation_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        if user["role"] == "staff" and user["id"] != staff_id:
+             return jsonify({"detail": "Permission denied"}), 403
+             
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+
+        if user["role"] == "formation_admin":
+             user_fmt_id = user.get("formation_id")
+             allowed = False
+             
+             if staff.formation_id == user_fmt_id:
+                 allowed = True
+             else:
+                 fmt = crud.get_formation(db, user_fmt_id)
+                 if fmt and fmt.formation_type and fmt.formation_type.strip().lower() == "zonal command":
+                     all_ids = {user_fmt_id}
+                     queue = [user_fmt_id]
+                     while queue:
+                        curr_id = queue.pop(0)
+                        children = db.scalars(select(models.Formation).where(models.Formation.parent_id == curr_id)).all()
+                        for c in children:
+                            if c.id not in all_ids:
+                                all_ids.add(c.id)
+                                queue.append(c.id)
+                     
+                     if staff.formation_id in all_ids:
+                         allowed = True
+            
+             if not allowed:
+                  return jsonify({"detail": "Permission denied"}), 403
+        
+        # Query Audit Logs for updates to this staff that involve rank
+        # We look for action="UPDATE" and target=f"Staff: {staff.nis_no}" (or similar)
+        # And details containing "rank"
+        
+        # Note: target format in update_staff is f"Staff: {staff.nis_no}"
+        target_str = f"Staff: {staff.nis_no}"
+        
+        stmt = select(models.AuditLog).where(
+            models.AuditLog.target == target_str,
+            models.AuditLog.details.ilike("%rank%")
+        ).order_by(models.AuditLog.timestamp.desc())
+        
+        logs = db.scalars(stmt).all()
+        
+        res = []
+        for log in logs:
+            res.append({
+                "id": log.id,
+                "date": log.timestamp.isoformat() if log.timestamp else None,
+                "details": log.details
+            })
+            
+        return jsonify(res)
+
+@app.post("/staff/<int:staff_id>/posting")
+def posting_staff(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin", "main_admin", "formation_admin"])
+    if err: return err, code
+    
+    data = request.get_json(force=True)
+    new_formation_id = data.get("formation_id")
+    new_office = data.get("office")
+    effective_date_str = data.get("date")
+    remarks = data.get("remarks", "")
+    
+    if not new_formation_id: return jsonify({"detail": "Formation is required"}), 400
+    
+    effective_date = date.today()
+    if effective_date_str:
+        effective_date = parse_date_value(effective_date_str) or date.today()
+        
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff:
+            return jsonify({"detail": "Not found"}), 404
+        
+        user_fmt_id = user.get("formation_id")
+        user_role = user.get("role")
+        user_fmt = db.get(models.Formation, user_fmt_id) if user_fmt_id else None
+
+        if user_role == "formation_admin":
+            if not user_fmt:
+                return jsonify({"detail": "Formation error"}), 500
+
+            staff_fmt = staff.formation
+            allowed_source = False
+            if staff.formation_id == user_fmt_id:
+                allowed_source = True
+            elif user_fmt.formation_type == "Zonal Command":
+                # Recursive check for source
+                zonal_descendants = crud.get_all_descendant_ids(db, user_fmt_id)
+                if staff.formation_id in zonal_descendants:
+                    allowed_source = True
+            
+            if not allowed_source:
+                return jsonify({"detail": "Permission denied: You can only post staff from your formation (or sub-formations for Zonal Commands)."}), 403
+
+            if user_fmt.formation_type == "Zonal Command":
+                # Recursive check for target
+                # Allow posting TO self or descendants
+                zonal_descendants = crud.get_all_descendant_ids(db, user_fmt_id)
+                if new_formation_id != user_fmt_id and new_formation_id not in zonal_descendants:
+                    return jsonify({"detail": "Permission denied: Zonal Commands can only post to formations under their command."}), 403
+
+
+        old_formation_id = staff.formation_id
+        old_office = staff.office
+        
+        if old_formation_id == new_formation_id and old_office == new_office:
+            return jsonify({"detail": "No change in posting"}), 400
+            
+        old_fmt = db.get(models.Formation, old_formation_id) if old_formation_id else None
+        new_fmt = db.get(models.Formation, new_formation_id)
+        if not new_fmt: return jsonify({"detail": "Target formation not found"}), 404
+        
+        old_fmt_name = old_fmt.name if old_fmt else "None"
+        if old_fmt and old_fmt.formation_type == "Directorate":
+            old_fmt_name = f"SHQ ({old_fmt.code})"
+            
+        new_fmt_name = new_fmt.name
+        if new_fmt.formation_type == "Directorate":
+            new_fmt_name = f"SHQ ({new_fmt.code})"
+        
+        full_remarks = f"Posted from {old_fmt_name} to {new_fmt_name}. {remarks}"
+        
+        # Add Prev Formation DOPP to remarks
+        prev_dopp_str = staff.formation_dopp.isoformat() if staff.formation_dopp else "N/A"
+        full_remarks = f"{full_remarks} | Prev Formation DOPP: {prev_dopp_str}"
+        
+        history = models.PostingHistory(
+            staff_id=staff.id,
+            action_type="POSTING",
+            from_office=f"{old_fmt_name} - {old_office}",
+            to_office=new_fmt_name, # Display only Formation Name as requested
+            action_date=effective_date,
+            remarks=full_remarks
+        )
+        db.add(history)
+        
+        staff.formation_id = new_formation_id
+        staff.office = new_office if new_office else "Not Assigned"
+        staff.dopp = effective_date
+        staff.formation_dopp = effective_date
+        
+        # Notifications
+        notif_msg = f"Staff Posted: {staff.nis_no} ({staff.rank}) to {new_fmt_name} - {new_office}"
+
+        # 1. Notify Target Formation Admin
+        crud.broadcast_notification(db, notif_msg, formation_id=new_formation_id)
+
+        # 2. Notify Main Admin
+        crud.broadcast_notification(db, notif_msg, role="main_admin")
+
+        # 3. Notify Target Office Admin (if office is known and valid)
+        if new_office:
+            target_off = db.query(models.Office).filter(
+                models.Office.formation_id == new_formation_id,
+                func.lower(models.Office.name) == new_office.lower()
+            ).first()
+            if target_off:
+                 crud.broadcast_notification(db, notif_msg, office_id=target_off.id)
+
+        db.commit()
+        crud.create_audit_log(db, "POSTING", f"Staff: {staff.nis_no}", f"Posted from {old_fmt_name} to {new_fmt_name}", formation_id=new_formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+        return jsonify(schemas.to_dict_staff(staff))
+
+@app.post("/api/process-retirements")
+def process_retirements_endpoint():
+    """
+    Manually trigger the retirement check process.
+    Typically this would be a cron job, but we expose it for admin usage.
+    """
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin", "main_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        count = crud.process_due_retirements(db)
+        return jsonify({"detail": f"Processed {count} retirements successfully."})
+
+@app.get("/settings/staff-edit")
+def get_staff_edit_settings():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        # Filter by formation_id if present
+        stmt = select(models.Staff)
+        if formation_id:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
+            
+        # We need to aggregate over the filtered set.
+        # But wait, crud operations or simple scalars?
+        # Let's construct queries manually since these are aggregates.
+        
+        q_max_rank = select(func.max(models.Staff.allow_edit_rank))
+        q_max_dopp = select(func.max(models.Staff.allow_edit_dopp))
+        q_max_login = select(func.max(models.Staff.allow_login))
+        
+        if formation_id:
+            q_max_rank = q_max_rank.where(models.Staff.formation_id == formation_id)
+            q_max_dopp = q_max_dopp.where(models.Staff.formation_id == formation_id)
+            q_max_login = q_max_login.where(models.Staff.formation_id == formation_id)
+
+        max_rank = db.scalar(q_max_rank) or 0
+        max_dopp = db.scalar(q_max_dopp) or 0
+        max_login = db.scalar(q_max_login)
+        
+        if max_login is None: max_login = 1 # Default to allowed if table empty?
+        
+        return jsonify({
+            "allow_edit_rank": bool(max_rank),
+            "allow_edit_dopp": bool(max_dopp),
+            "allow_login": bool(max_login),
+        })
+
+@app.put("/settings/staff-edit")
+def update_staff_edit_settings():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["special_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    data = request.get_json(force=True)
+    allow_rank = bool(data.get("allow_edit_rank"))
+    allow_dopp = bool(data.get("allow_edit_dopp"))
+    allow_login = bool(data.get("allow_login"))
+    
+    with next(get_db()) as db:
+        stmt = models.Staff.__table__.update().values(
+            allow_edit_rank=1 if allow_rank else 0,
+            allow_edit_dopp=1 if allow_dopp else 0,
+            allow_login=1 if allow_login else 0,
+        )
+        if formation_id:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
+            
+        db.execute(stmt)
+        db.commit()
+        crud.create_audit_log(
+            db,
+            "SETTINGS_UPDATE",
+            "staff-edit",
+            f"allow_edit_rank={allow_rank}, allow_edit_dopp={allow_dopp}, allow_login={allow_login}",
+            formation_id=formation_id,
+            user_id=user["id"],
+            username=user["sub"]
+        )
+    return jsonify({"allow_edit_rank": allow_rank, "allow_edit_dopp": allow_dopp, "allow_login": allow_login})
+
+@app.post("/change-password")
+def change_password():
+    try:
+        if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+        user_info = get_current_user()
+        if not user_info: return jsonify({"detail": "Not authenticated"}), 401
+        
+        data = request.get_json(force=True)
+        old_password = data.get("old_password")
+        new_password = data.get("new_password")
+        
+        if not old_password or not new_password:
+            return jsonify({"detail": "Old and new passwords are required"}), 400
+            
+        with next(get_db()) as db:
+            # Identify if user is in User table or Staff table
+            # We use ID and Sub (username/nis) to verify
+            
+            # 1. Try User table
+            user_obj = db.query(models.User).filter(models.User.id == user_info["id"]).first()
+            if user_obj and user_obj.username == user_info["sub"]:
+                 if not auth.verify_password(old_password, user_obj.password_hash):
+                     return jsonify({"detail": "Incorrect old password"}), 400
+                 
+                 user_obj.password_hash = auth.get_password_hash(new_password)
+                 db.commit()
+                 crud.create_audit_log(db, "PASSWORD_CHANGE", user_obj.username, "Admin changed password", formation_id=user_obj.formation_id, user_id=user_info["id"], username=user_info["sub"])
+                 return jsonify({"detail": "Password changed successfully"})
+
+            # 2. Try Staff table
+            staff = crud.get_staff(db, user_info["id"])
+            if staff and staff.nis_no == user_info["sub"]:
+                # Verify old password
+                valid_old = False
+                if staff.password_hash:
+                     if auth.verify_password(old_password, staff.password_hash): valid_old = True
+                elif old_password == staff.nis_no:
+                     valid_old = True
+                     
+                if not valid_old:
+                    return jsonify({"detail": "Incorrect old password"}), 400
+                    
+                staff.password_hash = auth.get_password_hash(new_password)
+                
+                # Resolve office_id for audit log
+                office_id = None
+                if staff.office:
+                    try:
+                        off_obj = db.query(models.Office).filter(
+                            func.lower(models.Office.name) == staff.office.lower(),
+                            models.Office.formation_id == staff.formation_id
+                        ).first()
+                        if off_obj:
+                            office_id = off_obj.id
+                    except:
+                        pass
+                
+                db.commit()
+                crud.create_audit_log(db, "PASSWORD_CHANGE", staff.nis_no, "User changed password", formation_id=staff.formation_id, office_id=office_id, user_id=user_info["id"], username=user_info["sub"])
+                return jsonify({"detail": "Password changed successfully"})
+
+            return jsonify({"detail": "User record not found"}), 404
+    except Exception as e:
+        print(f"Change Password Error: {e}")
+        traceback.print_exc()
+        return jsonify({"detail": f"Server error: {str(e)}"}), 500
+
+@app.get("/audit-logs")
+def get_audit_logs():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "special_admin", "formation_admin", "office_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    office_id = None
+    actions = None
+    
+    if user["role"] == "special_admin":
+        # Special admin sees logs from all formations, all actions
+        formation_id = None
+        actions = None
+        
+    elif user["role"] == "office_admin":
+         # Get staff record to find office_id
+         with next(get_db()) as db:
+              staff = crud.get_staff(db, user["id"])
+              if staff and staff.office:
+                  # Resolve Office ID from name
+                  stmt = select(models.Office).where(
+                      func.lower(models.Office.name) == staff.office.lower(),
+                      models.Office.formation_id == staff.formation_id
+                  )
+                  off_obj = db.scalar(stmt)
+                  office_id = off_obj.id if off_obj else None
+              else:
+                  return jsonify([]), 200
+
+    limit = request.args.get("limit", 100, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    
+    with next(get_db()) as db:
+        logs = crud.list_audit_logs(db, limit=limit, offset=offset, formation_id=formation_id, office_id=office_id, actions=actions)
+        return jsonify([schemas.to_dict_audit_log(l) for l in logs])
+
+@app.get("/export/excel")
+def export_excel():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    formation_id = user.get("formation_id")
+    
+    try:
+        with next(get_db()) as db:
+            q = request.args.get("q")
+            
+            rank = [r for r in request.args.getlist("rank") if r.strip()]
+            if not rank:
+                rank = None
+            
+            office = [o for o in request.args.getlist("office") if o.strip()]
+            if not office:
+                office = None
+
+            # Restriction: Office Admin can only export their own office
+            if user["role"] == "office_admin":
+                admin_staff = crud.get_staff(db, user["id"])
+                if admin_staff and admin_staff.office:
+                    office = [admin_staff.office]
+                else:
+                    office = ["__NO_OFFICE__"]
+
+            # Force completeness to None to include both completed and incomplete as requested
+            completeness = None
+            status = request.args.get("status", "active")
+            dopp_order = request.args.get("dopp_order")
+            columns_raw = request.args.get("columns")
+            merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
+
+            columns = []
+            if columns_raw:
+                columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
+
+            staff_list = crud.list_staff(
+                db,
+                q=q,
+                rank=rank,
+                office=office,
+                completeness=completeness,
+                status=status,
+                dopp_order=dopp_order,
+                limit=10000,
+                offset=0,
+                formation_id=formation_id
+            )
+
+            def tokenize_alpha_words(text: str) -> list[str]:
+                if not text:
+                    return []
+                parts = []
+                buf = []
+                for ch in str(text).strip():
+                    if ch.isalpha():
+                        buf.append(ch)
+                    else:
+                        if buf:
+                            parts.append("".join(buf))
+                            buf = []
+                if buf:
+                    parts.append("".join(buf))
+                return [p for p in parts if p]
+
+            def initials_from_words(words: list[str]) -> str:
+                return "".join([w[0].upper() for w in words if w])
+
+            def normalize_rank_code(value: str) -> str:
+                if not value:
+                    return ""
+                return "".join([ch for ch in str(value).upper() if ch.isalnum()])
+
+            senior_ranks = {
+                "CGI",
+                "DCG",
+                "ACG",
+                "CIS",
+                "DCI",
+                "ACI",
+                "CSI",
+                "SI",
+                "DSI",
+                "ASI1",
+                "ASI2",
+            }
+            junior_ranks = {
+                "II",
+                "AII",
+                "IA1",
+                "IA2",
+                "IA3",
+            }
+
+            rank_order = {
+                "CGI": 0, "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
+                "CSI": 6, "SI": 7, "DSI": 8, "ASI 1": 9, "ASI1": 9,
+                "ASI 2": 10, "ASI2": 10, "II": 11, "AII": 12,
+                "IA 1": 13, "IA1": 13, "IA 2": 14, "IA2": 14, "IA 3": 15, "IA3": 15
+            }
+            
+            def get_rank_priority(staff):
+                 r = normalize_rank_code(staff.rank)
+                 if staff.rank and staff.rank.upper() in rank_order:
+                     return rank_order[staff.rank.upper()]
+                 for k, v in rank_order.items():
+                     if normalize_rank_code(k) == r:
+                         return v
+                 return 999
+
+            staff_list.sort(key=get_rank_priority)
+
+            def merged_name_by_rank(staff) -> str:
+                other_words = tokenize_alpha_words(staff.other_names or "")
+                surname_full = (staff.surname or "").strip().title()
+                surname_words = tokenize_alpha_words(staff.surname or "")
+
+                other_initials = initials_from_words(other_words)
+                surname_initials = initials_from_words(surname_words)
+
+                rank_code = normalize_rank_code(staff.rank or "")
+
+                if rank_code in senior_ranks:
+                    if other_initials and surname_full:
+                        return f"{other_initials} {surname_full}".strip()
+                    return (surname_full or other_initials).strip()
+
+                if rank_code in junior_ranks:
+                    if not other_words:
+                        return surname_full
+                    first_name = other_words[0].upper()
+                    rest_initials = initials_from_words(other_words[1:])
+                    tail = f"{rest_initials}{surname_initials}".strip()
+                    if tail:
+                        return f"{first_name} {tail}".strip()
+                    return first_name
+
+                if surname_full:
+                    return f"{surname_full}{(' ' + other_initials) if other_initials else ''}".strip()
+                return other_initials
+
+            rank_order = {
+                "CGI": 0, "DCG": 1, "ACG": 2, "CIS": 3, "DCI": 4, "ACI": 5,
+                "CSI": 6, "SI": 7, "DSI": 8, "ASI 1": 9, "ASI1": 9,
+                "ASI 2": 10, "ASI2": 10, "II": 11, "AII": 12,
+                "IA 1": 13, "IA1": 13, "IA 2": 14, "IA2": 14, "IA 3": 15, "IA3": 15
+            }
+            
+            def get_rank_priority(staff):
+                 r = normalize_rank_code(staff.rank)
+                 if staff.rank and staff.rank.upper() in rank_order:
+                     return rank_order[staff.rank.upper()]
+                 for k, v in rank_order.items():
+                     if normalize_rank_code(k) == r:
+                         return v
+                 return 999
+
+            staff_list.sort(key=get_rank_priority)
+
+            def get_value(staff, col_key: str):
+                if col_key == "nis_no":
+                    return staff.nis_no
+                if col_key == "surname":
+                    return (staff.surname or "").title()
+                if col_key == "other_names":
+                    return (staff.other_names or "").title()
+                if col_key == "rank":
+                    return staff.rank
+                if col_key == "gender":
+                    return staff.gender
+                if col_key == "office":
+                    return staff.office
+                if col_key == "state":
+                    return staff.state.name if staff.state else ""
+                if col_key == "lga":
+                    return staff.lga.name if staff.lga else ""
+                if col_key == "phone_no":
+                    return staff.phone_no
+                if col_key == "qualification":
+                    return staff.qualification
+                if col_key == "dob":
+                    return staff.dob.strftime('%d/%m/%Y') if staff.dob else ""
+                if col_key == "dofa":
+                    return staff.dofa.strftime('%d/%m/%Y') if staff.dofa else ""
+                if col_key == "dopa":
+                    return staff.dopa.strftime('%d/%m/%Y') if staff.dopa else ""
+                if col_key == "dopp":
+                    return staff.dopp.strftime('%d/%m/%Y') if staff.dopp else ""
+                if col_key == "home_town":
+                    return staff.home_town
+                if col_key == "next_of_kin":
+                    return staff.next_of_kin
+                if col_key == "nok_phone":
+                    return staff.nok_phone
+                if col_key == "email":
+                    return staff.email
+                if col_key == "remark":
+                    return staff.remark
+                return ""
+
+            label_map = {
+                "nis_no": "NIS No",
+                "surname": "Surname",
+                "other_names": "Other Names",
+                "rank": "Rank",
+                "gender": "Gender",
+                "office": "Office",
+                "state": "State",
+                "lga": "LGA",
+                "phone_no": "Phone No",
+                "qualification": "Qual",
+                "dob": "DOB",
+                "dofa": "DOFA",
+                "dopa": "DOPA",
+                "dopp": "DOPP",
+                "home_town": "Home Town",
+                "next_of_kin": "Next of Kin",
+                "nok_phone": "NOK Phone",
+                "email": "Email",
+                "remark": "Remark",
+            }
+
+            if not columns:
+                columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
+
+            if "sn" in columns:
+                columns.remove("sn")
+            columns.insert(0, "sn")
+
+            if merge_name and ("surname" in columns or "other_names" in columns):
+                columns = [c for c in columns if c not in ("surname", "other_names")]
+                name_col_key = "__name__"
+                insert_at = 0
+                if "nis_no" in columns:
+                    insert_at = columns.index("nis_no") + 1
+                columns.insert(insert_at, name_col_key)
+                label_map[name_col_key] = "Name"
+            
+            label_map["sn"] = "S/N"
+            
+            # Fetch Formation Details
+            org_name = "Nigeria Immigration Service"
+            org_desc = "Headquarters"
+            if formation_id:
+                formation_obj = crud.get_formation(db, formation_id)
+                if formation_obj:
+                    org_name = formation_obj.name
+                    org_desc = formation_obj.formation_type or ""
+            
+            formation_full_name = f"{org_name} {org_desc}".strip()
+            main_title = formation_full_name
+            subtitle_text = ""
+            
+            office_title = None
+            rank_title = None
+            if office:
+                if isinstance(office, list):
+                    if len(office) == 1:
+                        office_title = office[0]
+                    else:
+                        office_title = ", ".join(office)
+                else:
+                    office_title = office
+            if rank:
+                if isinstance(rank, list):
+                    if len(rank) == 1:
+                        rank_title = rank[0]
+                    else:
+                        rank_title = ", ".join(rank)
+                else:
+                    rank_title = rank
+                    
+            if office_title:
+                main_title = office_title
+                subtitle_text = formation_full_name
+            elif rank_title:
+                main_title = rank_title
+                subtitle_text = formation_full_name
+            main_title = str(main_title)
+            safe_filename = "".join([c for c in main_title if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Staff List"
+            
+            font_style = Font(name='Liberation Sans', size=10)
+            header_font = Font(name='Liberation Sans', size=12, bold=True)
+            title_font = Font(name='Liberation Sans', size=14, bold=True)
+            subtitle_font = Font(name='Liberation Sans', size=10, italic=False)
+            center_align = Alignment(horizontal='center', vertical='center')
+            
+            current_row = 1
+            ws.cell(row=current_row, column=1, value=main_title)
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=len(columns))
+            cell = ws.cell(row=current_row, column=1)
+            cell.font = title_font
+            cell.alignment = center_align
+            current_row += 1
+            
+            if subtitle_text:
+                ws.cell(row=current_row, column=1, value=subtitle_text)
+                ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=len(columns))
+                cell = ws.cell(row=current_row, column=1)
+                cell.font = subtitle_font
+                cell.alignment = center_align
+                current_row += 1
+                
+            headers = [label_map.get(c, c).upper() for c in columns]
+            ws.append(headers)
+            header_row_idx = current_row
+            for cell in ws[header_row_idx]:
+                cell.font = header_font
+            for idx, staff in enumerate(staff_list, start=1):
+                row = []
+                for col_key in columns:
+                    if col_key == "sn":
+                        row.append(idx)
+                    elif col_key == "__name__":
+                        row.append(merged_name_by_rank(staff))
+                    else:
+                        row.append(get_value(staff, col_key))
+                ws.append(row)
+                row_idx = idx + header_row_idx
+                if row_idx % 2 == 0:
+                    fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
+                    for cell in ws[row_idx]:
+                        cell.fill = fill
+                for cell in ws[row_idx]:
+                    cell.font = font_style
+            ws.append([])
+            footer_cell = ws.cell(row=ws.max_row + 1, column=1, value=f"Generated on {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+            footer_cell.font = Font(name='Liberation Sans', size=8, italic=True)
+            out = io.BytesIO()
+            wb.save(out)
+            out.seek(0)
+            return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"{safe_filename}_{datetime.now().strftime('%Y%m%d')}.xlsx")
+    except Exception as e:
+        print("Export Excel error:", e)
+        return jsonify({"detail": f"Export Excel failed: {str(e)}"}), 500
+
+@app.get("/export/pdf")
+def export_pdf():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    formation_id = user.get("formation_id")
+    
+    try:
+        with next(get_db()) as db:
+            q = request.args.get("q")
+            
+            rank = [r for r in request.args.getlist("rank") if r.strip()]
+            if not rank:
+                rank = None
+            
+            office = [o for o in request.args.getlist("office") if o.strip()]
+            if not office:
+                office = None
+
+            # Restriction: Office Admin can only export their own office
+            if user["role"] == "office_admin":
+                admin_staff = crud.get_staff(db, user["id"])
+                if admin_staff and admin_staff.office:
+                    office = [admin_staff.office]
+                else:
+                    office = ["__NO_OFFICE__"]
+
+            # Include both completed and incomplete personnel in exports.
+            completeness = None
+            status = request.args.get("status", "active")
+            dopp_order = request.args.get("dopp_order")
+            columns_raw = request.args.get("columns")
+            merge_name = request.args.get("merge_name") in ("1", "true", "True", "yes", "on")
+
+            columns = []
+            if columns_raw:
+                columns = [c.strip() for c in columns_raw.split(",") if c and c.strip()]
+            if not columns:
+                columns = ["nis_no", "surname", "other_names", "rank", "gender", "office", "state", "lga", "phone_no"]
+
+            if "sn" in columns:
+                columns.remove("sn")
+            columns.insert(0, "sn")
+
+            staff_list = crud.list_staff(
+                db,
+                q=q,
+                rank=rank,
+                office=office,
+                completeness=completeness,
+                status=status,
+                dopp_order=dopp_order,
+                limit=10000,
+                offset=0,
+                formation_id=formation_id
+            )
+
+            def tokenize_alpha_words(text: str) -> list[str]:
+                if not text:
+                    return []
+                parts = []
+                buf = []
+                for ch in str(text).strip():
+                    if ch.isalpha():
+                        buf.append(ch)
+                    else:
+                        if buf:
+                            parts.append("".join(buf))
+                            buf = []
+                if buf:
+                    parts.append("".join(buf))
+                return [p for p in parts if p]
+
+            def initials_from_words(words: list[str]) -> str:
+                return "".join([w[0].upper() for w in words if w])
+
+            def normalize_rank_code(value: str) -> str:
+                if not value:
+                    return ""
+                return "".join([ch for ch in str(value).upper() if ch.isalnum()])
+
+            senior_ranks = {"DCG","ACG","CIS","DCI","ACI","CSI","SI","DSI","ASI1","ASI2"}
+            junior_ranks = {"II","AII","IA1","IA2","IA3"}
+
+            def merged_name_by_rank(staff) -> str:
+                other_words = tokenize_alpha_words(staff.other_names or "")
+                surname_full = (staff.surname or "").strip().title()
+                surname_words = tokenize_alpha_words(staff.surname or "")
+                other_initials = initials_from_words(other_words)
+                surname_initials = initials_from_words(surname_words)
+                rank_code = normalize_rank_code(staff.rank or "")
+                if rank_code in senior_ranks:
+                    if other_initials and surname_full:
+                        return f"{other_initials} {surname_full}".strip()
+                    return (surname_full or other_initials).strip()
+                if rank_code in junior_ranks:
+                    if not other_words:
+                        return surname_full
+                    first_name = other_words[0].upper()
+                    rest_initials = initials_from_words(other_words[1:])
+                    tail = f"{rest_initials}{surname_initials}".strip()
+                    if tail:
+                        return f"{first_name} {tail}".strip()
+                    return first_name
+                if surname_full:
+                    return f"{surname_full}{(' ' + other_initials) if other_initials else ''}".strip()
+                return other_initials
+
+            def get_value(staff, col_key: str):
+                if col_key == "nis_no":
+                    return staff.nis_no or ""
+                if col_key == "surname":
+                    return (staff.surname or "").title()
+                if col_key == "other_names":
+                    return (staff.other_names or "").title()
+                if col_key == "rank":
+                    return staff.rank or ""
+                if col_key == "gender":
+                    return staff.gender or ""
+                if col_key == "office":
+                    return staff.office or ""
+                if col_key == "state":
+                    return staff.state.name if staff.state else ""
+                if col_key == "lga":
+                    return staff.lga.name if staff.lga else ""
+                if col_key == "phone_no":
+                    return staff.phone_no or ""
+                if col_key == "qualification":
+                    return staff.qualification or ""
+                if col_key == "dob":
+                    return staff.dob.strftime('%d/%m/%Y') if staff.dob else ""
+                if col_key == "dofa":
+                    return staff.dofa.strftime('%d/%m/%Y') if staff.dofa else ""
+                if col_key == "dopa":
+                    return staff.dopa.strftime('%d/%m/%Y') if staff.dopa else ""
+                if col_key == "dopp":
+                    return staff.dopp.strftime('%d/%m/%Y') if staff.dopp else ""
+                if col_key == "home_town":
+                    return staff.home_town or ""
+                if col_key == "next_of_kin":
+                    return staff.next_of_kin or ""
+                if col_key == "nok_phone":
+                    return staff.nok_phone or ""
+                if col_key == "email":
+                    return staff.email or ""
+                if col_key == "remark":
+                    return staff.remark or ""
+                return ""
+
+            label_map = {
+                "nis_no": "NIS No",
+                "surname": "Surname",
+                "other_names": "Other Names",
+                "rank": "Rank",
+                "gender": "Gender",
+                "office": "Office",
+                "state": "State",
+                "lga": "LGA",
+                "phone_no": "Phone No",
+                "qualification": "Qual",
+                "dob": "DOB",
+                "dofa": "DOFA",
+                "dopa": "DOPA",
+                "dopp": "DOPP",
+                "home_town": "Home Town",
+                "next_of_kin": "Next of Kin",
+                "nok_phone": "NOK Phone",
+                "email": "Email",
+                "remark": "Remark",
+                "sn": "S/N",
+            }
+
+            headers_keys = list(columns)
+            if merge_name and ("surname" in headers_keys or "other_names" in headers_keys):
+                headers_keys = [c for c in headers_keys if c not in ("surname", "other_names")]
+                name_col_key = "__name__"
+                insert_at = 0
+                if "nis_no" in headers_keys:
+                    insert_at = headers_keys.index("nis_no") + 1
+                headers_keys.insert(insert_at, name_col_key)
+                label_map[name_col_key] = "Name"
+
+            data_table = [[label_map.get(k, k).upper() for k in headers_keys]]
+            for idx, staff in enumerate(staff_list, start=1):
+                row = []
+                for k in headers_keys:
+                    if k == "sn":
+                        row.append(str(idx))
+                    elif k == "__name__":
+                        row.append(merged_name_by_rank(staff))
+                    else:
+                        row.append(get_value(staff, k))
+                data_table.append(row)
+
+            out = io.BytesIO()
+            # Use A3 Landscape for more width
+            doc = SimpleDocTemplate(out, pagesize=landscape(A3), topMargin=30, bottomMargin=30, leftMargin=30, rightMargin=30)
+            styles = getSampleStyleSheet()
+            elements = []
+            
+            # Fetch Formation Details
+            org_name = "Nigeria Immigration Service"
+            org_desc = "Headquarters"
+            if formation_id:
+                formation_obj = crud.get_formation(db, formation_id)
+                if formation_obj:
+                    org_name = formation_obj.name
+                    org_desc = formation_obj.formation_type or ""
+            
+            formation_full_name = f"{org_name} {org_desc}".strip()
+            main_title = formation_full_name
+            subtitle_text = ""
+            
+            office_title = None
+            rank_title = None
+            if office:
+                if isinstance(office, list):
+                    if len(office) == 1:
+                        office_title = office[0]
+                    else:
+                        office_title = ", ".join(office)
+                else:
+                    office_title = office
+            if rank:
+                if isinstance(rank, list):
+                    if len(rank) == 1:
+                        rank_title = rank[0]
+                    else:
+                        rank_title = ", ".join(rank)
+                else:
+                    rank_title = rank
+                    
+            if office_title:
+                main_title = office_title
+                subtitle_text = formation_full_name
+            elif rank_title:
+                main_title = rank_title
+                subtitle_text = formation_full_name
+            main_title = str(main_title)
+            title_style = styles["Title"]
+            title_style.fontSize = 14
+            elements.append(Paragraph(main_title, title_style))
+            
+            if subtitle_text:
+                 subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], alignment=1, fontSize=10)
+                 elements.append(Paragraph(subtitle_text, subtitle_style))
+            
+            safe_filename = "".join([c for c in main_title if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
+
+            elements.append(Spacer(1, 0.2 * inch))
+            
+            # A3 Landscape width is approx 1190 points. With 30 margins, we have ~1130 available.
+            avail_width = 1130
+
+            font_size = 7
+            if len(headers_keys) > 12:
+                font_size = 6
+
+            char_width = font_size * 0.6
+            min_width_map = {
+                "sn": 25,
+                "rank": 35,
+                "gender": 40,
+                "nis_no": 45,
+                "qualification": 40,
+                "dob": 55, "dofa": 55, "dopa": 55, "dopp": 55,
+                "phone_no": 65,
+                "state": 60, "lga": 60,
+                "grade_level": 30, "step": 25,
+                "nok_phone": 65,
+            }
+            max_len_map = {}
+            for k in headers_keys:
+                header_text = label_map.get(k, k)
+                max_len_map[k] = len(str(header_text))
+            if "sn" in headers_keys:
+                max_len_map["sn"] = max(max_len_map.get("sn", 0), len(str(len(staff_list))))
+            for staff in staff_list:
+                for k in headers_keys:
+                    if k == "sn":
+                        s = ""
+                    elif k == "__name__":
+                        s = merged_name_by_rank(staff)
+                    else:
+                        s = str(get_value(staff, k))
+                    max_len_map[k] = max(max_len_map.get(k, 0), len(s or ""))
+            raw_widths = []
+            for k in headers_keys:
+                base = (max_len_map.get(k, 1) + 2) * char_width
+                min_w = min_width_map.get(k, 40)
+                raw_widths.append(max(base, min_w))
+            total_raw = sum(raw_widths)
+            if total_raw > 0:
+                scale = avail_width / total_raw
+            else:
+                scale = 1.0
+            final_widths = [w * scale for w in raw_widths]
+
+            font_size = 7
+            if len(headers_keys) > 12:
+                font_size = 6
+
+            cell_style = ParagraphStyle(
+                'CellStyle',
+                parent=styles['Normal'],
+                fontSize=font_size,
+                leading=font_size + 1,
+                alignment=0
+            )
+            
+            formatted_data = [data_table[0]]
+            
+            for idx, staff in enumerate(staff_list, start=1):
+                row = []
+                for k in headers_keys:
+                    val = ""
+                    if k == "sn":
+                        val = str(idx)
+                    elif k == "__name__":
+                        val = merged_name_by_rank(staff)
+                    else:
+                        val = str(get_value(staff, k))
+                    if val:
+                        row.append(Paragraph(val, cell_style))
+                    else:
+                        row.append("")
+                formatted_data.append(row)
+
+            table = Table(formatted_data, repeatRows=1, colWidths=final_widths)
+            
+            style = TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), font_size + 1),
+                ("FONTSIZE", (0, 1), (-1, -1), font_size),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+            ])
+            table.setStyle(style)
+            for i in range(1, len(formatted_data)):
+                if i % 2 == 0:
+                    table.setStyle(TableStyle([("BACKGROUND", (0, i), (-1, i), colors.whitesmoke)]))
+            elements.append(table)
+            
+            def footer(canvas, doc):
+                canvas.saveState()
+                canvas.setFont('Helvetica-Oblique', 8)
+                page_num = canvas.getPageNumber()
+                text = f"Page {page_num} | Generated on {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+                canvas.drawRightString(landscape(letter)[0] - 30, 20, text)
+                canvas.restoreState()
+
+            doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+            out.seek(0)
+            return send_file(out, mimetype="application/pdf", as_attachment=True, download_name=f"{safe_filename}_{datetime.now().strftime('%Y%m%d')}.pdf")
+    except Exception as e:
+        print("Export PDF error:", e)
+        return jsonify({"detail": f"Export PDF failed: {str(e)}"}), 500
+
+@app.post("/staff/<int:staff_id>/exit-request")
+def request_exit(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    data = request.get_json(force=True)
+    exit_date = parse_date_value(data.get("exit_date"))
+    exit_mode = data.get("exit_mode")
+    
+    if not exit_date or not exit_mode:
+        return jsonify({"detail": "Exit date and mode required"}), 400
+        
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        # Check permission (office admin only for own office)
+        if user["role"] == "office_admin":
+            admin_staff = crud.get_staff(db, user["id"])
+            if not admin_staff or admin_staff.office != staff.office:
+                return jsonify({"detail": "Permission denied"}), 403
+        
+        staff.out_request_status = "Pending"
+        staff.out_request_date = exit_date
+        staff.out_request_reason = exit_mode
+        
+        # Resolve office_id
+        office_id = None
+        if staff.office:
+             try:
+                 off_obj = db.query(models.Office).filter(
+                     func.lower(models.Office.name) == staff.office.lower(),
+                     models.Office.formation_id == staff.formation_id
+                 ).first()
+                 if off_obj:
+                     office_id = off_obj.id
+             except:
+                 pass
+                 
+        db.commit()
+        crud.create_audit_log(db, "EXIT_REQUEST", f"Staff: {staff.nis_no}", f"Requested exit: {exit_mode} on {exit_date}", formation_id=staff.formation_id, office_id=office_id)
+        return jsonify({"detail": "Request submitted"})
+
+@app.post("/staff/<int:staff_id>/exit-approve")
+def approve_exit(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        # Formation Admin Check
+        if formation_id and staff.formation_id != formation_id:
+             return jsonify({"detail": "Permission denied"}), 403
+        
+        if not staff.out_request_status:
+            return jsonify({"detail": "No pending request"}), 400
+            
+        staff.exit_date = staff.out_request_date
+        staff.exit_mode = staff.out_request_reason
+        staff.out_request_status = None
+        
+        # Log History
+        history = models.PostingHistory(
+            staff_id=staff.id,
+            action_type="EXIT",
+            from_office=staff.office,
+            to_office=None,
+            action_date=staff.exit_date,
+            remarks=staff.exit_mode
+        )
+        db.add(history)
+
+        staff.out_request_date = None
+        staff.out_request_reason = None
+        
+        db.commit()
+        crud.create_audit_log(db, "EXIT_APPROVE", f"Staff: {staff.nis_no}", "Approved exit request", formation_id=staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+        return jsonify(schemas.to_dict_staff(staff))
+
+@app.post("/staff/<int:staff_id>/exit-reject")
+def reject_exit(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        # Formation Admin Check
+        if formation_id and staff.formation_id != formation_id:
+             return jsonify({"detail": "Permission denied"}), 403
+        
+        staff.out_request_status = None
+        staff.out_request_date = None
+        staff.out_request_reason = None
+        
+        db.commit()
+        crud.create_audit_log(db, "EXIT_REJECT", f"Staff: {staff.nis_no}", "Rejected exit request", formation_id=staff.formation_id, office_id=None)
+        return jsonify({"detail": "Request rejected"})
+
+@app.post("/staff/<int:staff_id>/undo-exit")
+def undo_exit(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin"])
+    if err: return err, code
+    
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        if not staff.exit_date:
+            return jsonify({"detail": "Staff is not exited"}), 400
+            
+        # Log History
+        history = models.PostingHistory(
+            staff_id=staff.id,
+            action_type="UNDO_EXIT",
+            from_office=None,
+            to_office=staff.office,
+            action_date=date.today(),
+            remarks="Undo Exit"
+        )
+        db.add(history)
+
+        staff.exit_date = None
+        staff.exit_mode = None
+        # Also clear request fields if they linger
+        staff.out_request_status = None
+        staff.out_request_date = None
+        staff.out_request_reason = None
+        
+        db.commit()
+        crud.create_audit_log(db, "UNDO_EXIT", f"Staff: {staff.nis_no}", "Undid exit/posting out", formation_id=staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+        return jsonify(schemas.to_dict_staff(staff))
+
+@app.get("/admin/edit-requests")
+def list_edit_requests():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        # Use crud helper or direct query
+        stmt = select(models.StaffEditRequest).join(models.Staff).where(models.StaffEditRequest.status == "review_pending")
+        if formation_id:
+            stmt = stmt.where(models.Staff.formation_id == formation_id)
+        stmt = stmt.order_by(models.StaffEditRequest.created_at.desc())
+        
+        reqs = db.scalars(stmt).all()
+        
+        res = []
+        for r in reqs:
+            payload = json.loads(r.data)
+            res.append({
+                "id": r.id,
+                "staff_id": r.staff_id,
+                "staff_name": f"{r.staff.surname} {r.staff.other_names}",
+                "staff_nis": r.staff.nis_no,
+                "changes": payload.get("changes"),
+                "original": payload.get("original"),
+                "created_at": r.created_at.isoformat(),
+            })
+        return jsonify(res)
+
+@app.post("/admin/edit-requests/<int:req_id>/approve")
+def approve_edit_request(req_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        try:
+            req = db.get(models.StaffEditRequest, req_id)
+            if not req:
+                return jsonify({"detail": "Not found"}), 404
+            
+            # Formation check
+            if formation_id and req.staff.formation_id != formation_id:
+                 return jsonify({"detail": "Permission denied"}), 403
+
+            if req.status != "review_pending":
+                return jsonify({"detail": "Request not pending review"}), 400
+            
+            # For post-moderation, "approve" means "keep changes" (do nothing to staff data)
+            req.status = "approved"
+            req.reviewed_by = user.get("sub")
+            req.reviewed_at = func.now()
+            
+            crud.create_audit_log(db, "REVIEW_KEEP", f"Staff: {req.staff.nis_no}", f"Kept updates (Request {req_id})", formation_id=req.staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+            db.commit()
+            return jsonify({"detail": "Updates kept (Approved)"})
+        except Exception as e:
+            db.rollback()
+            print("Approve edit request error:", e)
+            return jsonify({"detail": f"Approve failed: {str(e)}"}), 500
+
+@app.post("/admin/edit-requests/<int:req_id>/reject")
+def reject_edit_request(req_id):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+
+    with next(get_db()) as db:
+        try:
+            req = db.get(models.StaffEditRequest, req_id)
+            if not req:
+                return jsonify({"detail": "Not found"}), 404
+
+            # Formation check
+            if formation_id and req.staff.formation_id != formation_id:
+                 return jsonify({"detail": "Permission denied"}), 403
+            
+            if req.status != "review_pending":
+                return jsonify({"detail": "Request not pending review"}), 400
+
+            # Revert changes using 'original' data
+            payload = json.loads(req.data)
+            original = payload.get("original")
+            
+            if original:
+                # Need to convert date strings back to objects if needed, 
+                # but crud.update_staff handles strings for dates usually? 
+                # Let's check crud.update_staff or parse them.
+                # update_staff expects dict with values.
+                # Dates in 'original' are ISO strings.
+                
+                # We need to parse dates
+                data_to_revert = {}
+                for k, v in original.items():
+                    if k in ["dofa", "dopa", "dopp", "dob", "exit_date", "formation_dopp"]:
+                        data_to_revert[k] = parse_date_value(v)
+                    else:
+                        data_to_revert[k] = v
+                
+                crud.update_staff(db, req.staff, data_to_revert)
+
+            req.status = "rejected"
+            req.reviewed_by = user.get("sub")
+            req.reviewed_at = func.now()
+            
+            crud.create_audit_log(db, "REVIEW_REVERT", f"Staff: {req.staff.nis_no}", f"Reverted updates (Request {req_id})", formation_id=req.staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+            db.commit()
+            return jsonify({"detail": "Updates reverted (Rejected)"})
+        except Exception as e:
+            db.rollback()
+            print("Reject edit request error:", e)
+            return jsonify({"detail": f"Reject failed: {str(e)}"}), 500
+
+@app.delete("/admin/edit-requests")
+def clear_edit_requests():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        stmt = delete(models.StaffEditRequest).where(models.StaffEditRequest.status == "review_pending")
+        
+        # If formation admin, filter by staff formation
+        if formation_id:
+             # Using subquery for deletion
+             sub_stmt = select(models.StaffEditRequest.id).join(models.Staff).where(
+                 models.StaffEditRequest.status == "review_pending",
+                 models.Staff.formation_id == formation_id
+             )
+             ids_to_delete = db.scalars(sub_stmt).all()
+             if ids_to_delete:
+                 db.execute(delete(models.StaffEditRequest).where(models.StaffEditRequest.id.in_(ids_to_delete)))
+        else:
+             db.execute(stmt)
+             
+        db.commit()
+        return jsonify({"detail": "Pending requests cleared"})
+
+@app.get("/notifications")
+def get_notifications():
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    user_id = user["id"]
+    role = user["role"]
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        # Resolve office name for office_admin if needed for legacy/broadcast support
+        office_name = None
+        if role == "office_admin":
+             staff = crud.get_staff(db, user_id)
+             if staff:
+                 office_name = staff.office
+
+        notifications = crud.get_user_notifications(db, user_id, role, formation_id, office_name)
+        
+        return jsonify([{
+            "id": n.id,
+            "message": n.message,
+            "is_read": n.is_read,
+            "created_at": n.timestamp.isoformat() if n.timestamp else None
+        } for n in notifications])
+
+@app.post("/notifications/<int:notif_id>/read")
+def mark_notification_read(notif_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user = get_current_user()
+    if not user: return jsonify({"detail": "Not authenticated"}), 401
+    
+    with next(get_db()) as db:
+        notif = db.get(models.Notification, notif_id)
+        if not notif: return jsonify({"detail": "Not found"}), 404
+        
+        # Ideally check permission, but for now allow if found
+        notif.is_read = True
+        db.commit()
+        return jsonify({"detail": "Marked as read"})
