@@ -4636,6 +4636,9 @@
                         if (allowPostingOut) {
                             actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openPostingModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
                         }
+                        if (role === 'main_admin' || role === 'formation_admin') {
+                            actionBtns += `<li><a class="dropdown-item text-danger" href="#" onclick="postOutStaff(${s.id}); return false;"><i class="bi bi-send me-2"></i>Posted Out</a></li>`;
+                        }
                     }
                     // Delete option removed as requested
                     actionBtns += `
@@ -4849,6 +4852,23 @@
             } catch(e) { console.error(e); }
         }
 
+        async function postOutStaff(id) {
+            if(!confirm("Are you sure you want to mark this personnel as Posted Out? They will be moved from Active Personnel to the Posted Out / Exited list.")) return;
+            try {
+                const res = await fetch(`${API_URL}/staff/${id}/post-out`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if(res.ok) {
+                    alert("Personnel posted out successfully");
+                    loadStaff();
+                } else {
+                    const data = await res.json();
+                    alert("Failed: " + (data.detail || "Unknown error"));
+                }
+            } catch(e) { console.error(e); }
+        }
+
         function updateTotalBadge() {
             const editCount = parseInt(document.getElementById('editRequestsCounter')?.textContent || '0');
             const exitCount = parseInt(document.getElementById('exitRequestsCounter')?.textContent || '0');
@@ -4965,6 +4985,9 @@
                     } else {
                         if (allowPostingOut) {
                              actionBtns += `<li><a class="dropdown-item text-warning" href="#" onclick="openPostingModal(${s.id}); return false;"><i class="bi bi-box-arrow-right me-2"></i>Posting/Out</a></li>`;
+                        }
+                        if (role === 'main_admin' || role === 'formation_admin') {
+                            actionBtns += `<li><a class="dropdown-item text-danger" href="#" onclick="postOutStaff(${s.id}); return false;"><i class="bi bi-send me-2"></i>Posted Out</a></li>`;
                         }
                     }
 

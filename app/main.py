@@ -3512,6 +3512,45 @@ def undo_exit(staff_id: int):
         crud.create_audit_log(db, "UNDO_EXIT", f"Staff: {staff.nis_no}", "Undid exit/posting out", formation_id=staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
+@app.post("/staff/<int:staff_id>/post-out")
+def post_out_staff(staff_id: int):
+    if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
+    user, err, code = require_role(["main_admin", "formation_admin"])
+    if err: return err, code
+    
+    formation_id = user.get("formation_id")
+    
+    with next(get_db()) as db:
+        staff = crud.get_staff(db, staff_id)
+        if not staff: return jsonify({"detail": "Not found"}), 404
+        
+        if staff.exit_date:
+            return jsonify({"detail": "Staff is already exited/posted out"}), 400
+        
+        if formation_id and staff.formation_id != formation_id:
+             return jsonify({"detail": "Permission denied"}), 403
+        
+        staff.exit_date = date.today()
+        staff.exit_mode = "Posted Out"
+        
+        staff.out_request_status = None
+        staff.out_request_date = None
+        staff.out_request_reason = None
+        
+        history = models.PostingHistory(
+            staff_id=staff.id,
+            action_type="EXIT",
+            from_office=staff.office,
+            to_office=None,
+            action_date=staff.exit_date,
+            remarks="Posted Out"
+        )
+        db.add(history)
+        
+        db.commit()
+        crud.create_audit_log(db, "POSTED_OUT", f"Staff: {staff.nis_no}", "Posted out from active list", formation_id=staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+        return jsonify(schemas.to_dict_staff(staff))
+
 @app.get("/admin/edit-requests")
 def list_edit_requests():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
