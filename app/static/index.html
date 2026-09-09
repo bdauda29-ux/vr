@@ -715,7 +715,7 @@
                         <li class="nav-item admin-only office-restricted d-none" role="presentation">
                             <button class="nav-link" id="edit-requests-tab" data-bs-toggle="tab" data-bs-target="#edit-requests-pane" type="button">Edit Approvals</button>
                         </li>
-                        <li class="nav-item admin-only special-only office-restricted d-none" role="presentation">
+                        <li class="nav-item admin-only custom-field-admin office-restricted d-none" role="presentation">
                             <button class="nav-link" id="custom-fields-tab" data-bs-toggle="tab" data-bs-target="#custom-fields-pane" type="button" onclick="loadCustomFieldsUI()">Custom Fields</button>
                         </li>
                     </ul>
@@ -1259,7 +1259,7 @@
                             <div class="card">
                                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                                     <h5 class="card-title mb-0">Custom Field Definitions</h5>
-                    <button class="btn btn-primary btn-sm special-only d-none" onclick="openAddCustomFieldModal()">
+                    <button class="btn btn-primary btn-sm custom-field-admin d-none" onclick="openAddCustomFieldModal()">
                         <i class="bi bi-plus-lg"></i> Add Custom Field
                     </button>
                                 </div>
@@ -2595,6 +2595,7 @@
                 // Role Based UI
                     if (role === 'special_admin') {
                         document.querySelectorAll('.special-only').forEach(el => el.classList.remove('d-none'));
+                        document.querySelectorAll('.custom-field-admin').forEach(el => el.classList.remove('d-none'));
                         populateFormationFilter();
                         showView('formations');
                         
@@ -2672,6 +2673,7 @@
                         const importTab = document.getElementById('import-tab')?.parentElement;
                         if (importTab) importTab.classList.add('d-none');
                         document.querySelectorAll('.super-only').forEach(el => el.classList.add('d-none'));
+                        document.querySelectorAll('.custom-field-admin').forEach(el => el.classList.remove('d-none'));
                     }
                     
                     if (role === 'main_admin') {

@@ -1600,7 +1600,7 @@ def list_custom_fields():
 @app.post("/custom-fields")
 def create_custom_field():
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, error_response, code = require_role(["special_admin"])
+    user, error_response, code = require_role(["special_admin", "main_admin"])
     if error_response: return error_response, code
     
     data = request.get_json(force=True)
@@ -1617,7 +1617,7 @@ def create_custom_field():
 @app.delete("/custom-fields/<int:field_id>")
 def delete_custom_field(field_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, error_response, code = require_role(["special_admin"])
+    user, error_response, code = require_role(["special_admin", "main_admin"])
     if error_response: return error_response, code
     
     with next(get_db()) as db:
