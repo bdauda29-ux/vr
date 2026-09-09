@@ -899,7 +899,8 @@
                                     </div>
 
                                     <div class="btn-group mb-3 w-100" role="group" aria-label="Status Filter">
-                                        <button type="button" class="btn btn-outline-primary active" onclick="setStatusFilter('completed', this)">Completed</button>
+                                        <button type="button" class="btn btn-outline-primary active" onclick="setStatusFilter('all', this)">All</button>
+                                        <button type="button" class="btn btn-outline-primary" onclick="setStatusFilter('completed', this)">Completed</button>
                                         <button type="button" class="btn btn-outline-primary" onclick="setStatusFilter('incomplete', this)">Incomplete</button>
                                     </div>
 
@@ -2220,7 +2221,7 @@
         let exportModal;
         let changePasswordModal;
         let staffEditModal;
-        let currentStatusFilter = 'completed'; // Default to completed
+        let currentStatusFilter = 'all'; // Default to all
         let currentStatus = 'active'; // 'active' or 'exited'
         let userId = localStorage.getItem('userId');
         let currentOfficeName = '';
@@ -4304,8 +4305,8 @@
                 if (parts.length === 2) params.append('dopa_to', userDateToIsoOrNull(parts[1]));
             }
 
-             // If searching, include both Completed and Incomplete by omitting completeness filter
-             if (!q && currentStatusFilter) params.append('completeness', currentStatusFilter);
+             // Skip completeness filter if searching or viewing 'All'
+             if (!q && currentStatusFilter && currentStatusFilter !== 'all') params.append('completeness', currentStatusFilter);
              if (currentStatus) params.append('status', currentStatus);
              
              // Multi-select Ranks
@@ -4454,13 +4455,19 @@
             }
 
             currentStatus = 'active';
-            currentStatusFilter = 'completed';
+            currentStatusFilter = 'all';
             
             // Reset tab UI states
             const mainTabs = document.querySelectorAll('#mainStatusTabs .nav-link');
             if (mainTabs.length >= 2) {
                 mainTabs.forEach(a => a.classList.remove('active'));
                 mainTabs[0].classList.add('active'); // Active Personnel
+            }
+            // Reset status filter button group (All/Completed/Incomplete)
+            const statusFilterBtns = document.querySelectorAll('.btn-group[aria-label="Status Filter"] .btn');
+            if (statusFilterBtns.length >= 1) {
+                statusFilterBtns.forEach(b => b.classList.remove('active'));
+                statusFilterBtns[0].classList.add('active'); // All
             }
             const statusTabs = document.querySelectorAll('#statusTabs .nav-link');
             if (statusTabs.length >= 2) {
@@ -6714,7 +6721,7 @@
                 if (parts.length === 2) params.append('dopa_to', userDateToIsoOrNull(parts[1]));
             }
 
-            if (!q && currentStatusFilter) params.append('completeness', currentStatusFilter);
+            if (!q && currentStatusFilter && currentStatusFilter !== 'all') params.append('completeness', currentStatusFilter);
             if (currentStatus) params.append('status', currentStatus);
             if (columns && columns.length) params.append('columns', columns.join(','));
             if (mergeName) params.append('merge_name', '1');
