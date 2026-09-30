@@ -1541,6 +1541,40 @@
         </div>
     </div>
 
+    <!-- Exit / Posted Out Modal -->
+    <div class="modal fade" id="exitPostOutModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Exit Personnel</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="exitPostOutForm">
+                        <input type="hidden" id="exitPostOutStaffId">
+                        <div class="mb-3">
+                            <label class="form-label required">Reason</label>
+                            <select class="form-select" id="exitPostOutReason" required>
+                                <option value="">Select reason...</option>
+                                <option value="Retired">Retired</option>
+                                <option value="Posted Out">Posted Out</option>
+                                <option value="Deceased">Deceased</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required">Effective Date</label>
+                            <input type="text" class="form-control date-picker" id="exitPostOutDate" placeholder="DD/MM/YYYY" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="submitExitPostOut()">Confirm Exit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Office Modal -->
     <div class="modal fade" id="officeModal" tabindex="-1">
         <div class="modal-dialog">
@@ -2132,44 +2166,6 @@
         </div>
     </div>
 
-    <!-- Add Custom Field Modal -->
-    <div class="modal fade" id="addCustomFieldModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Add Custom Field</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="addCustomFieldForm">
-                        <div class="mb-3">
-                            <label class="form-label required">Label</label>
-                            <input type="text" class="form-control" id="customFieldLabel" placeholder="e.g. Blood Group" required>
-                            <div class="form-text">The name displayed on the form.</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label required">Variable Name</label>
-                            <input type="text" class="form-control" id="customFieldName" placeholder="e.g. blood_group" required pattern="[a-z0-9_]+">
-                            <div class="form-text">Lowercase, numbers, and underscores only. No spaces.</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Type</label>
-                            <select class="form-select" id="customFieldType">
-                                <option value="text">Text</option>
-                                <option value="date">Date</option>
-                                <option value="number">Number</option>
-                            </select>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="submitAddCustomField()">Add Field</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
         (function () {
             try {
@@ -2221,6 +2217,7 @@
         let exportModal;
         let changePasswordModal;
         let staffEditModal;
+        let exitPostOutModal;
         let currentStatusFilter = 'all'; // Default to all
         let currentStatus = 'active'; // 'active' or 'exited'
         let userId = localStorage.getItem('userId');
@@ -2554,6 +2551,12 @@
                 const reviewEl = document.getElementById('reviewExitModal');
                 if (reviewEl) reviewExitModal = new bootstrap.Modal(reviewEl);
 
+                const exitPostOutEl = document.getElementById('exitPostOutModal');
+                if (exitPostOutEl) {
+                    exitPostOutModal = new bootstrap.Modal(exitPostOutEl);
+                    flatpickr("#exitPostOutDate", { dateFormat: "d/m/Y", allowInput: true });
+                }
+
                 const cpEl = document.getElementById('changePasswordModal');
                 if (cpEl) {
                     changePasswordModal = new bootstrap.Modal(cpEl);
@@ -2631,6 +2634,7 @@
                     // Formation Admin specific
                     if (role === 'formation_admin') {
                         document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+                        document.querySelectorAll('.custom-field-admin').forEach(el => el.classList.remove('d-none'));
                         
                         // Explicitly SHOW Personnel and Approvals for Formation Admin as requested
                         const personnelNav = document.getElementById('personnelNavItem');
@@ -4861,15 +4865,49 @@
             } catch(e) { console.error(e); }
         }
 
-        async function postOutStaff(id) {
-            if(!confirm("Are you sure you want to mark this personnel as Posted Out? They will be moved from Active Personnel to the Posted Out / Exited list.")) return;
+        function postOutStaff(id) {
+            document.getElementById('exitPostOutStaffId').value = id;
+            document.getElementById('exitPostOutReason').value = 'Posted Out';
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            document.getElementById('exitPostOutDate').value = `${dd}/${mm}/${yyyy}`;
+            if (exitPostOutModal) exitPostOutModal.show();
+        }
+
+        function parseDMY(s) {
+            if (!s) return null;
+            const parts = s.split('/');
+            if (parts.length !== 3) return null;
+            const d = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            const y = parseInt(parts[2], 10);
+            if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+            return new Date(y, m - 1, d);
+        }
+
+        async function submitExitPostOut() {
+            const id = document.getElementById('exitPostOutStaffId').value;
+            const exitMode = document.getElementById('exitPostOutReason').value;
+            const exitDateStr = document.getElementById('exitPostOutDate').value;
+            if (!exitMode) { alert("Please select a reason."); return; }
+            if (!exitDateStr) { alert("Please select an effective date."); return; }
+            const parsed = parseDMY(exitDateStr);
+            if (!parsed) { alert("Invalid effective date. Use DD/MM/YYYY."); return; }
+            const isoDate = `${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,'0')}-${String(parsed.getDate()).padStart(2,'0')}`;
             try {
                 const res = await fetch(`${API_URL}/staff/${id}/post-out`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ exit_mode: exitMode, exit_date: isoDate })
                 });
                 if(res.ok) {
-                    alert("Personnel posted out successfully");
+                    alert(`Personnel marked as ${exitMode} successfully`);
+                    if (exitPostOutModal) exitPostOutModal.hide();
                     loadStaff();
                 } else {
                     const data = await res.json();

@@ -3520,6 +3520,21 @@ def post_out_staff(staff_id: int):
     
     formation_id = user.get("formation_id")
     
+    data = request.get_json(silent=True) or {}
+    exit_mode = (data.get("exit_mode") or "Posted Out").strip()
+    valid_exit_modes = {"Retired", "Posted Out", "Deceased"}
+    if exit_mode not in valid_exit_modes:
+        return jsonify({"detail": f"Invalid exit_mode. Must be one of: {', '.join(sorted(valid_exit_modes))}"}), 400
+    
+    raw_exit_date = data.get("exit_date")
+    if raw_exit_date:
+        try:
+            chosen_exit_date = date.fromisoformat(str(raw_exit_date))
+        except ValueError:
+            return jsonify({"detail": "Invalid exit_date. Use YYYY-MM-DD."}), 400
+    else:
+        chosen_exit_date = date.today()
+    
     with next(get_db()) as db:
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
@@ -3530,8 +3545,8 @@ def post_out_staff(staff_id: int):
         if formation_id and staff.formation_id != formation_id:
              return jsonify({"detail": "Permission denied"}), 403
         
-        staff.exit_date = date.today()
-        staff.exit_mode = "Posted Out"
+        staff.exit_date = chosen_exit_date
+        staff.exit_mode = exit_mode
         
         staff.out_request_status = None
         staff.out_request_date = None
@@ -3543,12 +3558,12 @@ def post_out_staff(staff_id: int):
             from_office=staff.office,
             to_office=None,
             action_date=staff.exit_date,
-            remarks="Posted Out"
+            remarks=exit_mode
         )
         db.add(history)
         
         db.commit()
-        crud.create_audit_log(db, "POSTED_OUT", f"Staff: {staff.nis_no}", "Posted out from active list", formation_id=staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
+        crud.create_audit_log(db, "POSTED_OUT", f"Staff: {staff.nis_no}", f"{exit_mode} from active list on {chosen_exit_date}", formation_id=staff.formation_id, office_id=None, user_id=user["id"], username=user["sub"])
         return jsonify(schemas.to_dict_staff(staff))
 
 @app.get("/admin/edit-requests")
