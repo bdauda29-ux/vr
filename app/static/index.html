@@ -2943,22 +2943,26 @@
             }
 
             if (juniors.includes(rankCode)) {
-                // Logic: First Name (Full) + Other Initials + Surname Initials
-                if (otherWords.length === 0) {
-                    return surnameFull;
+                // Logic: Surname (Full) + First Name Initial + Other Names Initials (e.g. OZIGIS A A)
+                const otherInitials = initialsFromWords(otherWords);
+                if (otherInitials && surnameFull) {
+                    return `${surnameFull} ${otherInitials}`;
                 }
-                const firstName = otherWords[0].toUpperCase();
-                const restOtherInitials = initialsFromWords(otherWords.slice(1));
-                const surnameInitials = initialsFromWords(surnameWords);
-                
-                let parts = [firstName];
-                if (restOtherInitials) parts.push(restOtherInitials);
-                if (surnameInitials) parts.push(surnameInitials);
-                
-                return parts.join(' ');
+                return surnameFull || otherInitials;
             }
             
             return `${surnameFull} ${otherWords.join(' ').toUpperCase()}`;
+        }
+
+        function isJuniorRank(rank) {
+            const juniorRanks = ["II", "AII", "IA 1", "IA 2", "IA 3", "IA1", "IA2", "IA3"];
+            const normalizeRank = (r) => (r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            return juniorRanks.map(normalizeRank).includes(normalizeRank(rank));
+        }
+
+        function initialsFromName(name) {
+            const words = (name || '').trim().split(/\s+/).filter(w => w);
+            return words.map(w => w[0].toUpperCase()).join(' ');
         }
 
         function calculateRetirementDate(dobStr, dofaStr) {
@@ -4599,7 +4603,7 @@
                 
                 // Format Names
                 const surnameFormatted = formatName(s.surname);
-                const otherNamesFormatted = formatName(s.other_names);
+                const otherNamesFormatted = isJuniorRank(s.rank) ? initialsFromName(s.other_names) : formatName(s.other_names);
                 
                 const formationCell = (role === 'special_admin') 
                     ? `<td>${s.formation ? (s.formation.code || s.formation.name) : '-'}</td>` 
@@ -4958,7 +4962,7 @@
                 
                 // Format Names
                 const surnameFormatted = capitalizeName(s.surname);
-                const otherNamesFormatted = capitalizeName(s.other_names);
+                const otherNamesFormatted = isJuniorRank(s.rank) ? initialsFromName(s.other_names) : capitalizeName(s.other_names);
 
                 let rowHtml = '';
 
@@ -5951,7 +5955,7 @@
                     body.innerHTML = `
                         <div class="row">
                             <div class="col-12 mb-4 text-center">
-                                <h4 class="mb-0">${formatName(s.surname)} ${formatName(s.other_names)}</h4>
+                                <h4 class="mb-0">${formatStaffName(s.rank, s.surname, s.other_names)}</h4>
                                 <span class="badge bg-primary">${s.rank || 'No Rank'}</span>
                                 <span class="badge bg-secondary">${s.nis_no || 'No NIS'}</span>
                             </div>
