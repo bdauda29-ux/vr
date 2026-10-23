@@ -4974,9 +4974,13 @@
                                 <li><a class="dropdown-item" href="#" onclick="openViewModal(${s.id}); return false;"><i class="bi bi-eye me-2"></i>View</a></li>
                     `;
                     
-                    if (role === 'main_admin') {
+                    if (role === 'main_admin' || role === 'formation_admin') {
                         statusHtml += `
                                 <li><a class="dropdown-item text-success" href="#" onclick="undoExit(${s.id}); return false;"><i class="bi bi-arrow-counterclockwise me-2"></i>Restore to Active</a></li>
+                        `;
+                    }
+                    if (role === 'main_admin') {
+                        statusHtml += `
                                 <li><a class="dropdown-item" href="#" onclick="openPostingHistoryModal(${s.id}); return false;"><i class="bi bi-cursor me-2"></i>Formation History</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openMovementHistoryModal(${s.id}); return false;"><i class="bi bi-arrow-left-right me-2"></i>Internal History</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>All History</a></li>
