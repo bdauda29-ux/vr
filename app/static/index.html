@@ -4615,7 +4615,7 @@
                         <div class="dropdown">
                             <button class="btn btn-sm btn-light border dropdown-toggle" type="button" data-bs-toggle="dropdown">Actions</button>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="#" onclick="undoExit(${s.id}); return false;"><i class="bi bi-arrow-counterclockwise me-2"></i>Undo Exit</a></li>
+                                <li><a class="dropdown-item text-success" href="#" onclick="undoExit(${s.id}); return false;"><i class="bi bi-arrow-counterclockwise me-2"></i>Restore to Active</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>History</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openViewModal(${s.id}); return false;"><i class="bi bi-eye me-2"></i>View</a></li>
                             </ul>
@@ -4853,14 +4853,14 @@
         }
 
         async function undoExit(id) {
-            if(!confirm("Are you sure you want to undo this exit? The staff will be active again.")) return;
+            if(!confirm("Restore this personnel to Active Personnel? Their posting-out record will remain in history.")) return;
             try {
                 const res = await fetch(`${API_URL}/staff/${id}/undo-exit`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if(res.ok) {
-                    alert("Exit undone successfully");
+                    alert("Personnel restored to Active Personnel successfully");
                     loadStaff();
                 } else {
                     const data = await res.json();
@@ -4976,7 +4976,7 @@
                     
                     if (role === 'main_admin') {
                         statusHtml += `
-                                <li><a class="dropdown-item" href="#" onclick="undoExit(${s.id}); return false;"><i class="bi bi-arrow-counterclockwise me-2"></i>Undo Exit</a></li>
+                                <li><a class="dropdown-item text-success" href="#" onclick="undoExit(${s.id}); return false;"><i class="bi bi-arrow-counterclockwise me-2"></i>Restore to Active</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openPostingHistoryModal(${s.id}); return false;"><i class="bi bi-cursor me-2"></i>Formation History</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openMovementHistoryModal(${s.id}); return false;"><i class="bi bi-arrow-left-right me-2"></i>Internal History</a></li>
                                 <li><a class="dropdown-item" href="#" onclick="openHistoryModal(${s.id}); return false;"><i class="bi bi-clock-history me-2"></i>All History</a></li>
