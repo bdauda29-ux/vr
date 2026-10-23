@@ -3480,13 +3480,16 @@ def reject_exit(staff_id: int):
 @app.post("/staff/<int:staff_id>/undo-exit")
 def undo_exit(staff_id: int):
     if STARTUP_ERROR: return jsonify({"detail": STARTUP_ERROR}), 500
-    user, err, code = require_role(["main_admin"])
+    user, err, code = require_role(["main_admin", "formation_admin"])
     if err: return err, code
     
     with next(get_db()) as db:
         staff = crud.get_staff(db, staff_id)
         if not staff: return jsonify({"detail": "Not found"}), 404
         
+        if user.get("formation_id") and staff.formation_id != user["formation_id"]:
+            return jsonify({"detail": "Permission denied"}), 403
+
         if not staff.exit_date:
             return jsonify({"detail": "Staff is not exited"}), 400
             
